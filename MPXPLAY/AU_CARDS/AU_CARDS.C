@@ -149,7 +149,7 @@ extern unsigned int is_lfn_support,uselfn,iswin9x;
 #ifdef SBEMU
 struct mainvars mvps;
 struct mpxplay_audioout_info_s au_infos;
-unsigned int playcontrol,outmode;
+unsigned int playcontrol,outmode = OUTMODE_TYPE_AUDIO;
 unsigned int intsoundconfig,intsoundcontrol;
 unsigned long allcpuusage,allcputime;
 unsigned int is_lfn_support,uselfn,iswin9x;
