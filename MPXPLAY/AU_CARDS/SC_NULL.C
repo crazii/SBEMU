@@ -52,8 +52,8 @@ static void speedtestresults(struct mpxplay_audioout_info_s *aui)
    index=100.0f;
 
   sprintf(sout,"Runtime: %1.1f sec, decoded frames: %lu, speed: %.1fx (%.1f%%) (play:%.1f%%) ",
-	 (float)runtimeh/100.0f,framenum,index/100.0f,
-	 index,10000.0f/index);
+     (float)runtimeh/100.0f,framenum,index/100.0f,
+     index,10000.0f/index);
   pds_textdisplay_printf(sout);
  }
 }

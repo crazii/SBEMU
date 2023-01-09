@@ -19,7 +19,7 @@
 
 #include "mpxplay.h"
 #include "newfunc.h"
-#if defined(__GNUC__) && (defined(PDS_THREADS_POSIX_THREAD) || defined(PDS_THREADS_POSIX_TIMER) || !defined(PDS_THREADS_MUTEX_DEBUG))
+#if defined(__GNUC__) && !defined(DJGPP) && (defined(PDS_THREADS_POSIX_THREAD) || defined(PDS_THREADS_POSIX_TIMER) || !defined(PDS_THREADS_MUTEX_DEBUG))
  #include <pthread.h>
  #include <time.h>
 #endif
@@ -169,8 +169,8 @@ int pds_threads_mutex_lock(void **mup, int timeoutms)
     abs_time.tv_sec += timeout_ms / 1000;
     abs_time.tv_nsec += (timeout_ms % 1000) * 1000000;
     if(abs_time.tv_nsec >= 1000000000){
-    	abs_time.tv_sec++;
-    	abs_time.tv_nsec -= 1000000000;
+        abs_time.tv_sec++;
+        abs_time.tv_nsec -= 1000000000;
     }
     return pthread_mutex_timedlock((pthread_mutex_t *)mup, &abs_time);
 #elif PDS_THREADS_WIN32_MUTEX
@@ -186,7 +186,7 @@ int pds_threads_mutex_lock(void **mup, int timeoutms)
         return MPXPLAY_ERROR_MUTEX_UNINIT;
     if(c & PDS_THREADS_MUTEX_IS_LOCKED) {
 #ifdef MPXPLAY_WIN32
-    	timeout_ms /= 10;
+        timeout_ms /= 10;
         if(!timeout_ms) {
             Sleep(0);
             return MPXPLAY_ERROR_MUTEX_LOCKED;
@@ -284,8 +284,8 @@ int pds_threads_cond_timedwait(void **cop, void **mup, int timeoutms)
     abs_time.tv_sec += timeout_ms / 1000;
     abs_time.tv_nsec += (timeout_ms % 1000) * 1000000;
     if(abs_time.tv_nsec >= 1000000000){
-    	abs_time.tv_sec++;
-    	abs_time.tv_nsec -= 1000000000;
+        abs_time.tv_sec++;
+        abs_time.tv_nsec -= 1000000000;
     }
     return pthread_cond_timedwait((pthread_cond_t *)cop, (pthread_mutex_t *)mup, &abs_time);
 #elif PDS_THREADS_WIN32_MUTEX
@@ -322,13 +322,13 @@ static unsigned int int08_timer_period = 10;
 
 int pds_threads_get_number_of_processors(void)
 {
-	int nb_proc = 0;
+    int nb_proc = 0;
 #if defined(__GNUC__) && defined(__WINPTHREADS_VERSION)
-	nb_proc = pthread_num_processors_np();
+    nb_proc = pthread_num_processors_np();
 #endif // TODO: other operating systems
-	if(nb_proc < 1)
-		nb_proc = 1;
-	return nb_proc;
+    if(nb_proc < 1)
+        nb_proc = 1;
+    return nb_proc;
 }
 
 void pds_threads_set_singlecore(void)
@@ -349,126 +349,126 @@ void pds_threads_set_singlecore(void)
 #if defined(MPXPLAY_WIN32) && defined(MPXPLAY_GUI_QT) && defined(MPXPLAY_USE_SMP)
 static unsigned int CountSetBits(ULONG_PTR bitMask)
 {
-	DWORD LSHIFT = sizeof(ULONG_PTR) * 8 - 1;
-	DWORD bitSetCount = 0;
-	ULONG_PTR bitTest = (ULONG_PTR)1 << LSHIFT;
-	DWORD i;
+    DWORD LSHIFT = sizeof(ULONG_PTR) * 8 - 1;
+    DWORD bitSetCount = 0;
+    ULONG_PTR bitTest = (ULONG_PTR)1 << LSHIFT;
+    DWORD i;
 
-	for (i = 0; i <= LSHIFT; ++i)
-	{
-		bitSetCount += ((bitMask & bitTest)?1:0);
-		bitTest/=2;
-	}
+    for (i = 0; i <= LSHIFT; ++i)
+    {
+        bitSetCount += ((bitMask & bitTest)?1:0);
+        bitTest/=2;
+    }
 
-	return bitSetCount;
+    return bitSetCount;
 }
 
 static WINBOOL pds_threads_get_number_of_threads_per_cores(unsigned int *number_of_cores, unsigned int *number_of_logical_processors)
 {
-	WINBOOL result = FALSE;
-	DWORD returnLength = 0;
-	DWORD logicalProcessorCount = 0;
-	DWORD processorCoreCount = 0;
-	PSYSTEM_LOGICAL_PROCESSOR_INFORMATION Buffer = NULL, ptr = NULL;
-	*number_of_cores = 1;
-	*number_of_logical_processors = 1;
+    WINBOOL result = FALSE;
+    DWORD returnLength = 0;
+    DWORD logicalProcessorCount = 0;
+    DWORD processorCoreCount = 0;
+    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION Buffer = NULL, ptr = NULL;
+    *number_of_cores = 1;
+    *number_of_logical_processors = 1;
 
-	do
-	{
-		result = GetLogicalProcessorInformation(Buffer, &returnLength);
-		if(returnLength <= 0)
-		{
-			result = FALSE;
-			goto err_out_th;
-		}
-		if((result == TRUE) && Buffer)
-			break;
-		if(Buffer)
-			pds_free(Buffer);
-		Buffer = pds_calloc(returnLength, sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION));
-		if(!Buffer)
-			return FALSE;
-	}while(TRUE);
+    do
+    {
+        result = GetLogicalProcessorInformation(Buffer, &returnLength);
+        if(returnLength <= 0)
+        {
+            result = FALSE;
+            goto err_out_th;
+        }
+        if((result == TRUE) && Buffer)
+            break;
+        if(Buffer)
+            pds_free(Buffer);
+        Buffer = pds_calloc(returnLength, sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION));
+        if(!Buffer)
+            return FALSE;
+    }while(TRUE);
 
-	ptr = Buffer;
-	returnLength /= sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION);
-	do
-	{
-		switch (ptr->Relationship)
-		{
-		case RelationProcessorCore:
-			processorCoreCount++;
-			// A hyperthreaded core supplies more than one logical processor.
-			logicalProcessorCount += CountSetBits(ptr->ProcessorMask);
-			break;
-		}
-		ptr++;
-	}while(--returnLength);
+    ptr = Buffer;
+    returnLength /= sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION);
+    do
+    {
+        switch (ptr->Relationship)
+        {
+        case RelationProcessorCore:
+            processorCoreCount++;
+            // A hyperthreaded core supplies more than one logical processor.
+            logicalProcessorCount += CountSetBits(ptr->ProcessorMask);
+            break;
+        }
+        ptr++;
+    }while(--returnLength);
 
-	*number_of_cores = processorCoreCount;
-	*number_of_logical_processors = logicalProcessorCount;
+    *number_of_cores = processorCoreCount;
+    *number_of_logical_processors = logicalProcessorCount;
 
 err_out_th:
-	if(Buffer)
-		pds_free(Buffer);
+    if(Buffer)
+        pds_free(Buffer);
 
-	return result;
+    return result;
 }
 #endif // defined(MPXPLAY_WIN32) && defined(MPXPLAY_GUI_QT) && defined(MPXPLAY_USE_SMP)
 
 void pds_threads_hyperthreading_disable(void)
 {
 #if defined(MPXPLAY_WIN32) && defined(MPXPLAY_GUI_QT) && defined(MPXPLAY_USE_SMP)
-	if(!(mpxplay_programcontrol & (MPXPLAY_PROGRAMC_DISABLE_SMP|MPXPLAY_PROGRAMC_ENABLE_HYPERTH)))
-	{
-		unsigned int number_of_cores = 0;
-		unsigned int number_of_logical_processors = 0;
-		if( pds_threads_get_number_of_threads_per_cores(&number_of_cores, &number_of_logical_processors)
-		 && (number_of_cores >= 2) && (number_of_logical_processors >= 4)  // FIXME: we disable HT only from 2C/4T CPUs (check the limit)
-		 && !(number_of_logical_processors % number_of_cores)
-		){
-			unsigned int threads_per_core = number_of_logical_processors / number_of_cores;
-			if(threads_per_core > 1)
-			{
-				DWORD_PTR cpu_affinity_mask;
-				HANDLE curr_process;
-				unsigned int i, j;
+    if(!(mpxplay_programcontrol & (MPXPLAY_PROGRAMC_DISABLE_SMP|MPXPLAY_PROGRAMC_ENABLE_HYPERTH)))
+    {
+        unsigned int number_of_cores = 0;
+        unsigned int number_of_logical_processors = 0;
+        if( pds_threads_get_number_of_threads_per_cores(&number_of_cores, &number_of_logical_processors)
+         && (number_of_cores >= 2) && (number_of_logical_processors >= 4)  // FIXME: we disable HT only from 2C/4T CPUs (check the limit)
+         && !(number_of_logical_processors % number_of_cores)
+        ){
+            unsigned int threads_per_core = number_of_logical_processors / number_of_cores;
+            if(threads_per_core > 1)
+            {
+                DWORD_PTR cpu_affinity_mask;
+                HANDLE curr_process;
+                unsigned int i, j;
 #if 0           // disable HT on all core
-				cpu_affinity_mask = 0;
-				for(i = 0; i < number_of_cores; i++)
-				{
-					cpu_affinity_mask |= 1 << (i * threads_per_core);
-				}
-#else			// disable HT on first core only
-				cpu_affinity_mask = 0;
-				for(j = 0; j < number_of_cores; j++)
-				{
-					for(i = 0; i < ((j == MPXPLAY_THREAD_HT_CORE_SELECT)? 1 : threads_per_core); i++)
-					{
-						cpu_affinity_mask |= (1 << (j * threads_per_core + i));
-					}
-				}
+                cpu_affinity_mask = 0;
+                for(i = 0; i < number_of_cores; i++)
+                {
+                    cpu_affinity_mask |= 1 << (i * threads_per_core);
+                }
+#else            // disable HT on first core only
+                cpu_affinity_mask = 0;
+                for(j = 0; j < number_of_cores; j++)
+                {
+                    for(i = 0; i < ((j == MPXPLAY_THREAD_HT_CORE_SELECT)? 1 : threads_per_core); i++)
+                    {
+                        cpu_affinity_mask |= (1 << (j * threads_per_core + i));
+                    }
+                }
 #endif
-				curr_process = GetCurrentProcess();
-				if(curr_process)
-				{
-					SetSecurityInfo((HANDLE)curr_process, SE_KERNEL_OBJECT, MPXPLAY_THREAD_RIGHTS, NULL, NULL, NULL, NULL);
-					SetProcessAffinityMask(curr_process, cpu_affinity_mask);
-				}
-			}
-		}
-	}
+                curr_process = GetCurrentProcess();
+                if(curr_process)
+                {
+                    SetSecurityInfo((HANDLE)curr_process, SE_KERNEL_OBJECT, MPXPLAY_THREAD_RIGHTS, NULL, NULL, NULL, NULL);
+                    SetProcessAffinityMask(curr_process, cpu_affinity_mask);
+                }
+            }
+        }
+    }
 #endif // defined(MPXPLAY_WIN32) && defined(MPXPLAY_GUI_QT) && defined(MPXPLAY_USE_SMP)
 }
 #endif // defined(MPXPLAY_THREADS_HYPERTREADING_DISABLE)
 
 void pds_threads_thread_set_affinity(mpxp_thread_id_type threadId, mpxp_ptrsize_t affinity_mask)
 {
-	DWORD_PTR result = 0, k;
+    DWORD_PTR result = 0, k;
     if(threadId && affinity_mask)
     {
-    	SetSecurityInfo((HANDLE)threadId, SE_KERNEL_OBJECT, (MPXPLAY_THREAD_RIGHTS | THREAD_QUERY_INFORMATION), NULL, NULL, NULL, NULL);
-    	result = SetThreadAffinityMask((HANDLE)threadId, (DWORD_PTR)affinity_mask);
+        SetSecurityInfo((HANDLE)threadId, SE_KERNEL_OBJECT, (MPXPLAY_THREAD_RIGHTS | THREAD_QUERY_INFORMATION), NULL, NULL, NULL, NULL);
+        result = SetThreadAffinityMask((HANDLE)threadId, (DWORD_PTR)affinity_mask);
     }
     k = result;
 }

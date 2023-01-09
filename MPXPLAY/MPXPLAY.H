@@ -37,7 +37,7 @@ extern "C" {
  //#define MPXPLAY_LINK_WATTCP32 1    // with WATTCP32 lib
 #endif
 
-#if defined(__DOS__) || (defined(MPXPLAY_WIN32) && !defined(MPXPLAY_GUI_QT))
+#if (defined(__DOS__) || (defined(MPXPLAY_WIN32) && !defined(MPXPLAY_GUI_QT))) && !defined(SBEMU)
 #define MPXPLAY_GUI_CONSOLE 1
 #endif
 
@@ -253,7 +253,7 @@ extern "C" {
                                                     MPXPLAY_CONFIG_VIDEOPLAYERCONTROL_DISABLESDHWDEC)
 #define MPXPLAY_CONFIG_VIDEOPLAYERCONTROL_REOPEN_REQUIRED (MPXPLAY_CONFIG_VIDEOPLAYERCONTROL_DECODEVIDEO | \
                                                            MPXPLAY_CONFIG_VIDEOPLAYERCONTROL_USEHWDECODING | \
-														   MPXPLAY_CONFIG_VIDEOPLAYERCONTROL_USEAV1HWDECODING | \
+                                                           MPXPLAY_CONFIG_VIDEOPLAYERCONTROL_USEAV1HWDECODING | \
                                                            MPXPLAY_CONFIG_VIDEOPLAYERCONTROL_DISABLESDHWDEC | \
                                                            MPXPLAY_CONFIG_VIDEOPLAYERCONTROL_STREAMS_FORCED_DISABLE | \
                                                            MPXPLAY_CONFIG_VIDEOPLAYERCONTROL_SUBTITLES_EMBEDDED_DISABLE)  // TODO: move these to in_ffmpgdec_infile_callback
@@ -289,11 +289,11 @@ extern "C" {
 #define MPXPLAY_WAVEID_UNSUPPORTED 0x0001FFFF // !!! higher wave-ids blocked (fails) in decoder.c (modify it if it's required)
 
 enum mpxplay_video_player_types {
-	MPXPLAY_VIDEOPLAYERTYPE_NONE = 0,
-	MPXPLAY_VIDEOPLAYERTYPE_FFMPEG = 1,
-	MPXPLAY_VIDEOPLAYERTYPE_EXTERNAL = 5,
-	MPXPLAY_VIDEOPLAYERTYPE_QTMEDIA = 5,
-	MPXPLAY_VIDEOPLAYERTYPE_MAX
+    MPXPLAY_VIDEOPLAYERTYPE_NONE = 0,
+    MPXPLAY_VIDEOPLAYERTYPE_FFMPEG = 1,
+    MPXPLAY_VIDEOPLAYERTYPE_EXTERNAL = 5,
+    MPXPLAY_VIDEOPLAYERTYPE_QTMEDIA = 5,
+    MPXPLAY_VIDEOPLAYERTYPE_MAX
 };
 
 //------------------------------------------------------------------------

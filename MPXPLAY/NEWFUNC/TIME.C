@@ -34,27 +34,27 @@ unsigned long pds_gettimeh(void)
 
 mpxp_int64_t pds_gettimem(void)
 {
-	mpxp_int64_t time_ms;
+    mpxp_int64_t time_ms;
 #ifdef __DOS__
-	if(oldint08_handler){
-		unsigned long tsc;
-		_disable();
-		outp(0x43, 0x04);
-		tsc = inp(0x40);
-		tsc += inp(0x40) << 8;
-		_enable();
-		if(tsc < INT08_DIVISOR_NEW)
-			tsc = INT08_DIVISOR_NEW - tsc;
-		else
-			tsc = 0;
-		time_ms = (mpxp_int64_t)(((float)int08counter+(float)tsc/(float)INT08_DIVISOR_NEW)*1000.0/(float)INT08_CYCLES_NEW);
-		//fprintf(stderr,"time_ms:%d \n",time_ms);
-	}else
+    if(oldint08_handler){
+        unsigned long tsc;
+        _disable();
+        outp(0x43, 0x04);
+        tsc = inp(0x40);
+        tsc += inp(0x40) << 8;
+        _enable();
+        if(tsc < INT08_DIVISOR_NEW)
+            tsc = INT08_DIVISOR_NEW - tsc;
+        else
+            tsc = 0;
+        time_ms = (mpxp_int64_t)(((float)int08counter+(float)tsc/(float)INT08_DIVISOR_NEW)*1000.0/(float)INT08_CYCLES_NEW);
+        //fprintf(stderr,"time_ms:%d \n",time_ms);
+    }else
 #elif defined(_POSIX_TIMERS) && defined(_POSIX_MONOTONIC_CLOCK)
     struct timespec tss;
     if(clock_gettime(CLOCK_MONOTONIC, &tss) == 0)
     {
-    	time_ms = (mpxp_int64_t)tss.tv_sec * (mpxp_int64_t)1000 + (mpxp_int64_t)(tss.tv_nsec / 1000000);
+        time_ms = (mpxp_int64_t)tss.tv_sec * (mpxp_int64_t)1000 + (mpxp_int64_t)(tss.tv_nsec / 1000000);
     }else
 #endif
     time_ms = (mpxp_int64_t)clock() * (mpxp_int64_t)1000 / (mpxp_int64_t)CLOCKS_PER_SEC;
@@ -64,32 +64,32 @@ mpxp_int64_t pds_gettimem(void)
 
 mpxp_int64_t pds_gettimeu(void)
 {
-	mpxp_int64_t time_ms;
+    mpxp_int64_t time_ms;
 #ifdef __DOS__
-	if(oldint08_handler){
-		unsigned long tsc;
-		_disable();
-		outp(0x43,0x04);
-		tsc = inp(0x40);
-		tsc += inp(0x40)<<8;
-		_enable();
-		if(tsc < INT08_DIVISOR_NEW)
-			tsc = INT08_DIVISOR_NEW - tsc;
-		else
-			tsc = 0;
-		time_ms = (mpxp_int64_t)(((float)int08counter+(float)tsc/(float)INT08_DIVISOR_NEW)*1000000.0/(float)INT08_CYCLES_NEW);
-		//fprintf(stderr,"time_ms:%d \n",(long)time_ms);
-	}else
+    if(oldint08_handler){
+        unsigned long tsc;
+        _disable();
+        outp(0x43,0x04);
+        tsc = inp(0x40);
+        tsc += inp(0x40)<<8;
+        _enable();
+        if(tsc < INT08_DIVISOR_NEW)
+            tsc = INT08_DIVISOR_NEW - tsc;
+        else
+            tsc = 0;
+        time_ms = (mpxp_int64_t)(((float)int08counter+(float)tsc/(float)INT08_DIVISOR_NEW)*1000000.0/(float)INT08_CYCLES_NEW);
+        //fprintf(stderr,"time_ms:%d \n",(long)time_ms);
+    }else
 #elif defined(_POSIX_TIMERS) && defined(_POSIX_MONOTONIC_CLOCK)
-	struct timespec tss;
-	if(clock_gettime(CLOCK_MONOTONIC, &tss) == 0)
-	{
-		time_ms = (mpxp_int64_t)tss.tv_sec * (mpxp_int64_t)1000000 + (mpxp_int64_t)(tss.tv_nsec / 1000);
-	}else
+    struct timespec tss;
+    if(clock_gettime(CLOCK_MONOTONIC, &tss) == 0)
+    {
+        time_ms = (mpxp_int64_t)tss.tv_sec * (mpxp_int64_t)1000000 + (mpxp_int64_t)(tss.tv_nsec / 1000);
+    }else
 #endif
-	time_ms = (mpxp_int64_t)clock() * (mpxp_int64_t)1000000 / (mpxp_int64_t)CLOCKS_PER_SEC;
+    time_ms = (mpxp_int64_t)clock() * (mpxp_int64_t)1000000 / (mpxp_int64_t)CLOCKS_PER_SEC;
 
-	return time_ms;
+    return time_ms;
 }
 
 unsigned long pds_gettime(void)
@@ -295,8 +295,8 @@ int pds_gettimestampstr(char *timestampstr, unsigned int buflen)
  mpxp_uint32_t date_val = pds_getdate();
  mpxp_uint32_t time_val = pds_gettime();
  return snprintf(timestampstr, buflen, "%4.4d.%2.2d.%2.2d_%2.2d-%2.2d-%2.2d",
-		 	 	 (date_val >> 16), ((date_val >> 8) & 0xff), (date_val & 0xff),
-				 (time_val >> 16), ((time_val >> 8) & 0xff), (time_val & 0xff));
+                   (date_val >> 16), ((date_val >> 8) & 0xff), (date_val & 0xff),
+                 (time_val >> 16), ((time_val >> 8) & 0xff), (time_val & 0xff));
 }
 
 // "hh:mm:ss.nn" to 0xhhmmssnn

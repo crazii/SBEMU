@@ -33,10 +33,10 @@
 #define ESS_MIXERTYPE2     0x0002
 #define ESS_MIXERTYPE_MASK (ESS_MIXERTYPE1|ESS_MIXERTYPE2)
 
-#define ES18XX_PCM2	   0x0010 /* Has two useable PCM */
+#define ES18XX_PCM2       0x0010 /* Has two useable PCM */
 #define ES18XX_NEW_RATE    0x0020 /* More precise rate setting at 1869,1879*/
-#define ES18XX_HWV	   0x0080 /* Has seperate hardware volume mixer controls*/
-#define ES18XX_CONTROL	   0x0800 /* Has control ports */
+#define ES18XX_HWV       0x0080 /* Has seperate hardware volume mixer controls*/
+#define ES18XX_CONTROL       0x0800 /* Has control ports */
 
 typedef struct{
  unsigned int card_id;
@@ -51,13 +51,13 @@ static ess_hwinfo_s ess_hw_info[]={
  {0x8680,0xfff0,ES18XX_CONTROL|ESS_MIXERTYPE2                               },
  {0x1869,0xffff,ES18XX_PCM2   |ES18XX_NEW_RATE|ES18XX_CONTROL|ESS_MIXERTYPE2|ES18XX_HWV},
  {0x8690,0xfff0,ES18XX_PCM2   |ES18XX_NEW_RATE|ES18XX_CONTROL|ESS_MIXERTYPE2|ES18XX_HWV},
- {0x1878,0xffff,ES18XX_CONTROL|ESS_MIXERTYPE2				    },
- {0x8780,0xfff0,ES18XX_CONTROL|ESS_MIXERTYPE2				    },
+ {0x1878,0xffff,ES18XX_CONTROL|ESS_MIXERTYPE2                    },
+ {0x8780,0xfff0,ES18XX_CONTROL|ESS_MIXERTYPE2                    },
  {0x1879,0xffff,ES18XX_PCM2   |ES18XX_NEW_RATE|ES18XX_CONTROL|ESS_MIXERTYPE2|ES18XX_HWV},
  {0x8790,0xfff0,ES18XX_PCM2   |ES18XX_NEW_RATE|ES18XX_CONTROL|ESS_MIXERTYPE2|ES18XX_HWV},
- {0x1887,0xffff,ES18XX_PCM2   |ESS_MIXERTYPE2				    },
- {0x1888,0xffff,ES18XX_PCM2   |ESS_MIXERTYPE2				    },
- {0x8800,0xff00,ES18XX_PCM2   |ESS_MIXERTYPE2				    }
+ {0x1887,0xffff,ES18XX_PCM2   |ESS_MIXERTYPE2                    },
+ {0x1888,0xffff,ES18XX_PCM2   |ESS_MIXERTYPE2                    },
+ {0x8800,0xff00,ES18XX_PCM2   |ESS_MIXERTYPE2                    }
 };
 
 static unsigned int ESS_regB1,ESS_regB2;
@@ -166,7 +166,7 @@ static void ESS_card_info(struct mpxplay_audioout_info_s *aui)
 {
  char sout[100];
  sprintf(sout,"ESS : soundcard found (type=%4.4X) : SET BLASTER=A%3X I%d D%d H%d",
-	       aui->card_type,aui->card_port,aui->card_irq,aui->card_isa_dma,aui->card_isa_hidma);
+           aui->card_type,aui->card_port,aui->card_irq,aui->card_isa_dma,aui->card_isa_hidma);
  pds_textdisplay_printf(sout);
 }
 

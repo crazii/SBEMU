@@ -40,13 +40,13 @@
 #define ICH_GLOB_CNT_AC97WARM  0x00000004 // AC'97 warm reset
 #define ICH_GLOB_CNT_AC97COLD  0x00000002 // AC'97 cold reset
 
-#define ICH_PCM_20BIT	  0x00400000 // 20-bit samples (ICH4)
+#define ICH_PCM_20BIT      0x00400000 // 20-bit samples (ICH4)
 #define ICH_PCM_246_MASK  0x00300000 // 6 channels (not all chips)
 
 #define ICH_GLOB_STAT_REG 0x30       // Global Status register (RO)
 #define ICH_GLOB_STAT_PCR 0x00000100 // Primary codec is ready for action (software must check these bits before starting the codec!)
 #define ICH_GLOB_STAT_RCS 0x00008000 // read completion status
-#define ICH_SAMPLE_CAP	  0x00c00000 // ICH4: sample capability bits (RO)
+#define ICH_SAMPLE_CAP      0x00c00000 // ICH4: sample capability bits (RO)
 #define ICH_SAMPLE_16_20  0x00400000 // ICH4: 16- and 20-bit samples
 
 #define ICH_PO_BDBAR_REG  0x10  // PCM out buffer descriptor BAR
@@ -352,7 +352,7 @@ static int INTELICH_adetect(struct mpxplay_audioout_info_s *aui)
  if(!card->pci_dev)
   goto err_adetect;
 
- if(pcibios_search_devices(&ich_devices,card->pci_dev)!=PCI_SUCCESSFUL)
+ if(pcibios_search_devices(ich_devices,card->pci_dev)!=PCI_SUCCESSFUL)
   goto err_adetect;
 
  mpxplay_debugf(ICH_DEBUG_OUTPUT,"chip init : enable PCI io and busmaster");

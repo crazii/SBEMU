@@ -49,16 +49,16 @@ extern unsigned int MIrq_autodetect(struct mpxplay_audioout_info_s *aui);
 #define ENTER_CRITICAL IRQ_PUSH_OFF()
  void IRQ_PUSH_OFF (void);
 #pragma aux IRQ_PUSH_OFF = \
-	"pushfd",          \
-	"cli"              \
-	modify [esp];
+        "pushfd",          \
+        "cli"              \
+        modify [esp];
 
 #define LEAVE_CRITICAL IRQ_POP()
  void IRQ_POP (void);
 #pragma aux IRQ_POP =   \
-		"popfd" \
-		"sti"   \
-		modify [esp];
+        "popfd" \
+        "sti"   \
+        modify [esp];
 #else
 
 #define ENTER_CRITICAL {}

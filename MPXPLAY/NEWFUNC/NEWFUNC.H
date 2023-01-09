@@ -108,6 +108,12 @@ typedef int           mpxp_ptrsize_t;
 #define min(a,b) (((a)<(b))? (a):(b))
 #endif
 
+#if defined(SBEMU) && defined(DJGPP)
+#include <pc.h>
+#define inpd inportl
+#define outpd outportl
+#endif
+
 #if defined(NEWFUNC_ASM) && defined(__WATCOMC__)
  typedef char mpxp_float80_t[10];
  void pds_float80_put(mpxp_float80_t *ptr,double val);
@@ -348,6 +354,7 @@ extern void pds_fpu_setround_near(void);
 extern void pds_fpu_setround_chop(void);
 
 //dll_load.c
+#ifndef SBEMU
 #include "dll_load.h"
 extern mpxplay_module_entry_s *newfunc_dllload_getmodule(unsigned long moduletype_major,unsigned long moduletype_minor,char *modulename_minor,mpxplay_module_entry_s *prev_module);
 extern unsigned int newfunc_dllload_reloadmodule(mpxplay_module_entry_s *module);
@@ -384,9 +391,16 @@ extern mpxp_ptrsize_t newfunc_dllload_winlib_callfunc(struct pds_win32dllcallfun
 extern time_t pds_mkgmtime(struct tm *t_in);
 #endif // defined(MPXPLAY_GUI_QT) || defined(MPXPLAY_LINK_ORIGINAL_FFMPEG)
 #endif // MPXPLAY_WIN32
+#endif
 
 //dpmi.c
 #ifndef MPXPLAY_WIN32
+#if defined(DJGPP)
+#define far
+#define __far
+#define __interrupt
+#define __loadds
+#endif
 #define PDS_INT2X_DOSMEM_SIZE  512
 extern long pds_dpmi_segment_to_selector(unsigned int segment);
 extern void far *pds_dpmi_getrmvect(unsigned int intno);

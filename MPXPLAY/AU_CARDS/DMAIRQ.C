@@ -124,8 +124,8 @@ unsigned int MDma_init_pcmoutbuf(struct mpxplay_audioout_info_s *aui,unsigned in
  }
 
  dmabufsize=(unsigned int)((float)maxbufsize
-		           *(float)aui->freq_card/freq);
-		           // *(float)bit_width/16.0);
+                   *(float)aui->freq_card/freq);
+                   // *(float)bit_width/16.0);
  dmabufsize+=(pagesize-1);           // rounding up to pagesize
  dmabufsize-=(dmabufsize%pagesize);  //
  if(dmabufsize<(pagesize*2))
@@ -566,10 +566,10 @@ static void setvect_soundcard_oldirq(unsigned int irq_num,unsigned long *card_in
 //--------------------------------------------------------------------------
 #ifdef __DOS__
 
-#define OCR1	0x20
-#define IMR1	0x21
-#define OCR2	0xA0
-#define IMR2	0xA1
+#define OCR1    0x20
+#define IMR1    0x21
+#define OCR2    0xA0
+#define IMR2    0xA1
 
 static void MIrq_OnOff(unsigned int irqnum,unsigned int start)
 {

@@ -31,59 +31,59 @@
 #define ES1371_MAX_BYTES        4
 #define ES1371_DMABUF_ALIGN (ES1371_DMABUF_PERIODS*ES1371_MAX_CHANNELS*ES1371_MAX_BYTES) // 256
 
-#define POLL_COUNT	  0xf000
-#define ES_REG_CONTROL	0x00	/* R/W: Interrupt/Chip select control register */
-#define  ES_1371_GPIO_OUT(o)	(((o)&0x0f)<<16)/* GPIO out [3:0] pins - W/R */
-#define  ES_1371_SYNC_RES	(1<<14)		/* Warm AC97 reset */
-#define  ES_DAC1_EN		(1<<6)		/* DAC1 playback channel enable */
-#define ES_REG_STATUS	0x04	 /* R/O: Interrupt/Chip select status register */
-#define  ES_1371_ST_AC97_RST	(1<<29)		/* CT5880 AC'97 Reset bit */
+#define POLL_COUNT      0xf000
+#define ES_REG_CONTROL    0x00    /* R/W: Interrupt/Chip select control register */
+#define  ES_1371_GPIO_OUT(o)    (((o)&0x0f)<<16)/* GPIO out [3:0] pins - W/R */
+#define  ES_1371_SYNC_RES    (1<<14)        /* Warm AC97 reset */
+#define  ES_DAC1_EN        (1<<6)        /* DAC1 playback channel enable */
+#define ES_REG_STATUS    0x04     /* R/O: Interrupt/Chip select status register */
+#define  ES_1371_ST_AC97_RST    (1<<29)        /* CT5880 AC'97 Reset bit */
 #define ES_REG_UART_CONTROL 0x09 /* W/O: UART control register */
-#define ES_REG_UART_RES	0x0a	 /* R/W: UART reserver register */
-#define ES_REG_MEM_PAGE	0x0c	 /* R/W: Memory page register */
-#define  ES_MEM_PAGEO(o)	(((o)&0x0f)<<0)	/* memory page select - out */
-#define  ES_P1_MODEM		(0x03<<0)	/* mask for above */
+#define ES_REG_UART_RES    0x0a     /* R/W: UART reserver register */
+#define ES_REG_MEM_PAGE    0x0c     /* R/W: Memory page register */
+#define  ES_MEM_PAGEO(o)    (((o)&0x0f)<<0)    /* memory page select - out */
+#define  ES_P1_MODEM        (0x03<<0)    /* mask for above */
 #define ES_REG_1371_SMPRATE 0x10 // W/R: Codec rate converter interface register
 #define  ES_1371_SRC_RAM_ADDRO(o) (((o)&0x7f)<<25)/* address of the sample rate converter */
-#define  ES_1371_SRC_RAM_WE	  (1<<24)	/* R/W: read/write control for sample rate converter */
-#define  ES_1371_SRC_RAM_BUSY     (1<<23)	/* R/O: sample rate memory is busy */
-#define  ES_1371_SRC_DISABLE      (1<<22)	/* sample rate converter disable */
-#define  ES_1371_DIS_P1	   (1<<21)	/* playback channel 1 accumulator update disable */
-#define  ES_1371_DIS_P2	   (1<<20)	/* playback channel 1 accumulator update disable */
-#define  ES_1371_DIS_R1	   (1<<19)	/* capture channel accumulator update disable */
+#define  ES_1371_SRC_RAM_WE      (1<<24)    /* R/W: read/write control for sample rate converter */
+#define  ES_1371_SRC_RAM_BUSY     (1<<23)    /* R/O: sample rate memory is busy */
+#define  ES_1371_SRC_DISABLE      (1<<22)    /* sample rate converter disable */
+#define  ES_1371_DIS_P1       (1<<21)    /* playback channel 1 accumulator update disable */
+#define  ES_1371_DIS_P2       (1<<20)    /* playback channel 1 accumulator update disable */
+#define  ES_1371_DIS_R1       (1<<19)    /* capture channel accumulator update disable */
 #define  ES_1371_SRC_RAM_DATAO(o) (((o)&0xffff)<<0)/* current value of the sample rate converter */
 
-#define ES_REG_1371_CODEC 0x14	/* W/R: Codec Read/Write register address */
-#define  ES_1371_CODEC_RDY	   (1<<31)	/* codec ready */
-#define  ES_1371_CODEC_WIP	   (1<<30)	/* codec register access in progress */
-#define  ES_1371_CODEC_PIRD	   (1<<23)	/* codec read/write select register */
+#define ES_REG_1371_CODEC 0x14    /* W/R: Codec Read/Write register address */
+#define  ES_1371_CODEC_RDY       (1<<31)    /* codec ready */
+#define  ES_1371_CODEC_WIP       (1<<30)    /* codec register access in progress */
+#define  ES_1371_CODEC_PIRD       (1<<23)    /* codec read/write select register */
 #define  ES_1371_CODEC_WRITE(a,d) ((((a)&0x7f)<<16)|(((d)&0xffff)<<0))
 #define  ES_1371_CODEC_READS(a)   ((((a)&0x7f)<<16)|ES_1371_CODEC_PIRD)
 #define  ES_1371_CODEC_READ(i)    (((i)>>0)&0xffff)
-#define ES_REG_1371_LEGACY 0x18	/* W/R: Legacy control/status register */
-#define ES_REG_SERIAL	0x20	/* R/W: Serial interface control register */
-#define  ES_P1_LOOP_SEL	        (1<<13)		/* DAC1; 0 - loop mode; 1 = stop mode */
-#define  ES_P1_PAUSE		(1<<11)		/* DAC1; 0 - play mode; 1 = pause mode */
-#define  ES_P1_SCT_RLD		(1<<7)		/* force sample counter reload for DAC1 */
-#define  ES_P1_MODEO(o)	        (((o)&0x03)<<0)	/* DAC1 mode; -- '' -- */
+#define ES_REG_1371_LEGACY 0x18    /* W/R: Legacy control/status register */
+#define ES_REG_SERIAL    0x20    /* R/W: Serial interface control register */
+#define  ES_P1_LOOP_SEL            (1<<13)        /* DAC1; 0 - loop mode; 1 = stop mode */
+#define  ES_P1_PAUSE        (1<<11)        /* DAC1; 0 - play mode; 1 = pause mode */
+#define  ES_P1_SCT_RLD        (1<<7)        /* force sample counter reload for DAC1 */
+#define  ES_P1_MODEO(o)            (((o)&0x03)<<0)    /* DAC1 mode; -- '' -- */
 
-#define ES_REG_DAC1_COUNT 0x24	/* R/W: DAC1 sample count register */
-#define ES_REG_DAC1_FRAME 0x30	/* R/W: PAGE 0x0c; DAC1 frame address */
-#define ES_REG_DAC1_SIZE  0x34	/* R/W: PAGE 0x0c; DAC1 frame size */
+#define ES_REG_DAC1_COUNT 0x24    /* R/W: DAC1 sample count register */
+#define ES_REG_DAC1_FRAME 0x30    /* R/W: PAGE 0x0c; DAC1 frame address */
+#define ES_REG_DAC1_SIZE  0x34    /* R/W: PAGE 0x0c; DAC1 frame size */
 #define  ES_REG_FCURR_COUNTI(i) (((i)>>14)&0x3fffc)
 
 //Sample rate converter addresses
-#define ES_SMPREG_DAC1		0x70
-#define ES_SMPREG_DAC2		0x74
-#define ES_SMPREG_ADC		0x78
-#define ES_SMPREG_VOL_ADC	0x6c
-#define ES_SMPREG_VOL_DAC1	0x7c
-#define ES_SMPREG_VOL_DAC2	0x7e
-#define ES_SMPREG_TRUNC_N	0x00
-#define ES_SMPREG_INT_REGS	0x01
-#define ES_SMPREG_VFREQ_FRAC	0x03
+#define ES_SMPREG_DAC1        0x70
+#define ES_SMPREG_DAC2        0x74
+#define ES_SMPREG_ADC        0x78
+#define ES_SMPREG_VOL_ADC    0x6c
+#define ES_SMPREG_VOL_DAC1    0x7c
+#define ES_SMPREG_VOL_DAC2    0x7e
+#define ES_SMPREG_TRUNC_N    0x00
+#define ES_SMPREG_INT_REGS    0x01
+#define ES_SMPREG_VFREQ_FRAC    0x03
 
-#define ES_PAGE_DAC	0x0c
+#define ES_PAGE_DAC    0x0c
 
 #define ES1371REV_CT5880_A  0x07
 #define CT5880REV_CT5880_C  0x02
@@ -135,7 +135,7 @@ static unsigned int snd_es1371_src_read(struct ensoniq_card_s *card, unsigned sh
 
  // expose the SRC state bits
  r = temp & (ES_1371_SRC_DISABLE | ES_1371_DIS_P1 |
-		    ES_1371_DIS_P2 | ES_1371_DIS_R1);
+            ES_1371_DIS_P2 | ES_1371_DIS_R1);
  r |= ES_1371_SRC_RAM_ADDRO(reg) | 0x10000;
  outl((card->port + ES_REG_1371_SMPRATE), r);
 
@@ -164,7 +164,7 @@ static unsigned int snd_es1371_src_read(struct ensoniq_card_s *card, unsigned sh
 }
 
 static void snd_es1371_src_write(struct ensoniq_card_s * card,
-				 unsigned short reg, unsigned short data)
+                 unsigned short reg, unsigned short data)
 {
  unsigned int r;
 
@@ -176,7 +176,7 @@ static void snd_es1371_src_write(struct ensoniq_card_s * card,
 }
 
 static void snd_es1371_codec_write(struct ensoniq_card_s *card,
-				   unsigned short reg, unsigned short val)
+                   unsigned short reg, unsigned short val)
 {
  unsigned int t, x;
 
@@ -208,7 +208,7 @@ static void snd_es1371_codec_write(struct ensoniq_card_s *card,
 }
 
 static unsigned short snd_es1371_codec_read(struct ensoniq_card_s *card,
-					    unsigned short reg)
+                        unsigned short reg)
 {
  unsigned int t, x, fail = 0;
 
@@ -287,9 +287,9 @@ static void snd_es1371_dac1_rate(struct ensoniq_card_s *card, unsigned int rate)
  r = (snd_es1371_wait_src_ready(card) & (ES_1371_SRC_DISABLE |ES_1371_DIS_P2 | ES_1371_DIS_R1)) | ES_1371_DIS_P1;
  outl((card->port + ES_REG_1371_SMPRATE), r);
  snd_es1371_src_write(card, ES_SMPREG_DAC1 + ES_SMPREG_INT_REGS,
-			     (snd_es1371_src_read(card, ES_SMPREG_DAC1 +
-			      ES_SMPREG_INT_REGS) & 0x00ff) |
-			      ((freq >> 5) & 0xfc00));
+                 (snd_es1371_src_read(card, ES_SMPREG_DAC1 +
+                  ES_SMPREG_INT_REGS) & 0x00ff) |
+                  ((freq >> 5) & 0xfc00));
  snd_es1371_src_write(card, ES_SMPREG_DAC1 + ES_SMPREG_VFREQ_FRAC, freq & 0x7fff);
  r = (snd_es1371_wait_src_ready(card) & (ES_1371_SRC_DISABLE | ES_1371_DIS_P2 | ES_1371_DIS_R1));
  outl((card->port + ES_REG_1371_SMPRATE), r);
@@ -453,7 +453,7 @@ static int ES1371_adetect(struct mpxplay_audioout_info_s *aui)
  if(!card->pci_dev)
   goto err_adetect;
 
- if(pcibios_search_devices(&ensoniq_devices,card->pci_dev)!=PCI_SUCCESSFUL)
+ if(pcibios_search_devices(ensoniq_devices,card->pci_dev)!=PCI_SUCCESSFUL)
   goto err_adetect;
 
  mpxplay_debugf(ENS_DEBUG_OUTPUT,"chip init : enable PCI io and busmaster");
@@ -475,7 +475,7 @@ static int ES1371_adetect(struct mpxplay_audioout_info_s *aui)
   funcbit_enable(card->sctrl,ES_1371_ST_AC97_RST);
  }
 
- if(pcibios_search_devices(&amplifier_hack_devices,NULL)==PCI_SUCCESSFUL)
+ if(pcibios_search_devices(amplifier_hack_devices,NULL)==PCI_SUCCESSFUL)
   funcbit_enable(card->ctrl,ES_1371_GPIO_OUT(1)); // turn on amplifier
 
  mpxplay_debugf(ENS_DEBUG_OUTPUT,"vend_id:%4.4X dev_id:%4.4X port:%8.8X irq:%d rev:%2.2X info:%8.8X",

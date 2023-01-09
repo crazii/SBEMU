@@ -27,65 +27,65 @@
 // ac97
 #define VIA_REG_AC97_CTRL               0x80
 #define VIA_REG_AC97_CODEC_ID_PRIMARY   0x00000000
-#define VIA_REG_AC97_PRIMARY_VALID	(1<<25)
-#define VIA_REG_AC97_BUSY		(1<<24)
-#define VIA_REG_AC97_READ		(1<<23)
+#define VIA_REG_AC97_PRIMARY_VALID    (1<<25)
+#define VIA_REG_AC97_BUSY        (1<<24)
+#define VIA_REG_AC97_READ        (1<<23)
 #define VIA_REG_AC97_WRITE              0
-#define VIA_REG_AC97_CMD_SHIFT	        16
+#define VIA_REG_AC97_CMD_SHIFT            16
 #define VIA_REG_AC97_CMD_MASK           0x7F
-#define VIA_REG_AC97_DATA_MASK	        0xffff
+#define VIA_REG_AC97_DATA_MASK            0xffff
 
-#define VIA_REG_OFFSET_STATUS	     0x00	/* byte - channel status */
+#define VIA_REG_OFFSET_STATUS         0x00    /* byte - channel status */
 
 
-#define VIA_REG_OFFSET_CONTROL	     0x01	/* byte - channel control */
-#define  VIA_REG_CTRL_START	     0x80	/* WO */
-#define  VIA_REG_CTRL_TERMINATE	     0x40	/* WO */
-#define  VIA_REG_CTRL_PAUSE	     0x08	/* RW */
-#define  VIA_REG_CTRL_RESET	     0x01	/* RW - probably reset? undocumented */
+#define VIA_REG_OFFSET_CONTROL         0x01    /* byte - channel control */
+#define  VIA_REG_CTRL_START         0x80    /* WO */
+#define  VIA_REG_CTRL_TERMINATE         0x40    /* WO */
+#define  VIA_REG_CTRL_PAUSE         0x08    /* RW */
+#define  VIA_REG_CTRL_RESET         0x01    /* RW - probably reset? undocumented */
 
-#define VIA_REG_OFFSET_TYPE 	     0x02	/* byte - channel type */
+#define VIA_REG_OFFSET_TYPE          0x02    /* byte - channel type */
 #define  VIA_REG_TYPE_INT_LSAMPLE    0x04
-#define  VIA_REG_TYPE_INT_EOL	     0x02
-#define  VIA_REG_TYPE_INT_FLAG	     0x01
+#define  VIA_REG_TYPE_INT_EOL         0x02
+#define  VIA_REG_TYPE_INT_FLAG         0x01
 
-#define VIA_REG_OFFSET_TABLE_PTR     0x04	/* dword - channel table pointer */
-#define VIA_REG_OFFSET_CURR_PTR      0x04	/* dword - channel current pointer */
-#define VIA_REG_PLAYBACK_CURR_COUNT  0x0C	/* dword - channel current count */
+#define VIA_REG_OFFSET_TABLE_PTR     0x04    /* dword - channel table pointer */
+#define VIA_REG_OFFSET_CURR_PTR      0x04    /* dword - channel current pointer */
+#define VIA_REG_PLAYBACK_CURR_COUNT  0x0C    /* dword - channel current count */
 
 // VT8233
-#define VIA_REG_CTRL_AUTOSTART	     0x20
-#define VIA_REG_OFFSET_STOP_IDX      0x08	/* dword - stop index, channel type, sample rate */
-#define VIA_REG_TYPE_AUTOSTART	     0x80	/* RW - autostart at EOL */
-#define VIA_REG_TYPE_16BIT	     0x20	/* RW */
-#define VIA_REG_TYPE_STEREO	     0x10	/* RW */
-#define VIA8233_REG_TYPE_16BIT	     0x00200000	/* RW */
-#define VIA8233_REG_TYPE_STEREO	     0x00100000	/* RW */
-#define VIA_REG_OFFSET_CURR_INDEX    0x0f	/* byte - channel current index */
+#define VIA_REG_CTRL_AUTOSTART         0x20
+#define VIA_REG_OFFSET_STOP_IDX      0x08    /* dword - stop index, channel type, sample rate */
+#define VIA_REG_TYPE_AUTOSTART         0x80    /* RW - autostart at EOL */
+#define VIA_REG_TYPE_16BIT         0x20    /* RW */
+#define VIA_REG_TYPE_STEREO         0x10    /* RW */
+#define VIA8233_REG_TYPE_16BIT         0x00200000    /* RW */
+#define VIA8233_REG_TYPE_STEREO         0x00100000    /* RW */
+#define VIA_REG_OFFSET_CURR_INDEX    0x0f    /* byte - channel current index */
 #define VIA_REG_OFS_PLAYBACK_VOLUME_L 0x02
 #define VIA_REG_OFS_PLAYBACK_VOLUME_R 0x03
-#define VIA_TBL_BIT_EOL		0x80000000
+#define VIA_TBL_BIT_EOL        0x80000000
 
-#define VIA_ACLINK_STAT		0x40
-#define  VIA_ACLINK_C11_READY	0x20
-#define  VIA_ACLINK_C10_READY	0x10
-#define  VIA_ACLINK_C01_READY	0x04 /* secondary codec ready */
-#define  VIA_ACLINK_LOWPOWER	0x02 /* low-power state */
-#define  VIA_ACLINK_C00_READY	0x01 /* primary codec ready */
-#define VIA_ACLINK_CTRL		0x41
-#define  VIA_ACLINK_CTRL_ENABLE	0x80 /* 0: disable, 1: enable */
-#define  VIA_ACLINK_CTRL_RESET	0x40 /* 0: assert, 1: de-assert */
-#define  VIA_ACLINK_CTRL_SYNC	0x20 /* 0: release SYNC, 1: force SYNC hi */
-#define  VIA_ACLINK_CTRL_SDO	0x10 /* 0: release SDO, 1: force SDO hi */
-#define  VIA_ACLINK_CTRL_VRA	0x08 /* 0: disable VRA, 1: enable VRA */
-#define  VIA_ACLINK_CTRL_PCM	0x04 /* 0: disable PCM, 1: enable PCM */
-#define  VIA_ACLINK_CTRL_FM	0x02 /* via686 only */
-#define  VIA_ACLINK_CTRL_SB	0x01 /* via686 only */
+#define VIA_ACLINK_STAT        0x40
+#define  VIA_ACLINK_C11_READY    0x20
+#define  VIA_ACLINK_C10_READY    0x10
+#define  VIA_ACLINK_C01_READY    0x04 /* secondary codec ready */
+#define  VIA_ACLINK_LOWPOWER    0x02 /* low-power state */
+#define  VIA_ACLINK_C00_READY    0x01 /* primary codec ready */
+#define VIA_ACLINK_CTRL        0x41
+#define  VIA_ACLINK_CTRL_ENABLE    0x80 /* 0: disable, 1: enable */
+#define  VIA_ACLINK_CTRL_RESET    0x40 /* 0: assert, 1: de-assert */
+#define  VIA_ACLINK_CTRL_SYNC    0x20 /* 0: release SYNC, 1: force SYNC hi */
+#define  VIA_ACLINK_CTRL_SDO    0x10 /* 0: release SDO, 1: force SDO hi */
+#define  VIA_ACLINK_CTRL_VRA    0x08 /* 0: disable VRA, 1: enable VRA */
+#define  VIA_ACLINK_CTRL_PCM    0x04 /* 0: disable PCM, 1: enable PCM */
+#define  VIA_ACLINK_CTRL_FM    0x02 /* via686 only */
+#define  VIA_ACLINK_CTRL_SB    0x01 /* via686 only */
 
-#define  VIA_ACLINK_CTRL_INIT	(VIA_ACLINK_CTRL_ENABLE|\
-				 VIA_ACLINK_CTRL_RESET|\
-				 VIA_ACLINK_CTRL_PCM|\
-				 VIA_ACLINK_CTRL_VRA)
+#define  VIA_ACLINK_CTRL_INIT    (VIA_ACLINK_CTRL_ENABLE|\
+                 VIA_ACLINK_CTRL_RESET|\
+                 VIA_ACLINK_CTRL_PCM|\
+                 VIA_ACLINK_CTRL_VRA)
 
 #define PCI_VENDOR_ID_VIA        0x1106
 #define PCI_DEVICE_ID_VT82C686   0x3058
@@ -97,7 +97,7 @@
 struct via82xx_card
 {
  unsigned long   iobase;
- unsigned short	 model;
+ unsigned short     model;
  unsigned int    irq;
  unsigned char   chiprev;
  struct pci_config_s  *pci_dev;
@@ -222,7 +222,7 @@ static void VIA82XX_card_info(struct mpxplay_audioout_info_s *aui)
  struct via82xx_card *card=aui->card_private_data;
  char sout[100];
  sprintf(sout,"VIA : %s soundcard found on port:%4.4X irq:%d chiprev:%2.2X model:%4.4X",
-	 card->pci_dev->device_name,card->iobase,card->irq,card->chiprev,card->model);
+     card->pci_dev->device_name,card->iobase,card->irq,card->chiprev,card->model);
  pds_textdisplay_printf(sout);
 }
 
@@ -239,7 +239,7 @@ static int VIA82XX_adetect(struct mpxplay_audioout_info_s *aui)
  if(!card->pci_dev)
   goto err_adetect;
 
- if(pcibios_search_devices(&via_devices,card->pci_dev)!=PCI_SUCCESSFUL)
+ if(pcibios_search_devices(via_devices,card->pci_dev)!=PCI_SUCCESSFUL)
   goto err_adetect;
 
  pcibios_set_master(card->pci_dev);
@@ -255,8 +255,8 @@ static int VIA82XX_adetect(struct mpxplay_audioout_info_s *aui)
  card->pcmout_bufsize=MDma_get_max_pcmoutbufsize(aui,0,PCMBUFFERPAGESIZE,2,0);
 
  card->dm=MDma_alloc_dosmem( VIRTUALPAGETABLESIZE   // virtualpagetable
-			    +card->pcmout_bufsize   // pcm output
-			    +4096 );                // to round
+                +card->pcmout_bufsize   // pcm output
+                +4096 );                // to round
 
  card->virtualpagetable=(void *)(((uint32_t)card->dm->linearptr+4095)&(~4095));
  card->pcmout_buffer=(char *)card->virtualpagetable+VIRTUALPAGETABLESIZE;
@@ -335,11 +335,11 @@ static void VIA82XX_setrate(struct mpxplay_audioout_info_s *aui)
 
  if(card->pci_dev->device_id==PCI_DEVICE_ID_VT82C686){
   outb(card->iobase+VIA_REG_OFFSET_TYPE,
-	VIA_REG_TYPE_AUTOSTART |
-	VIA_REG_TYPE_16BIT | VIA_REG_TYPE_STEREO ); // old: 0xB0
-	//VIA_REG_TYPE_INT_LSAMPLE |                     // ?????
-	//VIA_REG_TYPE_INT_EOL | VIA_REG_TYPE_INT_FLAG); // ?????
-	// new: 0xB7
+    VIA_REG_TYPE_AUTOSTART |
+    VIA_REG_TYPE_16BIT | VIA_REG_TYPE_STEREO ); // old: 0xB0
+    //VIA_REG_TYPE_INT_LSAMPLE |                     // ?????
+    //VIA_REG_TYPE_INT_EOL | VIA_REG_TYPE_INT_FLAG); // ?????
+    // new: 0xB7
  }else{ // VT8233
   unsigned int rbits;
   // init dxs volume (??? here?)

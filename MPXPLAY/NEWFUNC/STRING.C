@@ -509,7 +509,7 @@ void pds_str_url_decode(char *strbegin)
    if(c || ((src[0]=='0') && (src[1]=='0')))
     src += 2;
    else
-	c = *src;
+    c = *src;
   }
   *dest++ = c;
  }while(1);

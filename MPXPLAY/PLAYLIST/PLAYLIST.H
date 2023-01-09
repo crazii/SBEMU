@@ -522,8 +522,10 @@ extern struct playlist_entry_info *playlist_editlist_updatesides_add_dft(struct 
 #define DISKFILE_FILECOPY_BARBUFLEN (DISKFILE_FILECOPY_BARLEN+1)
 #endif
 extern void playlist_diskfile_filecopy_makebar(char *barstr,unsigned int percent);
+#ifdef MPXPLAY_WIN32
 extern unsigned int playlist_diskfile_credentials_logoff(struct mpxp_credentials_s *cri);
 extern unsigned int playlist_diskfile_credentials_errorhand(struct mpxp_credentials_s *cri,unsigned int do_cr);
+#endif
 extern void playlist_diskfile_copy_or_move(struct mainvars *mvp,unsigned int move);
 extern void playlist_diskfile_delete_init(struct mainvars *mvp);
 extern void playlist_diskfile_show_multifileinfos(struct mainvars *mvp);

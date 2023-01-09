@@ -42,7 +42,7 @@ typedef struct emu10k1_card
 {
  unsigned long   iobase;
  unsigned int    irq;
- unsigned short	 model;
+ unsigned short     model;
  unsigned char   chiprev;
  unsigned long   serial;
  unsigned char   chips;

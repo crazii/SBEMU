@@ -48,7 +48,7 @@ static uint8_t pcibios_GetBus(void)
  return 1;
 }
 
-uint8_t	pcibios_FindDevice(uint16_t wVendor, uint16_t wDevice, pci_config_s *ppkey)
+uint8_t    pcibios_FindDevice(uint16_t wVendor, uint16_t wDevice, pci_config_s *ppkey)
 {
  union REGS reg;
 
@@ -91,7 +91,7 @@ uint8_t pcibios_search_devices(pci_device_s devices[],pci_config_s *ppkey)
  return PCI_DEVICE_NOTFOUND;
 }
 
-uint8_t	pcibios_ReadConfig_Byte(pci_config_s * ppkey, uint16_t wAdr)
+uint8_t    pcibios_ReadConfig_Byte(pci_config_s * ppkey, uint16_t wAdr)
 {
  union REGS reg;
 

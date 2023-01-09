@@ -390,6 +390,7 @@ void mpxplay_timer_executefunc(void *func)
  }
 }
 
+#ifndef SBEMU
 // currently returns 1 if there is delay, returns 0 if no
 unsigned int mpxplay_timer_lowpriorstart_wait(void)
 {
@@ -397,6 +398,7 @@ unsigned int mpxplay_timer_lowpriorstart_wait(void)
   return 1;
  return 0;
 }
+#endif
 
 //------------------------------------------------------------------------
 
@@ -452,7 +454,7 @@ void mpxplay_timer_execute_maincycle_funcs(void) // not reentrant!
    if(funcbit_smp_test(mtf->timer_flags,MPXPLAY_TIMERTYPE_SIGNAL)){
     if(funcbit_smp_test(signal_events,mtf->refresh_delay)){
 
-#if defined(__DOS__)
+#if defined(__DOS__) && !defined(SBEMU)
      if(funcbit_test(mtf->timer_flags,MPXPLAY_TIMERFLAG_INDOS)){ // ???
       if(pds_filehand_check_infilehand())    //
        continue;                             //
@@ -478,13 +480,14 @@ void mpxplay_timer_execute_maincycle_funcs(void) // not reentrant!
     }
    }else{
     if(pds_threads_timer_tick_get() >= (funcbit_smp_int32_get(mtf->refresh_counter) + funcbit_smp_int32_get(mtf->refresh_delay))){
-
+     #ifndef SBEMU
      if(funcbit_smp_test(mtf->timer_flags,MPXPLAY_TIMERFLAG_LOWPRIOR)){
       if(!mpxplay_check_buffers_full(&mvps))
        continue;
      }
+     #endif
 
-#if defined(__DOS__)
+#if defined(__DOS__) && !defined(SBEMU)
      if(funcbit_test(mtf->timer_flags,MPXPLAY_TIMERFLAG_INDOS)){ // ???
       if(pds_filehand_check_infilehand())    //
        continue;                             //
@@ -587,7 +590,7 @@ void mpxplay_timer_execute_int08_funcs(void)
   if(mtf_func && funcbit_smp_test(mtf->timer_flags,MPXPLAY_TIMERTYPE_INT08) && !funcbit_smp_test(mtf->timer_flags,MPXPLAY_TIMER_INT08_EXCLUSION)){
    if(pds_threads_timer_tick_get() >= (funcbit_smp_int32_get(mtf->refresh_counter) + funcbit_smp_int32_get(mtf->refresh_delay))){
 
-#if defined(__DOS__)
+#if defined(__DOS__) && !defined(SBEMU)
     if(funcbit_test(mtf->timer_flags,MPXPLAY_TIMERFLAG_INDOS)){
      if(oldint08_running)
       continue;
@@ -816,6 +819,14 @@ void restorefpu(void);
 
 void cld(void);
 #pragma aux cld="cld"
+
+#if defined(SBEMU) && defined(DJGPP)
+#define loades() { asm("push %ds\n\t pop %es");}
+#define savefpu() {asm("sub $200, %esp\n\t fsave (%esp)");}
+#define clearfpu() {asm("finit");}
+#define restorefpu() {asm("frstor (%esp)\n\t add $200, %esp");}
+#define cld() {asm("cld");}
+#endif
 
 static void __interrupt __loadds newhandler_08(void)
 {

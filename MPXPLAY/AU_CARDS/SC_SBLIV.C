@@ -30,8 +30,8 @@
 #include "sc_sbliv.h"
 
 #define VOICE_FLAGS_MASTER      0x01
-#define VOICE_FLAGS_STEREO	0x02
-#define VOICE_FLAGS_16BIT	0x04
+#define VOICE_FLAGS_STEREO    0x02
+#define VOICE_FLAGS_16BIT    0x04
 
 //#define AUDIGY1_USE_AC97 1 // it's for testing only
 
@@ -202,20 +202,20 @@ static void snd_emu10k1_hw_init(struct emu10k1_card *card)
   *  P                 = 0     (Consumer)
   */
  emu10k1_writeptr(card, SPCS0, 0,
-			SPCS_CLKACCY_1000PPM | SPCS_SAMPLERATE_48 |
-			SPCS_CHANNELNUM_LEFT | SPCS_SOURCENUM_UNSPEC |
-			SPCS_GENERATIONSTATUS | 0x00001200 |
-			0x00000000 | SPCS_EMPHASIS_NONE | SPCS_COPYRIGHT);
+            SPCS_CLKACCY_1000PPM | SPCS_SAMPLERATE_48 |
+            SPCS_CHANNELNUM_LEFT | SPCS_SOURCENUM_UNSPEC |
+            SPCS_GENERATIONSTATUS | 0x00001200 |
+            0x00000000 | SPCS_EMPHASIS_NONE | SPCS_COPYRIGHT);
  emu10k1_writeptr(card, SPCS1, 0,
-			SPCS_CLKACCY_1000PPM | SPCS_SAMPLERATE_48 |
-			SPCS_CHANNELNUM_LEFT | SPCS_SOURCENUM_UNSPEC |
-			SPCS_GENERATIONSTATUS | 0x00001200 |
-			0x00000000 | SPCS_EMPHASIS_NONE | SPCS_COPYRIGHT);
+            SPCS_CLKACCY_1000PPM | SPCS_SAMPLERATE_48 |
+            SPCS_CHANNELNUM_LEFT | SPCS_SOURCENUM_UNSPEC |
+            SPCS_GENERATIONSTATUS | 0x00001200 |
+            0x00000000 | SPCS_EMPHASIS_NONE | SPCS_COPYRIGHT);
  emu10k1_writeptr(card, SPCS2, 0,
-			SPCS_CLKACCY_1000PPM | SPCS_SAMPLERATE_48 |
-			SPCS_CHANNELNUM_LEFT | SPCS_SOURCENUM_UNSPEC |
-			SPCS_GENERATIONSTATUS | 0x00001200 |
-			0x00000000 | SPCS_EMPHASIS_NONE | SPCS_COPYRIGHT);
+            SPCS_CLKACCY_1000PPM | SPCS_SAMPLERATE_48 |
+            SPCS_CHANNELNUM_LEFT | SPCS_SOURCENUM_UNSPEC |
+            SPCS_GENERATIONSTATUS | 0x00001200 |
+            0x00000000 | SPCS_EMPHASIS_NONE | SPCS_COPYRIGHT);
 
  if(card->card_capabilities->chips&EMU_CHIPS_0151) { // audigy2,4 (24 bit)
   // Hacks for Alice3 to work independent of haP16V driver
@@ -298,7 +298,7 @@ static void snd_emu10k1_hw_init(struct emu10k1_card *card)
   }
  }
 
- if(card->chips&EMU_CHIPS_10K2) {	// enable analog output
+ if(card->chips&EMU_CHIPS_10K2) {    // enable analog output
   uint32_t tmp = inl(card->iobase + A_IOCFG);
   outl(card->iobase + A_IOCFG, tmp | A_IOCFG_GPOUT0);
  }
@@ -596,7 +596,7 @@ static uint32_t emu10k1_srToPitch(uint32_t sampleRate)
  if (sampleRate == 0)
   return 0;
 
- sampleRate *= 11185;	// Scale 48000 to 0x20002380
+ sampleRate *= 11185;    // Scale 48000 to 0x20002380
 
  for (i = 31; i > 0; i--) {
   if (sampleRate & 0x80000000) {
@@ -644,8 +644,8 @@ static uint32_t emu10k1_select_interprom(struct emu10k1_card *card, unsigned int
 
 static void emu10k1_pcm_init_voice(struct emu10k1_card *card,
                                        unsigned int voice, unsigned int flags,
-				       unsigned int start_addr,
-				       unsigned int end_addr)
+                       unsigned int start_addr,
+                       unsigned int end_addr)
 {
  unsigned int ccca_start = 0;
  uint32_t silent_page;

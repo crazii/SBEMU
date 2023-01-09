@@ -32,103 +32,103 @@
 #define EMU20KX_PAGESIZE     4096 // ???
 #define EMU20KX_MAXPAGES     8192 // ???
 
-//#define PCI_SUBDEVICE_ID_CREATIVE_SB0760	0x0024
-//#define PCI_SUBDEVICE_ID_CREATIVE_SB08801	0x0041
-//#define PCI_SUBDEVICE_ID_CREATIVE_SB08802	0x0042
-//#define PCI_SUBDEVICE_ID_CREATIVE_SB08803	0x0043
-//#define PCI_SUBDEVICE_ID_CREATIVE_HENDRIX	0x6000
+//#define PCI_SUBDEVICE_ID_CREATIVE_SB0760    0x0024
+//#define PCI_SUBDEVICE_ID_CREATIVE_SB08801    0x0041
+//#define PCI_SUBDEVICE_ID_CREATIVE_SB08802    0x0042
+//#define PCI_SUBDEVICE_ID_CREATIVE_SB08803    0x0043
+//#define PCI_SUBDEVICE_ID_CREATIVE_HENDRIX    0x6000
 
 // sample formats
-#define SRC_SF_U8	0x0
-#define SRC_SF_S16	0x1
-#define SRC_SF_S24	0x2
-#define SRC_SF_S32	0x3
-#define SRC_SF_F32	0x4
+#define SRC_SF_U8    0x0
+#define SRC_SF_S16    0x1
+#define SRC_SF_S24    0x2
+#define SRC_SF_S32    0x3
+#define SRC_SF_F32    0x4
 
 // EMU20K1 registers
-#define	PTPAHX		0x13B000
-#define	PTPALX		0x13B004
-#define	TRNCTL		0x13B404
-#define	TRNIS		0x13B408
-#define	AMOPLO		0x140000
-#define	AMOPHI		0x140004
-#define	PMOPLO		0x148000
-#define	PMOPHI		0x148004
-#define	PRING_LO_HI	0x198000
-#define	SRCCTL		0x1B0000
-#define	SRCCCR		0x1B0004
-#define	SRCCA		0x1B0010
-#define	SRCCF		0x1B0014
-#define	SRCSA		0x1B0018
-#define	SRCLA		0x1B001C
-#define	SRCMCTL		0x1B012C
-#define	SRCIP		0x1B102C
-#define	I2SCTL		0x1C5420
-#define	SPOCTL		0x1C5480
-#define	SPICTL		0x1C5484
-#define	GIE		0x1C6014
-#define	GPIO		0x1C6020
-#define	GPIOCTL		0x1C6024
-#define	PLLCTL		0x1C6060
-#define	GCTL		0x1C6070
+#define    PTPAHX        0x13B000
+#define    PTPALX        0x13B004
+#define    TRNCTL        0x13B404
+#define    TRNIS        0x13B408
+#define    AMOPLO        0x140000
+#define    AMOPHI        0x140004
+#define    PMOPLO        0x148000
+#define    PMOPHI        0x148004
+#define    PRING_LO_HI    0x198000
+#define    SRCCTL        0x1B0000
+#define    SRCCCR        0x1B0004
+#define    SRCCA        0x1B0010
+#define    SRCCF        0x1B0014
+#define    SRCSA        0x1B0018
+#define    SRCLA        0x1B001C
+#define    SRCMCTL        0x1B012C
+#define    SRCIP        0x1B102C
+#define    I2SCTL        0x1C5420
+#define    SPOCTL        0x1C5480
+#define    SPICTL        0x1C5484
+#define    GIE        0x1C6014
+#define    GPIO        0x1C6020
+#define    GPIOCTL        0x1C6024
+#define    PLLCTL        0x1C6060
+#define    GCTL        0x1C6070
 
 // EMU20K1 card initialization bits
-#define GCTL_EAC	0x00000001
-#define GCTL_EAI	0x00000002
-#define GCTL_BEP	0x00000004
-#define GCTL_BES	0x00000008
-#define GCTL_DSP	0x00000010
-#define GCTL_DBP	0x00000020
-#define GCTL_ABP	0x00000040
-#define GCTL_TBP	0x00000080
-#define GCTL_SBP	0x00000100
-#define GCTL_FBP	0x00000200
-#define GCTL_XA		0x00000400
-#define GCTL_ET		0x00000800
-#define GCTL_PR		0x00001000
-#define GCTL_MRL	0x00002000
-#define GCTL_SDE	0x00004000
-#define GCTL_SDI	0x00008000
-#define GCTL_SM		0x00010000
-#define GCTL_SR		0x00020000
-#define GCTL_SD		0x00040000
-#define GCTL_SE		0x00080000
-#define GCTL_AID	0x00100000
+#define GCTL_EAC    0x00000001
+#define GCTL_EAI    0x00000002
+#define GCTL_BEP    0x00000004
+#define GCTL_BES    0x00000008
+#define GCTL_DSP    0x00000010
+#define GCTL_DBP    0x00000020
+#define GCTL_ABP    0x00000040
+#define GCTL_TBP    0x00000080
+#define GCTL_SBP    0x00000100
+#define GCTL_FBP    0x00000200
+#define GCTL_XA        0x00000400
+#define GCTL_ET        0x00000800
+#define GCTL_PR        0x00001000
+#define GCTL_MRL    0x00002000
+#define GCTL_SDE    0x00004000
+#define GCTL_SDI    0x00008000
+#define GCTL_SM        0x00010000
+#define GCTL_SR        0x00020000
+#define GCTL_SD        0x00040000
+#define GCTL_SE        0x00080000
+#define GCTL_AID    0x00100000
 
 // SRC resource control block
-#define SRCCTL_STATE	0x00000007
-#define SRCCTL_BM	0x00000008
-#define SRCCTL_RSR	0x00000030
-#define SRCCTL_SF	0x000001C0
-#define SRCCTL_WR	0x00000200
-#define SRCCTL_PM	0x00000400
-#define SRCCTL_ROM	0x00001800
-#define SRCCTL_VO	0x00002000
-#define SRCCTL_ST	0x00004000
-#define SRCCTL_IE	0x00008000
-#define SRCCTL_ILSZ	0x000F0000
-#define SRCCTL_BP	0x00100000
+#define SRCCTL_STATE    0x00000007
+#define SRCCTL_BM    0x00000008
+#define SRCCTL_RSR    0x00000030
+#define SRCCTL_SF    0x000001C0
+#define SRCCTL_WR    0x00000200
+#define SRCCTL_PM    0x00000400
+#define SRCCTL_ROM    0x00001800
+#define SRCCTL_VO    0x00002000
+#define SRCCTL_ST    0x00004000
+#define SRCCTL_IE    0x00008000
+#define SRCCTL_ILSZ    0x000F0000
+#define SRCCTL_BP    0x00100000
 
 // SRCCTL_STATE
-#define SRC_STATE_OFF	0x0
-#define SRC_STATE_INIT	0x4
+#define SRC_STATE_OFF    0x0
+#define SRC_STATE_INIT    0x4
 
-#define SRCCA_CA	0x03FFFFFF
+#define SRCCA_CA    0x03FFFFFF
 
 // mixer defs
 
-#define BLANK_SLOT		4094
+#define BLANK_SLOT        4094
 
-#define INIT_VOL	0x1c00
+#define INIT_VOL    0x1c00
 
-#define AMIXER_Y_IMMEDIATE	1
+#define AMIXER_Y_IMMEDIATE    1
 
-#define AMOPLO_M	0x00000003 // amoplo mode
-#define AMOPLO_X	0x0003FFF0
-#define AMOPLO_Y	0xFFFC0000
+#define AMOPLO_M    0x00000003 // amoplo mode
+#define AMOPLO_X    0x0003FFF0
+#define AMOPLO_Y    0xFFFC0000
 
-#define AMOPHI_SADR	0x000000FF
-#define AMOPHI_SE	0x80000000
+#define AMOPHI_SADR    0x000000FF
+#define AMOPHI_SE    0x80000000
 
 enum CT_AMIXER_CTL{
  // volume control mixers
@@ -243,10 +243,10 @@ static void set_field(unsigned int *data, unsigned int field, unsigned int value
 }
 
 //-------------------------------------------------------------------------
-#define AR_SLOT_SIZE		4096
-#define AR_SLOT_BLOCK_SIZE	16
-#define AR_PTS_PITCH		6
-#define AR_PARAM_SRC_OFFSET	0x60
+#define AR_SLOT_SIZE        4096
+#define AR_SLOT_BLOCK_SIZE    16
+#define AR_PTS_PITCH        6
+#define AR_PARAM_SRC_OFFSET    0x60
 
 static unsigned int src_param_pitch_mixer(unsigned int src_idx)
 {
@@ -475,8 +475,8 @@ static int hw_dac_init(struct emu20kx_card_s *card)
  if((card->subsys_id == 0x0022) || (card->subsys_id == 0x002F)) {
   /* SB055x, unmute outputs */
   gpioorg = (uint16_t)hw_read_20kx(card, GPIO);
-  gpioorg &= 0xffbf;	/* set GPIO6 to low */
-  gpioorg |= 2;		/* set GPIO1 to high */
+  gpioorg &= 0xffbf;    /* set GPIO6 to low */
+  gpioorg |= 2;        /* set GPIO1 to high */
   hw_write_20kx(card, GPIO, gpioorg);
   return 0;
  }
@@ -521,8 +521,8 @@ static int hw_dac_init(struct emu20kx_card_s *card)
 //-------------------------------------------------------------------------
 /*#include "ac97_def.h"
 
-#define	 AC97D		0x1C5400
-#define	 AC97A		0x1C5404
+#define     AC97D        0x1C5400
+#define     AC97A        0x1C5404
 
 static void emu20kx_ac97_write(struct emu20kx_card_s *card,unsigned int reg,unsigned int data)
 {

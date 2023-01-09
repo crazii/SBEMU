@@ -575,8 +575,8 @@ static unsigned int mixer_common_setvar(struct mpxp_aumixer_passinfo_s *mpi,stru
    switch(setmode){
     case MIXER_SETMODE_RELATIVE:newmixval=currmixval+(value*infop->var_step);
                                 if((currmixval<infop->var_center && newmixval>infop->var_center) || (currmixval>infop->var_center && newmixval<infop->var_center))
-			         newmixval=infop->var_center;
-				break;
+                     newmixval=infop->var_center;
+                break;
     case MIXER_SETMODE_ABSOLUTE:newmixval=value;break;
     case MIXER_SETMODE_RESET   :newmixval=infop->var_center;break;
    }

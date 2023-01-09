@@ -21,10 +21,12 @@
 #include <dos.h>
 
 #include "mpxplay.h"
-#include "newfunc\dll_load.h"
 #include "dmairq.h"
+#ifndef SBEMU
+#include "newfunc\dll_load.h"
 #include "au_mixer\au_mixer.h"
 #include "display\display.h"
+#endif
 
 typedef void (*aucards_writedata_t)(struct mpxplay_audioout_info_s *aui,unsigned long);
 
@@ -35,23 +37,36 @@ static unsigned int AU_cardbuf_space(struct mpxplay_audioout_info_s *aui);
 static void aucards_writedata_normal(struct mpxplay_audioout_info_s *aui,unsigned long outbytes_left);
 static void aucards_writedata_intsound(struct mpxplay_audioout_info_s *aui,unsigned long outbytes_left);
 static void aucards_dma_monitor(void);
+#ifndef SBEMU
 static void aucards_interrupt_decoder(void);
+#endif
 static void aucards_get_cpuusage_int08(void);
 
 #ifdef __DOS__
-extern one_sndcard_info SB16_sndcard_info;
 extern one_sndcard_info ESS_sndcard_info;
-extern one_sndcard_info WSS_sndcard_info;
-extern one_sndcard_info SBLIVE_sndcard_info;
-extern one_sndcard_info EMU20KX_sndcard_info;
-extern one_sndcard_info CMI8X38_sndcard_info;
 extern one_sndcard_info ES1371_sndcard_info;
 extern one_sndcard_info ICH_sndcard_info;
 extern one_sndcard_info IHD_sndcard_info;
 extern one_sndcard_info VIA82XX_sndcard_info;
+#ifndef SBEMU
+extern one_sndcard_info WSS_sndcard_info;
+extern one_sndcard_info SB16_sndcard_info;
+extern one_sndcard_info SBLIVE_sndcard_info;
+extern one_sndcard_info EMU20KX_sndcard_info;
+extern one_sndcard_info CMI8X38_sndcard_info;
 extern one_sndcard_info GUS_sndcard_info;
 extern one_sndcard_info SB_sndcard_info;
 extern one_sndcard_info MIDAS_sndcard_info;
+#else
+#undef AU_CARDS_LINK_WSS
+#undef AU_CARDS_LINK_SBLIVE
+#undef AU_CARDS_LINK_SB16
+#undef AU_CARDS_LINK_EMU20KX
+#undef AU_CARDS_LINK_CMI8X38
+#undef AU_CARDS_LINK_GUS
+#undef AU_CARDS_LINK_SB
+#undef AU_CARDS_LINK_MIDAS
+#endif
 #endif
 
 #ifdef AU_CARDS_LINK_WIN
@@ -59,10 +74,12 @@ extern one_sndcard_info WINDSOUND_sndcard_info;
 extern one_sndcard_info WINWAVOUT_sndcard_info;
 #endif
 
+#ifndef SBEMU
 extern one_sndcard_info WAV_sndcard_info;
 extern one_sndcard_info NON_sndcard_info;
 extern one_sndcard_info TST_sndcard_info;
 extern one_sndcard_info NUL_sndcard_info;
+#endif
 
 static one_sndcard_info *all_sndcard_info[]={
 #ifdef AU_CARDS_LINK_SB16
@@ -110,10 +127,12 @@ static one_sndcard_info *all_sndcard_info[]={
 #ifdef AU_CARDS_LINK_WINWAVOUT
  &WINWAVOUT_sndcard_info,
 #endif
+#ifndef SBEMU
  &WAV_sndcard_info,
  &NON_sndcard_info,
  &TST_sndcard_info,
  &NUL_sndcard_info,
+#endif
  NULL
 };
 
@@ -125,6 +144,15 @@ extern unsigned long allcpuusage,allcputime;
 #ifdef __DOS__
 extern unsigned long int08counter, mpxplay_signal_events;
 extern unsigned int is_lfn_support,uselfn,iswin9x;
+#endif
+
+#ifdef SBEMU
+struct mainvars mvps;
+struct mpxplay_audioout_info_s au_infos;
+unsigned int playcontrol,outmode;
+unsigned int intsoundconfig,intsoundcontrol;
+unsigned long allcpuusage,allcputime;
+unsigned int is_lfn_support,uselfn,iswin9x;
 #endif
 
 static aucards_writedata_t aucards_writedata_func;
@@ -194,7 +222,11 @@ auinit_retry:
   }
   if(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_TESTCARD){
    pds_textdisplay_printf("Testing finished... Press ESC to exit, other key to start Mpxplay...");
+   #ifndef SBEMU
    if(pds_extgetch()==KEY_ESC){
+    #else
+    {
+    #endif
     error_code = MPXERROR_UNDEFINED;
     goto err_out_auinit;
    }
@@ -319,7 +351,7 @@ err_out_auinit:
 #ifdef MPXPLAY_GUI_CONSOLE
  mpxplay_close_program(error_code);
 #else
- mpxplay_timer_addfunc(&display_textwin_openwindow_errormsg_ok,"Couldn't initialize audio output!\nSwitched to Null output.", (MPXPLAY_TIMERTYPE_WAKEUP | MPXPLAY_TIMERTYPE_SIGNAL), MPXPLAY_SIGNALTYPE_GUIREADY);
+ //mpxplay_timer_addfunc(&display_textwin_openwindow_errormsg_ok,"Couldn't initialize audio output!\nSwitched to Null output.", (MPXPLAY_TIMERTYPE_WAKEUP | MPXPLAY_TIMERTYPE_SIGNAL), MPXPLAY_SIGNALTYPE_GUIREADY);
  if(pds_stricmp(aui->card_selectname, "NUL") != 0){
    aui->card_selectname = "NUL";
    goto auinit_retry;
@@ -386,10 +418,12 @@ void AU_ini_interrupts(struct mpxplay_audioout_info_s *aui)
   newfunc_newhandler08_init();
   if(aui->card_handler->cardbuf_int_monitor)
    mpxplay_timer_addfunc(&aucards_dma_monitor,NULL,MPXPLAY_TIMERTYPE_INT08|MPXPLAY_TIMERTYPE_REPEAT|MPXPLAY_TIMERFLAG_OWNSTACK|MPXPLAY_TIMERFLAG_STI,0);
+  #ifndef SBEMU
   if(intsoundconfig&INTSOUND_DECODER){
    mpxplay_timer_addfunc(&aucards_interrupt_decoder,NULL,MPXPLAY_TIMERTYPE_INT08|MPXPLAY_TIMERTYPE_REPEAT|MPXPLAY_TIMERFLAG_OWNSTCK2|MPXPLAY_TIMERFLAG_STI,0);
    aucards_writedata_func=&aucards_writedata_intsound;
   }
+  #endif
  }
 }
 
@@ -398,7 +432,9 @@ void AU_del_interrupts(struct mpxplay_audioout_info_s *aui)
  AU_close(aui);
 #ifndef __DOS__
  mpxplay_timer_deletefunc(&aucards_dma_monitor,NULL);
+ #ifndef SBEMU
  mpxplay_timer_deletefunc(&aucards_interrupt_decoder,NULL);
+ #endif
 #endif
 }
 
@@ -483,15 +519,19 @@ void AU_wait_and_stop(struct mpxplay_audioout_info_s *aui)
 
 void AU_suspend_decoding(struct mpxplay_audioout_info_s *aui)
 {
+ #ifndef SBEMU
  struct mainvars *mvp=aui->mvp;
  funcbit_smp_int32_put(mvp->idone,MPXPLAY_ERROR_INFILE_EOF);
+ #endif
  newfunc_newhandler08_waitfor_threadend();
 }
 
 void AU_resume_decoding(struct mpxplay_audioout_info_s *aui)
 {
+#ifndef SBEMU
  struct mainvars *mvp=aui->mvp;
  funcbit_smp_int32_put(mvp->idone,MPXPLAY_ERROR_INFILE_OK);
+#endif
 }
 
 void AU_close(struct mpxplay_audioout_info_s *aui)
@@ -687,7 +727,7 @@ void AU_setmixer_one(struct mpxplay_audioout_info_s *aui,unsigned int mixchannum
  //calculate new percent
  switch(setmode){
   case MIXER_SETMODE_ABSOLUTE:newpercentval=newvalue;
-			      break;
+                  break;
   case MIXER_SETMODE_RELATIVE:if(function==AU_MIXCHANFUNC_VOLUME)
                                newpercentval=aui->card_mixer_values[channel]+newvalue;
                               else
@@ -695,7 +735,7 @@ void AU_setmixer_one(struct mpxplay_audioout_info_s *aui,unsigned int mixchannum
                                 newpercentval=0;
                                else
                                 newpercentval=maxpercentval;
-			      break;
+                  break;
   default:return;
  }
  if(newpercentval<0)
@@ -1000,7 +1040,7 @@ static void aucards_dma_monitor(void)
 
 //---------------- Timer Interrupt ------------------------------------------
 unsigned long intdec_timer_counter;
-
+#ifndef SBEMU
 static void aucards_interrupt_decoder(void)
 {
  struct mpxplay_audioout_info_s *aui=&au_infos;
@@ -1042,6 +1082,7 @@ static void aucards_interrupt_decoder(void)
 aid_end:
  aucards_get_cpuusage_int08();
 }
+#endif
 
 #if defined(__DOS__)
 

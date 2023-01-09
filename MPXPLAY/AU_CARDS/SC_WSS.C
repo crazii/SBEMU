@@ -149,7 +149,7 @@ static int WSS_adetect(struct mpxplay_audioout_info_s *aui)
 static void WSS_setrate(struct mpxplay_audioout_info_s *aui)
 {
  static unsigned int wssfreqs[16]={8000,5513,16000,11025,27429,18900,32000,
-			      22050, 0,37800, 0,44100,48000,33075,9600,6615};
+                  22050, 0,37800, 0,44100,48000,33075,9600,6615};
  int i,j,mindiff=65535,wssrate,setfreq=aui->freq_card;
  for(i=0;i<16;i++){
   if(wssfreqs[i]){

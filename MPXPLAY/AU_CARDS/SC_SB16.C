@@ -25,15 +25,15 @@
 
 #define SB_MIXER_ADDRESS     (baseport+0x4)
 #define SB_MIXER_DATA        (baseport+0x5)
-#define SB_RESET_PORT	     (baseport+0x6)
+#define SB_RESET_PORT         (baseport+0x6)
 #define SB_READ_DATA_PORT    (baseport+0xa)
 #define SB_WRITE_DATA_PORT   (baseport+0xc)
 #define SB_WRITE_STATUS_PORT (baseport+0xc)
 #define SB_DATA_AVAIL_PORT   (baseport+0xe)
 #define SB16_DATA_AVAIL_PORT (baseport+0xf)
 
-#define SB_DSP_DMA16_OFF	0xd5
-#define SB_DSP_DMA16_EXIT	0xd9
+#define SB_DSP_DMA16_OFF    0xd5
+#define SB_DSP_DMA16_EXIT    0xd9
 
 #define SB_MIXERREG_VOL_MASTER_L  0x30
 #define SB_MIXERREG_VOL_MASTER_R  0x31

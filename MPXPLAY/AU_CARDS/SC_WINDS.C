@@ -341,7 +341,7 @@ static void WINDS_setrate(struct mpxplay_audioout_info_s *aui)
  dsbdesc->dwSize = sizeof(DSBUFFERDESC);
  dsbdesc->dwFlags = DSBCAPS_GETCURRENTPOSITION2 // Better position accuracy
                  | DSBCAPS_GLOBALFOCUS         // Allows background playing
-	         | DSBCAPS_CTRLVOLUME;         // volume control enabled
+             | DSBCAPS_CTRLVOLUME;         // volume control enabled
  if(funcbit_test(card->config_select,AUCARDSCONFIG_WDS_LOCHARDWARE))
   dsbdesc->dwFlags |= DSBCAPS_LOCHARDWARE;
 

@@ -562,30 +562,30 @@ struct mpxplay_infile_func_s{
 #define MPXPLAY_CONFIG_DVBEPGCTRL_VIDEOWALL_RESTORE           (1 << 19)      // restore videowall if it was enabled
 #define MPXPLAY_CONFIG_DVBEPGCTRL_VIDEOWALL_WAS_ENABLED       (1 << 20)      // videowall was enabled (restore it)
 #define MPXPLAY_CONFIG_DVBEPGCTRL_DEFAULTS (MPXPLAY_CONFIG_DVBEPGCTRL_CHANNELS_SORT_BY_PROGID | MPXPLAY_CONFIG_DVBEPGCTRL_VIDEOSURFACE_SHOW_EPGDIALOG \
-		                                    | MPXPLAY_CONFIG_DVBEPGCTRL_VIDEOWALL_HIDEMAINWIN | MPXPLAY_CONFIG_DVBEPGCTRL_VIDEOWALL_KEYFRAMES_ONLY \
+                                            | MPXPLAY_CONFIG_DVBEPGCTRL_VIDEOWALL_HIDEMAINWIN | MPXPLAY_CONFIG_DVBEPGCTRL_VIDEOWALL_KEYFRAMES_ONLY \
                                             | MPXPLAY_CONFIG_DVBEPGCTRL_VIDEOWALL_FILTER_WINDOW | MPXPLAY_CONFIG_DVBEPGCTRL_VIDEOWALL_RESTORE)
 
 #define MPXPLAY_STREAMTYPE_VIDEOWALL_NUM  49  // max number of sub-windows on videowall (eg. 7 x 7) (probably there are no more programs in a multiplex at DVB-T2 neither)
 
 enum mpxplay_streamindex_types{
-	MPXPLAY_STREAMTYPEINDEX_AUDIO = 0,     // 0. audio
-	MPXPLAY_STREAMTYPEINDEX_VIDEO,         // 1. video
-	MPXPLAY_STREAMTYPEINDEX_SUBTITLE,      // 2. subtitle
-	MPXPLAY_STREAMTYPEINDEX_EXTSTREAMNUM,  // external stream types, currently it's 3, truly it's 2 only (audio, subtitle)
-	MPXPLAY_STREAMTYPEINDEX_PLAYNUM = MPXPLAY_STREAMTYPEINDEX_EXTSTREAMNUM, // 3 stream types to play (audio, video, subtitle)
-	MPXPLAY_STREAMTYPEINDEX_SEEKPREVIEW = MPXPLAY_STREAMTYPEINDEX_PLAYNUM,  // 3. preview window at seeking
-	MPXPLAY_STREAMTYPEINDEX_NUM,           // 4  // TODO: it's not required to use _NUM everywhere, _PLAYNUM is enough
-	MPXPLAY_STREAMTYPEINDEX_VIDEOWALL = MPXPLAY_STREAMTYPEINDEX_NUM,
-	MPXPLAY_STREAMTYPEINDEX_MAX = MPXPLAY_STREAMTYPEINDEX_VIDEOWALL + MPXPLAY_STREAMTYPE_VIDEOWALL_NUM,
-	MPXPLAY_STREAMTYPEINDEX_TEMP           // used to store temporary video frames in a queue within a thread (no mutex is initialized)
+    MPXPLAY_STREAMTYPEINDEX_AUDIO = 0,     // 0. audio
+    MPXPLAY_STREAMTYPEINDEX_VIDEO,         // 1. video
+    MPXPLAY_STREAMTYPEINDEX_SUBTITLE,      // 2. subtitle
+    MPXPLAY_STREAMTYPEINDEX_EXTSTREAMNUM,  // external stream types, currently it's 3, truly it's 2 only (audio, subtitle)
+    MPXPLAY_STREAMTYPEINDEX_PLAYNUM = MPXPLAY_STREAMTYPEINDEX_EXTSTREAMNUM, // 3 stream types to play (audio, video, subtitle)
+    MPXPLAY_STREAMTYPEINDEX_SEEKPREVIEW = MPXPLAY_STREAMTYPEINDEX_PLAYNUM,  // 3. preview window at seeking
+    MPXPLAY_STREAMTYPEINDEX_NUM,           // 4  // TODO: it's not required to use _NUM everywhere, _PLAYNUM is enough
+    MPXPLAY_STREAMTYPEINDEX_VIDEOWALL = MPXPLAY_STREAMTYPEINDEX_NUM,
+    MPXPLAY_STREAMTYPEINDEX_MAX = MPXPLAY_STREAMTYPEINDEX_VIDEOWALL + MPXPLAY_STREAMTYPE_VIDEOWALL_NUM,
+    MPXPLAY_STREAMTYPEINDEX_TEMP           // used to store temporary video frames in a queue within a thread (no mutex is initialized)
 };
 
 enum dispqt_video_externalstreamload_types {
-	MPXPLAY_EXTERNALSTREAM_LOADTYPE_NONE = 0, // do nothing with external streams (no auto search, no auto load)
-	MPXPLAY_EXTERNALSTREAM_LOADTYPE_SEARCH,   // automatically search for additional external streams, adding them to the selectable stream list (video contextmenu)
-	MPXPLAY_EXTERNALSTREAM_LOADTYPE_USE,      // automatically search for additional external streams, use if no internal stream found
-	MPXPLAY_EXTERNALSTREAM_LOADTYPE_PREFER,   // automatically search for additional external streams, prefer external stream over internal one
-	MPXPLAY_EXTERNALSTREAM_LOADTYPE_MAX
+    MPXPLAY_EXTERNALSTREAM_LOADTYPE_NONE = 0, // do nothing with external streams (no auto search, no auto load)
+    MPXPLAY_EXTERNALSTREAM_LOADTYPE_SEARCH,   // automatically search for additional external streams, adding them to the selectable stream list (video contextmenu)
+    MPXPLAY_EXTERNALSTREAM_LOADTYPE_USE,      // automatically search for additional external streams, use if no internal stream found
+    MPXPLAY_EXTERNALSTREAM_LOADTYPE_PREFER,   // automatically search for additional external streams, prefer external stream over internal one
+    MPXPLAY_EXTERNALSTREAM_LOADTYPE_MAX
 };
 
 //callback config (from infile to service) and control (from service to infile)
@@ -628,39 +628,39 @@ typedef int (mpxplay_infile_callback_t)(mpxp_ptrsize_t passdata, unsigned int co
 
 // for video contextmenu
 typedef struct mpxplay_streaminfo_t{
-	unsigned int nb_entries[MPXPLAY_STREAMTYPEINDEX_NUM];
-	int selected_stream_index[MPXPLAY_STREAMTYPEINDEX_NUM];
-	char **stream_names[MPXPLAY_STREAMTYPEINDEX_NUM];
-	int *stream_idx[MPXPLAY_STREAMTYPEINDEX_NUM];
-	mpxp_bool_t is_record_running;      // by in_ffmpfile_file_output_running
-	mpxp_bool_t is_videowall_enabled;
-	char primary_media_filename[MAX_PATHNAMELEN];
+    unsigned int nb_entries[MPXPLAY_STREAMTYPEINDEX_NUM];
+    int selected_stream_index[MPXPLAY_STREAMTYPEINDEX_NUM];
+    char **stream_names[MPXPLAY_STREAMTYPEINDEX_NUM];
+    int *stream_idx[MPXPLAY_STREAMTYPEINDEX_NUM];
+    mpxp_bool_t is_record_running;      // by in_ffmpfile_file_output_running
+    mpxp_bool_t is_videowall_enabled;
+    char primary_media_filename[MAX_PATHNAMELEN];
 }mpxplay_streaminfo_t;
 
 // for video contextmenu (should be replaced with common structures bellow)
 typedef struct mpxplay_programinfo_t{
-	unsigned int nb_programs;           //
-	int selected_prognum;               // -1 if no program is selected
-	int *program_ids;                   // can be NULL (then no programs)
-	char **program_names;               // can be NULL (then no programs)
+    unsigned int nb_programs;           //
+    int selected_prognum;               // -1 if no program is selected
+    int *program_ids;                   // can be NULL (then no programs)
+    char **program_names;               // can be NULL (then no programs)
 }mpxplay_programinfo_t;
 
 // for videowall (should be replaced with common structures bellow)
 typedef struct mpxplay_dvb_epgeventlist_t{
-	char *program_name;                 // name of the DVB program channel (dynamically allocated string)
-	unsigned int nb_program_events;     // number of EPG list entries
-	char **program_event_list;          // dynamically allocated (simple) string list
-	int videowall_window_pos_x, videowall_window_pos_y;  // video window x,y position on the videowall (given by video_worker for epg tooltip displaying, not by ffmpepg)
-	int videowall_window_width;         // video window width
-	int videowall_window_height;        // video window height (to limit epg list displaying)
+    char *program_name;                 // name of the DVB program channel (dynamically allocated string)
+    unsigned int nb_program_events;     // number of EPG list entries
+    char **program_event_list;          // dynamically allocated (simple) string list
+    int videowall_window_pos_x, videowall_window_pos_y;  // video window x,y position on the videowall (given by video_worker for epg tooltip displaying, not by ffmpepg)
+    int videowall_window_width;         // video window width
+    int videowall_window_height;        // video window height (to limit epg list displaying)
 }mpxplay_dvb_epgeventlist_t;
 
 typedef struct mpxplay_loadfile_callbackdata_s{
-	int load_type;                      // Mainwindow_SelectLoadType (used in maindwindow.cpp only)
-	int sidenum;                        // editor side select
-	int tabnum;                         // editor tab select
-	unsigned int nb_filenames;          //
-	char **filenames;                   //
+    int load_type;                      // Mainwindow_SelectLoadType (used in maindwindow.cpp only)
+    int sidenum;                        // editor side select
+    int tabnum;                         // editor tab select
+    unsigned int nb_filenames;          //
+    char **filenames;                   //
 }mpxplay_loadfile_callbackdata_t;
 
 #define MPXPLAY_VIDEO_RENDERER_FRAME_POOL_SIZE_MIN  12
@@ -679,31 +679,31 @@ typedef struct _GUID {
 #endif /* GUID_DEFINED */
 
 typedef struct mpxplay_video_renderer_info_s{
-	void *d3d_device_mutex;
-	void *d3d_close_mutex;
-	mpxp_ptrsize_t d3d_dll_hnd;      // dll handler for video renderer DLL (D3D11.DLL or D3D9.DLL)
-	void *d3d_device_ptr;            // ID3D11Device
-	void *d3d_device_ctx;            // ID3D11DeviceContext
-	void *d3d_video_device;          // ID3D11VideoDevice / IDirect3DDeviceManager9
-	void *d3d_video_ctx;             // ID3D11VideoContext
-	void *d3d_render_handler;        // opaque evr_data
-	void *renderer_private_data;     // opaque evr_data or vulkan_data
-	int  hwdevice_avpixfmt;          // FFmpeg hw decoder output format of this renderer (eg. AV_PIX_FMT_D3D11)
-	mpxp_bool_t   (*render_function_check_videodecoder_inputformat)(const GUID format_guid, int av_pixfmt);
-	mpxp_uint32_t (*render_function_get_frame_delay)(void *render_private_data); // get the rendering delay in frames (at deinterlacing)
-	mpxp_bool_t   (*render_function_poolbufelem_validity_check)(void *av_frame); // check that the av_frame is pool buffer elem
-	mpxp_bool_t   (*render_function_is_framebuffer_support)(void);               // is hw texture pool buffer is available?
-	int           (*render_function_get_frame_buffer)(void *avctx, void *avframe, int flags); // prepare a pool buffer elem
-	void          (*render_function_frame_buffer_consolidate)(void);             // clear pool buffer
-	mpxp_bool_t   (*render_function_copy_to_pool_buffer)(void *dest_avframe, void *src_avframe); // copy simple avframe into a pool buffer elem
-	void          (*render_function_poolbufelem_unmap)(void *av_frame);          // close memory mapping of pool buffer elem
-	void *        (*render_function_poolbuf_bufptr_get)(void);
-	void *        (*render_function_poolbuf_pixform_get)(void *format_datas, int pix_format);
-	mpxp_bool_t   (*render_function_poolbuf_texture_alloc)(void *format_datas, int tex_width, int tex_height, void **poolbufelem_texture_2d, void **poolbufelem_shader_resource_views, void *mapres);
-	void          (*render_function_poolbuf_texture_free)(void **poolbufelem_texture_2d, void **poolbufelem_shader_resource_views);
-	mpxp_bool_t   (*render_function_poolbuf_texture_map)(void *poolbufelem_texture_2d, void *mapped_resource);
-	void          (*render_function_poolbuf_texture_unmap)(void *poolbufelem_texture_2d, void *mapres);
-	mpxp_uint32_t renderer_capabilities;
+    void *d3d_device_mutex;
+    void *d3d_close_mutex;
+    mpxp_ptrsize_t d3d_dll_hnd;      // dll handler for video renderer DLL (D3D11.DLL or D3D9.DLL)
+    void *d3d_device_ptr;            // ID3D11Device
+    void *d3d_device_ctx;            // ID3D11DeviceContext
+    void *d3d_video_device;          // ID3D11VideoDevice / IDirect3DDeviceManager9
+    void *d3d_video_ctx;             // ID3D11VideoContext
+    void *d3d_render_handler;        // opaque evr_data
+    void *renderer_private_data;     // opaque evr_data or vulkan_data
+    int  hwdevice_avpixfmt;          // FFmpeg hw decoder output format of this renderer (eg. AV_PIX_FMT_D3D11)
+    mpxp_bool_t   (*render_function_check_videodecoder_inputformat)(const GUID format_guid, int av_pixfmt);
+    mpxp_uint32_t (*render_function_get_frame_delay)(void *render_private_data); // get the rendering delay in frames (at deinterlacing)
+    mpxp_bool_t   (*render_function_poolbufelem_validity_check)(void *av_frame); // check that the av_frame is pool buffer elem
+    mpxp_bool_t   (*render_function_is_framebuffer_support)(void);               // is hw texture pool buffer is available?
+    int           (*render_function_get_frame_buffer)(void *avctx, void *avframe, int flags); // prepare a pool buffer elem
+    void          (*render_function_frame_buffer_consolidate)(void);             // clear pool buffer
+    mpxp_bool_t   (*render_function_copy_to_pool_buffer)(void *dest_avframe, void *src_avframe); // copy simple avframe into a pool buffer elem
+    void          (*render_function_poolbufelem_unmap)(void *av_frame);          // close memory mapping of pool buffer elem
+    void *        (*render_function_poolbuf_bufptr_get)(void);
+    void *        (*render_function_poolbuf_pixform_get)(void *format_datas, int pix_format);
+    mpxp_bool_t   (*render_function_poolbuf_texture_alloc)(void *format_datas, int tex_width, int tex_height, void **poolbufelem_texture_2d, void **poolbufelem_shader_resource_views, void *mapres);
+    void          (*render_function_poolbuf_texture_free)(void **poolbufelem_texture_2d, void **poolbufelem_shader_resource_views);
+    mpxp_bool_t   (*render_function_poolbuf_texture_map)(void *poolbufelem_texture_2d, void *mapped_resource);
+    void          (*render_function_poolbuf_texture_unmap)(void *poolbufelem_texture_2d, void *mapres);
+    mpxp_uint32_t renderer_capabilities;
 }mpxplay_video_renderer_info_s;
 
 //---------------------------------------------------------------------------------------------------------
@@ -717,30 +717,30 @@ typedef struct mpxplay_video_renderer_info_s{
 
 // datas belonging to a dvb program event
 typedef struct mpxplay_dvb_epg_event_data_s{
-	char *event_shortdesc_name;                                  // UTF-8 short description (title) of program event
-	char *event_shortdesc_details;                               // UTF-8 long description (details) of program event
-	char *event_extended_desc;                                   // UTF-8 extended description (details) of program event
-	mpxp_uint64_t event_begin_date_time;                         // start of the event in 0xYYYYMMDD00HHMMSS format (not BCD, just byte aligned numbers)
-	mpxp_uint32_t event_duration_time;                           // duration time of the event (byte aligned 0x00HHMMSS)
-	mpxp_uint32_t event_id;                                      // event id from EIT
-	mpxp_uint8_t extdesc_counter;                                // expected descriptor_number of extended event descriptor
-	mpxp_uint8_t parental_rating;                                // recommended (limit) age for this program (4 - 18)
-	mpxp_uint8_t event_flags;                                    // additional flags for this program event
-	struct mpxplay_dvb_epg_event_data_s *next_event;             // next element of the program events chain
+    char *event_shortdesc_name;                                  // UTF-8 short description (title) of program event
+    char *event_shortdesc_details;                               // UTF-8 long description (details) of program event
+    char *event_extended_desc;                                   // UTF-8 extended description (details) of program event
+    mpxp_uint64_t event_begin_date_time;                         // start of the event in 0xYYYYMMDD00HHMMSS format (not BCD, just byte aligned numbers)
+    mpxp_uint32_t event_duration_time;                           // duration time of the event (byte aligned 0x00HHMMSS)
+    mpxp_uint32_t event_id;                                      // event id from EIT
+    mpxp_uint8_t extdesc_counter;                                // expected descriptor_number of extended event descriptor
+    mpxp_uint8_t parental_rating;                                // recommended (limit) age for this program (4 - 18)
+    mpxp_uint8_t event_flags;                                    // additional flags for this program event
+    struct mpxplay_dvb_epg_event_data_s *next_event;             // next element of the program events chain
 }mpxplay_dvb_epg_program_event_s;
 
 // datas belonging to a dvb program
 typedef struct mpxplay_dvb_epg_program_data_s{
-	char *program_name;                                          // program name (service_name)
-	char *current_event_name;                                    // UTF-8 short description (title) of program current event
-	mpxp_uint32_t current_event_duration;                        // duration time of the current event (byte aligned 0x00HHMMSS)
-	mpxp_int32_t program_id;                                     // program id (service_id / event_id)
-	mpxp_uint32_t channel_id;                                    // logical channel id
-	mpxp_uint32_t ctrl_flags;                                    // control flags for this program
-	mpxp_bool_t current_event_changed;                           // changed event flag
-	unsigned int nb_program_events;                              // number of collected program events in the chain
-	struct mpxplay_dvb_epg_event_data_s *epg_program_event_chain;// first element of the program events chain
-	struct mpxplay_dvb_epg_program_data_s *next_program;         // next element of program datas chain
+    char *program_name;                                          // program name (service_name)
+    char *current_event_name;                                    // UTF-8 short description (title) of program current event
+    mpxp_uint32_t current_event_duration;                        // duration time of the current event (byte aligned 0x00HHMMSS)
+    mpxp_int32_t program_id;                                     // program id (service_id / event_id)
+    mpxp_uint32_t channel_id;                                    // logical channel id
+    mpxp_uint32_t ctrl_flags;                                    // control flags for this program
+    mpxp_bool_t current_event_changed;                           // changed event flag
+    unsigned int nb_program_events;                              // number of collected program events in the chain
+    struct mpxplay_dvb_epg_event_data_s *epg_program_event_chain;// first element of the program events chain
+    struct mpxplay_dvb_epg_program_data_s *next_program;         // next element of program datas chain
 }mpxplay_dvb_epg_program_data_s;
 
 #define MPXPLAY_DVBEPG_FREQ_FLAG_LOADED_SDT  (1 << 0) // SDT section has been loaded (programs list)
@@ -749,12 +749,12 @@ typedef struct mpxplay_dvb_epg_program_data_s{
 // datas belonging to a mux/frequency/channel
 typedef struct mpxplay_dvb_epg_frequency_data_s
 {
-	mpxp_uint32_t frequency;                                     // frequency in Hz
-	mpxp_uint32_t freq_flags;                                    // MPXPLAY_DVBEPG_FREQ_FLAG_
-	mpxp_uint32_t freq_signal_quality;                           // detected tuner signal quality (0 - 100 %)
-	unsigned int nb_programs;
-	struct mpxplay_dvb_epg_program_data_s *program_data_chain;
-	struct mpxplay_dvb_epg_frequency_data_s *next_frequency;
+    mpxp_uint32_t frequency;                                     // frequency in Hz
+    mpxp_uint32_t freq_flags;                                    // MPXPLAY_DVBEPG_FREQ_FLAG_
+    mpxp_uint32_t freq_signal_quality;                           // detected tuner signal quality (0 - 100 %)
+    unsigned int nb_programs;
+    struct mpxplay_dvb_epg_program_data_s *program_data_chain;
+    struct mpxplay_dvb_epg_frequency_data_s *next_frequency;
 }mpxplay_dvb_epg_frequency_data_s;
 
 #define MPXPLAY_DVBEPG_PROTOCOL_FLAG_FULLDATA    (1 << 0) // sending all data of a protocol
@@ -765,16 +765,16 @@ typedef struct mpxplay_dvb_epg_frequency_data_s
 // datas belonging to a device/protocol
 typedef struct mpxplay_dvb_epg_protocol_data_s
 {
-	mpxp_uint32_t protocol_id;                                   // BDADEVTYPE_
-	mpxp_uint32_t prot_flags;                                    // MPXPLAY_DVBEPG_PROTOCOL_FLAG_
-	mpxp_uint64_t stream_datetime_val;                           // value of TDT in YYYYMMDD00HHMMSS format (packed byte aligned, not BCD)
-	mpxp_uint32_t freq_bandwidth;                                // bandwidth in Hz
-	mpxp_uint32_t scan_freq_begin;                               // scan start frequency in Hz
-	mpxp_uint32_t scan_freq_end;                                 // scan end frequency in Hz
-	mpxp_uint32_t curr_program_id;                               // currently played program
-	unsigned int nb_frequencies;
-	struct mpxplay_dvb_epg_frequency_data_s *frequency_data_chain;
-	struct mpxplay_dvb_epg_protocol_data_s *next_protocol;
+    mpxp_uint32_t protocol_id;                                   // BDADEVTYPE_
+    mpxp_uint32_t prot_flags;                                    // MPXPLAY_DVBEPG_PROTOCOL_FLAG_
+    mpxp_uint64_t stream_datetime_val;                           // value of TDT in YYYYMMDD00HHMMSS format (packed byte aligned, not BCD)
+    mpxp_uint32_t freq_bandwidth;                                // bandwidth in Hz
+    mpxp_uint32_t scan_freq_begin;                               // scan start frequency in Hz
+    mpxp_uint32_t scan_freq_end;                                 // scan end frequency in Hz
+    mpxp_uint32_t curr_program_id;                               // currently played program
+    unsigned int nb_frequencies;
+    struct mpxplay_dvb_epg_frequency_data_s *frequency_data_chain;
+    struct mpxplay_dvb_epg_protocol_data_s *next_protocol;
 }mpxplay_dvb_epg_protocol_data_s;
 
 //---------------------------------------------------------------------------------------------------------
@@ -792,20 +792,20 @@ enum {MPXPLAY_PACKETTYPE_AVCODECCTX = 0, MPXPLAY_PACKETTYPE_AVPACKET, MPXPLAY_PA
 #define MPXPLAY_PACKETLISTFLAG_TEXTTYPE_MASK    (0x03) // MPXPLAY_TEXTCONV_TYPE_CHAR (0),  MPXPLAY_TEXTCONV_TYPE_UTF8 (1), MPXPLAY_TEXTCONV_TYPE_UTF16LE (2), MPXPLAY_TEXTCONV_TYPE_UTF16BE (3)
 
 typedef struct mpxplay_packetlist_t{
-	unsigned int flags;                 // control flags
-	unsigned int packet_type;           // MPXPLAY_PACKETTYPE_
-	void *frame_pkt;                    // AVPacket
-	void *codec_ctx;                    // AVCodecContext belongs to frame_pkt
-	struct mpxplay_packetlist_t *next;  // next elem in the list
-	mpxp_int64_t timestamp_us;          // timestamp in usec
+    unsigned int flags;                 // control flags
+    unsigned int packet_type;           // MPXPLAY_PACKETTYPE_
+    void *frame_pkt;                    // AVPacket
+    void *codec_ctx;                    // AVCodecContext belongs to frame_pkt
+    struct mpxplay_packetlist_t *next;  // next elem in the list
+    mpxp_int64_t timestamp_us;          // timestamp in usec
 }mpxplay_packetlist_t;
 
 typedef struct mpxplay_packetqueue_t{
-	mpxplay_packetlist_t *first_pkt, *last_pkt;
-	int nb_packets;
-	void *mutexhnd_queue;
-//	void *condhnd_queue;
-	int streamtype_index;
+    mpxplay_packetlist_t *first_pkt, *last_pkt;
+    int nb_packets;
+    void *mutexhnd_queue;
+//    void *condhnd_queue;
+    int streamtype_index;
 }mpxplay_packetqueue_t;
 
 extern mpxp_int64_t mpxplay_infile_callback_check_audio_timesync(void *fr_data, mpxp_int64_t avsync_clocktime, mpxp_int64_t *avsync_timestamp, mpxp_int64_t curr_pts, int bs_leftbytes, int sample_rate);

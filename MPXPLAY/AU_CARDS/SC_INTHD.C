@@ -48,9 +48,9 @@ struct intelhd_card_s
  struct hda_gnode *afg_nodes;
  unsigned int def_amp_out_caps;
  unsigned int def_amp_in_caps;
- struct hda_gnode *dac_node[2];	        // DAC nodes
- struct hda_gnode *out_pin_node[MAX_PCM_VOLS];	// Output pin (Line-Out) nodes
- unsigned int pcm_num_vols;	        // number of PCM volumes
+ struct hda_gnode *dac_node[2];            // DAC nodes
+ struct hda_gnode *out_pin_node[MAX_PCM_VOLS];    // Output pin (Line-Out) nodes
+ unsigned int pcm_num_vols;            // number of PCM volumes
  struct pcm_vol_s pcm_vols[MAX_PCM_VOLS]; // PCM volume nodes
 
  dosmem_t *dm;
@@ -120,7 +120,7 @@ static aucards_onemixerchan_s ihd_master_vol={
 
 //-------------------------------------------------------------------------
 static void update_pci_byte(pci_config_s *pci, unsigned int reg,
-			    unsigned char mask, unsigned char val)
+                unsigned char mask, unsigned char val)
 {
  unsigned char data;
 
@@ -195,7 +195,7 @@ static void azx_single_send_cmd(struct intelhd_card_s *chip,uint32_t val)
 
 static void snd_hda_codec_write(struct intelhd_card_s *chip, hda_nid_t nid,
                          uint32_t direct,
-			 unsigned int verb, unsigned int parm)
+             unsigned int verb, unsigned int parm)
 {
  uint32_t val;
 
@@ -228,7 +228,7 @@ static unsigned int azx_get_response(struct intelhd_card_s *chip)
 
 static unsigned int snd_hda_codec_read(struct intelhd_card_s *chip, hda_nid_t nid,
                          uint32_t direct,
-			 unsigned int verb, unsigned int parm)
+             unsigned int verb, unsigned int parm)
 {
  snd_hda_codec_write(chip,nid,direct,verb,parm);
  return azx_get_response(chip);
@@ -237,8 +237,8 @@ static unsigned int snd_hda_codec_read(struct intelhd_card_s *chip, hda_nid_t ni
 #define snd_hda_param_read(codec,nid,param) snd_hda_codec_read(codec,nid,0,AC_VERB_PARAMETERS,param)
 
 static void snd_hda_codec_setup_stream(struct intelhd_card_s *chip, hda_nid_t nid,
-				uint32_t stream_tag,
-				int channel_id, int format)
+                uint32_t stream_tag,
+                int channel_id, int format)
 {
  snd_hda_codec_write(chip, nid, 0, AC_VERB_SET_CHANNEL_STREAMID,
                     (stream_tag << 4) | channel_id);
@@ -249,7 +249,7 @@ static void snd_hda_codec_setup_stream(struct intelhd_card_s *chip, hda_nid_t ni
 
 //------------------------------------------------------------------------
 static unsigned int snd_hda_get_sub_nodes(struct intelhd_card_s *card, hda_nid_t nid,
-			  hda_nid_t *start_id)
+              hda_nid_t *start_id)
 {
  int parm;
 
@@ -277,7 +277,7 @@ static void snd_hda_search_audio_node(struct intelhd_card_s *card)
 }
 
 static int snd_hda_get_connections(struct intelhd_card_s *card, hda_nid_t nid,
-			    hda_nid_t *conn_list, int max_conns)
+                hda_nid_t *conn_list, int max_conns)
 {
  unsigned int parm;
  int i, conn_len, conns;
@@ -411,7 +411,7 @@ static void snd_hda_put_vol_mute(struct intelhd_card_s *card,hda_nid_t nid,
 }
 
 static unsigned int snd_hda_get_vol_mute(struct intelhd_card_s *card,hda_nid_t nid,
-				 int ch, int direction, int index)
+                 int ch, int direction, int index)
 {
  uint32_t val, parm;
 
@@ -423,7 +423,7 @@ static unsigned int snd_hda_get_vol_mute(struct intelhd_card_s *card,hda_nid_t n
 }
 
 static int snd_hda_codec_amp_update(struct intelhd_card_s *card, hda_nid_t nid, int ch,
-			     int direction, int idx, int mask, int val)
+                 int direction, int idx, int mask, int val)
 {
  val &= mask;
  val |= snd_hda_get_vol_mute(card, nid, ch, direction, idx) & ~mask;
@@ -432,7 +432,7 @@ static int snd_hda_codec_amp_update(struct intelhd_card_s *card, hda_nid_t nid, 
 }
 
 static int snd_hda_codec_amp_stereo(struct intelhd_card_s *card, hda_nid_t nid,
-			     int direction, int idx, int mask, int val)
+                 int direction, int idx, int mask, int val)
 {
  int ch, ret = 0;
  for (ch = 0; ch < 2; ch++)
@@ -453,7 +453,7 @@ static void snd_hda_unmute_input(struct intelhd_card_s *card, struct hda_gnode *
 }
 
 static void select_input_connection(struct intelhd_card_s *card, struct hda_gnode *node,
-				   unsigned int index)
+                   unsigned int index)
 {
  snd_hda_codec_write(card, node->nid, 0,AC_VERB_SET_CONNECT_SEL, index);
 }
@@ -554,8 +554,8 @@ static struct hda_gnode *parse_output_jack(struct intelhd_card_s *card,int jack_
    snd_hda_unmute_output(card, node);
    snd_hda_codec_write(card, node->nid, 0,
                        AC_VERB_SET_PIN_WIDGET_CONTROL,
-		       AC_PINCTL_OUT_EN |
-		       ((node->pin_caps & AC_PINCAP_HP_DRV)? AC_PINCTL_HP_EN : 0));
+               AC_PINCTL_OUT_EN |
+               ((node->pin_caps & AC_PINCAP_HP_DRV)? AC_PINCTL_HP_EN : 0));
    return node;
   }
  }
@@ -1123,7 +1123,7 @@ static int INTELHD_adetect(struct mpxplay_audioout_info_s *aui)
  card->pci_dev=(struct pci_config_s *)pds_calloc(1,sizeof(struct pci_config_s));
  if(!card->pci_dev)
   goto err_adetect;
- if(pcibios_search_devices(&intelhda_devices,card->pci_dev)!=PCI_SUCCESSFUL)
+ if(pcibios_search_devices(intelhda_devices,card->pci_dev)!=PCI_SUCCESSFUL)
   goto err_adetect;
 
  card->iobase = pcibios_ReadConfig_Dword(card->pci_dev, PCIR_NAMBAR);

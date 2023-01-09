@@ -23,7 +23,7 @@
 
 #define SB_MIXER_ADDRESS     (baseport+0x4)
 #define SB_MIXER_DATA        (baseport+0x5)
-#define SB_RESET_PORT	     (baseport+0x6)
+#define SB_RESET_PORT         (baseport+0x6)
 #define SB_READ_DATA_PORT    (baseport+0xa)
 #define SB_WRITE_DATA_PORT   (baseport+0xc)
 #define SB_WRITE_STATUS_PORT (baseport+0xc)
@@ -155,7 +155,7 @@ static void SB_card_info(struct mpxplay_audioout_info_s *aui)
 {
  char sout[100];
  sprintf(sout,"SBP : SB-pro card found : SET BLASTER=A%3X I%d D%d T%d",
-	       aui->card_port,aui->card_irq,aui->card_isa_dma,aui->card_type);
+           aui->card_port,aui->card_irq,aui->card_isa_dma,aui->card_type);
  pds_textdisplay_printf(sout);
 }
 
