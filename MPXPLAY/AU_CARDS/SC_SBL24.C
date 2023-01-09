@@ -213,7 +213,7 @@ static unsigned int snd_live24_buffer_init(struct emu10k1_card *card,struct mpxp
 {
  unsigned int bytes_per_sample=(aui->bits_set>=24)? 4:2;
  card->pcmout_bufsize=MDma_get_max_pcmoutbufsize(aui,0,CA0106_DMABUF_ALIGN,bytes_per_sample,0);
- card->dm=MDma_alloc_dosmem(CA0106_DMABUF_PERIODS*2*sizeof(uint32_t)+card->pcmout_bufsize);
+ card->dm=MDma_alloc_cardmem(CA0106_DMABUF_PERIODS*2*sizeof(uint32_t)+card->pcmout_bufsize);
  card->virtualpagetable=(uint32_t *)card->dm->linearptr;
  card->pcmout_buffer=((char *)card->virtualpagetable)+CA0106_DMABUF_PERIODS*2*sizeof(uint32_t);
  mpxplay_debugf(SBL_DEBUG_OUTPUT,"buffer init: pagetable:%8.8X pcmoutbuf:%8.8X size:%d",(unsigned long)card->virtualpagetable,(unsigned long)card->pcmout_buffer,card->pcmout_bufsize);

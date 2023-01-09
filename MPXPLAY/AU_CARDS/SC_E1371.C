@@ -101,7 +101,7 @@ typedef struct ensoniq_card_s
  unsigned int    chiprev;
  struct pci_config_s  *pci_dev;
 
- dosmem_t *dm;
+ cardmem_t *dm;
  char *pcmout_buffer;
  long pcmout_bufsize;
 
@@ -314,7 +314,7 @@ static unsigned int snd_es1371_buffer_init(struct ensoniq_card_s *card,struct mp
 {
  unsigned int bytes_per_sample=2; // 16 bit
  card->pcmout_bufsize=MDma_get_max_pcmoutbufsize(aui,0,ES1371_DMABUF_ALIGN,bytes_per_sample,0);
- card->dm=MDma_alloc_dosmem(card->pcmout_bufsize);
+ card->dm=MDma_alloc_cardmem(card->pcmout_bufsize);
  card->pcmout_buffer=(char *)card->dm->linearptr;
  aui->card_DMABUFF=card->pcmout_buffer;
  mpxplay_debugf(ENS_DEBUG_OUTPUT,"buffer init: pcmoutbuf:%8.8X size:%d",(unsigned long)card->pcmout_buffer,card->pcmout_bufsize);
@@ -500,7 +500,7 @@ static void ES1371_close(struct mpxplay_audioout_info_s *aui)
  struct ensoniq_card_s *card=aui->card_private_data;
  if(card){
   snd_es1371_chip_close(card);
-  MDma_free_dosmem(card->dm);
+  MDma_free_cardmem(card->dm);
   if(card->pci_dev)
    pds_free(card->pci_dev);
   pds_free(card);

@@ -20,11 +20,11 @@ extern "C" {
 typedef struct au_isadma_s{
  unsigned int dma_low;
  unsigned int dma_high;
- dosmem_t *card_dma_dosmem;
+ cardmem_t *card_dma_dosmem;
 }au_isadma_s;
 
-extern struct dosmem_t *MDma_alloc_dosmem(unsigned int buffsize);
-extern void MDma_free_dosmem(struct dosmem_t *dm);
+extern cardmem_t *MDma_alloc_cardmem(unsigned int buffsize);
+extern void MDma_free_cardmem(cardmem_t *dm);
 extern unsigned int MDma_get_max_pcmoutbufsize(struct mpxplay_audioout_info_s *aui,unsigned int max_bufsize,unsigned int pagesize,unsigned int samplesize,unsigned long freq_config);
 extern unsigned int MDma_init_pcmoutbuf(struct mpxplay_audioout_info_s *aui,unsigned int maxbufsize,unsigned int pagesize,unsigned long freq_config);
 
@@ -46,6 +46,8 @@ extern unsigned int MIrq_autodetect(struct mpxplay_audioout_info_s *aui);
 
 #ifdef __DOS__
 
+#ifndef DJGPP
+
 #define ENTER_CRITICAL IRQ_PUSH_OFF()
  void IRQ_PUSH_OFF (void);
 #pragma aux IRQ_PUSH_OFF = \
@@ -59,6 +61,17 @@ extern unsigned int MIrq_autodetect(struct mpxplay_audioout_info_s *aui);
         "popfd" \
         "sti"   \
         modify [esp];
+
+#else//DJGPP
+
+#define ENTER_CRITICAL int cpu__fd = IRQ_PUSH_OFF()
+static int /*__attribute__((naked))*/ IRQ_PUSH_OFF (void) { asm( "pushfl \n\t popl %eax \n\t cli"); }
+
+#define LEAVE_CRITICAL IRQ_POP(cpu__fd)
+static void /*__attribute__((naked))*/ IRQ_POP (int fd) {asm("pushl %0 \n\t popfl" ::"r"(fd)); }
+
+#endif
+
 #else
 
 #define ENTER_CRITICAL {}

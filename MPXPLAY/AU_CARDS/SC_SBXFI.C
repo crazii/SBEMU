@@ -592,7 +592,7 @@ static unsigned int snd_emu20kx_buffer_init(struct emu20kx_card_s *card,struct m
  uint32_t pagecount,pcmbufp;
 
  card->pcmout_bufsize=MDma_get_max_pcmoutbufsize(aui,0,EMU20KX_PAGESIZE,bytes_per_sample,0);
- card->dm=MDma_alloc_dosmem( EMU20KX_MAXPAGES*sizeof(uint32_t)// virtualpage
+ card->dm=MDma_alloc_cardmem( EMU20KX_MAXPAGES*sizeof(uint32_t)// virtualpage
                             +EMU20KX_PAGESIZE                // silentpage
                             +card->pcmout_bufsize            // pcm output
                             +0x1000 );                       // to round
@@ -817,7 +817,7 @@ static void EMU20KX_close(struct mpxplay_audioout_info_s *aui)
    snd_emu20kx_chip_close(card);
    pds_dpmi_unmap_physycal_memory(card->iobase);
   }
-  MDma_free_dosmem(card->dm);
+  MDma_free_cardmem(card->dm);
   if(card->pci_dev)
    free(card->pci_dev);
   free(card);

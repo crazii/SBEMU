@@ -15,8 +15,8 @@
 //function: Intel ICH audiocards low level routines
 //based on: ALSA (http://www.alsa-project.org) and ICH-DOS wav player from Jeff Leyda
 
-//#define MPXPLAY_USE_DEBUGF 1
-//#define ICH_DEBUG_OUTPUT stdout
+#define MPXPLAY_USE_DEBUGF 1
+#define ICH_DEBUG_OUTPUT stdout
 
 #include "mpxplay.h"
 #include <time.h>
@@ -72,7 +72,7 @@ typedef struct intel_card_s
  unsigned char   device_type;
  struct pci_config_s  *pci_dev;
 
- dosmem_t *dm;
+ cardmem_t *dm;
  uint32_t *virtualpagetable; // must be aligned to 8 bytes?
  char *pcmout_buffer;
  long pcmout_bufsize;
@@ -146,7 +146,7 @@ static void snd_intel_codec_write(struct intel_card_s *card,unsigned int reg,uns
 
 static unsigned int snd_intel_codec_read(struct intel_card_s *card,unsigned int reg)
 {
- unsigned int data,retry;
+ unsigned int data = 0,retry;
  snd_intel_codec_semaphore(card,ICH_GLOB_STAT_PCR);
 
  retry=ICH_DEFAULT_RETRY;
@@ -166,7 +166,7 @@ static unsigned int snd_intel_buffer_init(struct intel_card_s *card,struct mpxpl
  unsigned int bytes_per_sample=(aui->bits_set>16)? 4:2;
 
  card->pcmout_bufsize=MDma_get_max_pcmoutbufsize(aui,0,ICH_DMABUF_ALIGN,bytes_per_sample,0);
- card->dm=MDma_alloc_dosmem(ICH_DMABUF_PERIODS*2*sizeof(uint32_t)+card->pcmout_bufsize);
+ card->dm=MDma_alloc_cardmem(ICH_DMABUF_PERIODS*2*sizeof(uint32_t)+card->pcmout_bufsize);
  card->virtualpagetable=(uint32_t *)card->dm->linearptr; // pagetable requires 8 byte align, but dos-allocmem gives 16 byte align (so we don't need alignment correction)
  card->pcmout_buffer=((char *)card->virtualpagetable)+ICH_DMABUF_PERIODS*2*sizeof(uint32_t);
  aui->card_DMABUFF=card->pcmout_buffer;
@@ -194,7 +194,7 @@ static void snd_intel_chip_init(struct intel_card_s *card)
  retry=ICH_DEFAULT_RETRY;
  do{
   unsigned int cntreg=snd_intel_read_32(card,ICH_GLOB_CNT_REG);
-  if(!(cntreg&ICH_GLOB_CNT_AC97WARM))
+  if(!(cntreg&(cmd&(ICH_GLOB_CNT_AC97COLD|ICH_GLOB_CNT_AC97WARM))))
    break;
   pds_delay_10us(10);
  }while(--retry);
@@ -292,7 +292,7 @@ static void snd_intel_prepare_playback(struct intel_card_s *card,struct mpxplay_
   table_base[i*2]=(uint32_t)((char *)card->pcmout_buffer+(i*card->period_size_bytes));
   table_base[i*2+1]=period_size_samples;
  }
- snd_intel_write_32(card,ICH_PO_BDBAR_REG,(uint32_t)table_base);
+ snd_intel_write_32(card,ICH_PO_BDBAR_REG,(uint32_t)pds_cardmem_physicalptr(card->dm,table_base));
 
  snd_intel_write_8(card,ICH_PO_LVI_REG,(ICH_DMABUF_PERIODS-1)); // set last index
  snd_intel_write_8(card,ICH_PO_CIV_REG,0); // reset current index
@@ -373,7 +373,6 @@ static int INTELICH_adetect(struct mpxplay_audioout_info_s *aui)
 
  if(!snd_intel_buffer_init(card,aui))
   goto err_adetect;
-
  snd_intel_chip_init(card);
  snd_intel_ac97_init(card,aui->freq_set);
 
@@ -389,7 +388,7 @@ static void INTELICH_close(struct mpxplay_audioout_info_s *aui)
  struct intel_card_s *card=aui->card_private_data;
  if(card){
   snd_intel_chip_close(card);
-  MDma_free_dosmem(card->dm);
+  MDma_free_cardmem(card->dm);
   if(card->pci_dev)
    pds_free(card->pci_dev);
   pds_free(card);

@@ -15,7 +15,7 @@
 //function: Intel HD audio driver for Mpxplay
 //based on ALSA (http://www.alsa-project.org) and WSS libs
 
-//#define MPXPLAY_USE_DEBUGF 1
+#define MPXPLAY_USE_DEBUGF 1
 #define IHD_DEBUG_OUTPUT stdout
 
 #include "mpxplay.h"
@@ -53,7 +53,7 @@ struct intelhd_card_s
  unsigned int pcm_num_vols;            // number of PCM volumes
  struct pcm_vol_s pcm_vols[MAX_PCM_VOLS]; // PCM volume nodes
 
- dosmem_t *dm;
+ cardmem_t *dm;
  uint32_t *table_buffer;
  char *pcmout_buffer;
  long pcmout_bufsize;
@@ -679,7 +679,7 @@ static unsigned int snd_ihd_buffer_init(struct mpxplay_audioout_info_s *aui,stru
  unsigned int beginmem_aligned;
 
  allbufsize+=card->pcmout_bufsize=MDma_get_max_pcmoutbufsize(aui,0,AZX_PERIOD_SIZE,bytes_per_sample*aui->chan_card/2,aui->freq_set);
- card->dm=MDma_alloc_dosmem(allbufsize);
+ card->dm=MDma_alloc_cardmem(allbufsize);
  if(!card->dm)
   return 0;
 
@@ -687,7 +687,7 @@ static unsigned int snd_ihd_buffer_init(struct mpxplay_audioout_info_s *aui,stru
  card->table_buffer=(uint32_t *)beginmem_aligned;
  card->pcmout_buffer=(char *)(beginmem_aligned+BDL_SIZE);
 
- gcap = (unsigned long)azx_sd_readw(card,GCAP);
+ gcap = (unsigned long)azx_readw(card,GCAP);
  if(!(card->config_select & AUCARDSCONFIG_IHD_USE_FIXED_SDO) && (gcap & 0xF000)) // number of playback streams
   sdo_offset = ((gcap >> 8) & 0x0F) * 0x20 + 0x80; // number of capture streams
  else{
@@ -855,7 +855,7 @@ static void azx_setup_controller(struct intelhd_card_s *card)
  azx_sd_writel(card, SD_CBL, card->pcmout_dmasize);
  azx_sd_writew(card, SD_LVI, card->pcmout_num_periods - 1);
  azx_sd_writew(card, SD_FORMAT, card->format_val);
- azx_sd_writel(card, SD_BDLPL, (uint32_t)card->table_buffer);
+ azx_sd_writel(card, SD_BDLPL, (uint32_t)pds_cardmem_physicalptr(card->dm, card->table_buffer));
  azx_sd_writel(card, SD_BDLPU, 0); // upper 32 bit
  //azx_sd_writel(card, SD_CTL,azx_sd_readl(card, SD_CTL) | SD_INT_MASK);
  pds_delay_10us(100);
@@ -1135,7 +1135,6 @@ static int INTELHD_adetect(struct mpxplay_audioout_info_s *aui)
  card->iobase = pds_dpmi_map_physical_memory(card->iobase,16384);
  if(!card->iobase)
   goto err_adetect;
-
  if(aui->card_select_config>=0)
   card->config_select=aui->card_select_config;
 
@@ -1181,7 +1180,7 @@ static void INTELHD_close(struct mpxplay_audioout_info_s *aui)
   }
   if(card->afg_nodes)
    pds_free(card->afg_nodes);
-  MDma_free_dosmem(card->dm);
+  MDma_free_cardmem(card->dm);
   if(card->pci_dev)
    pds_free(card->pci_dev);
   pds_free(card);

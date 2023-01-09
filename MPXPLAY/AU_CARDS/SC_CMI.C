@@ -608,7 +608,7 @@ static int CMI8X38_adetect(struct mpxplay_audioout_info_s *aui)
  // alloc buffers
  card->pcmout_bufsize=MDma_get_max_pcmoutbufsize(aui,0,PCMBUFFERPAGESIZE,2,0);
 
- card->dm=MDma_alloc_dosmem( card->pcmout_bufsize      // pcm output
+ card->dm=MDma_alloc_cardmem( card->pcmout_bufsize      // pcm output
                             +PCMBUFFERPAGESIZE );      // to round
 
  card->pcmout_buffer=(void *)(((uint32_t)card->dm->linearptr+PCMBUFFERPAGESIZE-1)&(~(PCMBUFFERPAGESIZE-1))); // buffer begins on page (4096 bytes) boundary
@@ -631,7 +631,7 @@ static void CMI8X38_close(struct mpxplay_audioout_info_s *aui)
  if(card){
   if(card->iobase)
    cmi8x38_chip_close(card);
-  MDma_free_dosmem(card->dm);
+  MDma_free_cardmem(card->dm);
   if(card->pci_dev)
    pds_free(card->pci_dev);
   pds_free(card);

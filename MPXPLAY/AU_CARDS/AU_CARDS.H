@@ -133,7 +133,11 @@ typedef struct au_cardconfig_v0154_s{
 }au_cardinfo_s;*/
 
 #ifdef __DOS__
+#ifdef SBEMU
+#define AU_CARDS_LINK_ISA 0
+#else
 #define AU_CARDS_LINK_ISA 1
+#endif
 #define AU_CARDS_LINK_PCI 1
 #endif
 
@@ -216,7 +220,7 @@ typedef struct mpxplay_audioout_info_s{
  unsigned int   card_bytespersign; // bytespersample_card*chan_card
  unsigned int   card_dmaout_under_int08;
  unsigned short int08_decoder_cycles;
- dosmem_t *card_dma_dosmem;
+ cardmem_t *card_dma_dosmem;
  char *card_DMABUFF;
 
  char *card_selectname;          // select card by name

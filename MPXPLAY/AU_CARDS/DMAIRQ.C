@@ -61,24 +61,32 @@ static DMA_ENTRY dmatable[8] = {
 //-----------------------------------------------------------------------
 //common (ISA & PCI)
 #ifdef __DOS__
-struct dosmem_t *MDma_alloc_dosmem(unsigned int buffsize)
+cardmem_t *MDma_alloc_cardmem(unsigned int buffsize)
 {
- struct dosmem_t *dm;
- dm=calloc(1,sizeof(dosmem_t));
+ cardmem_t *dm;
+ dm=calloc(1,sizeof(cardmem_t));
  if(!dm)
-  mpxplay_close_program(MPXERROR_XMS_MEM);
+  exit(MPXERROR_XMS_MEM);
+  #ifndef DJGPP
  if(!pds_dpmi_dos_allocmem(dm,buffsize)){
+  #else
+  if(!pds_dpmi_xms_allocmem(dm,buffsize)){
+  #endif
   free(dm);
-  mpxplay_close_program(MPXERROR_CONVENTIONAL_MEM);
+  exit(MPXERROR_CONVENTIONAL_MEM);
  }
  memset(dm->linearptr,0,buffsize);
  return dm;
 }
 
-void MDma_free_dosmem(struct dosmem_t *dm)
+void MDma_free_cardmem(cardmem_t *dm)
 {
  if(dm){
+  #ifndef DJGPP
   pds_dpmi_dos_freemem(dm);
+  #else
+  pds_dpmi_xms_freemem(dm);
+  #endif
   free(dm);
  }
 }
@@ -213,12 +221,12 @@ void MDma_interrupt_monitor(struct mpxplay_audioout_info_s *aui)
 
 static void MDma_ISA_AllocMem(struct mpxplay_audioout_info_s *aui)
 {
- dosmem_t *dm;
+ cardmem_t *dm;
  unsigned long p;
 
  aui->card_dma_buffer_size=MDma_get_max_pcmoutbufsize(aui,MDMA_ISA_DMABUFSIZE_MAX,MDMA_ISA_BLOCKSIZE,2,0);
 
- dm=MDma_alloc_dosmem(aui->card_dma_buffer_size*2);
+ dm=MDma_alloc_cardmem(aui->card_dma_buffer_size*2);
 
  p=(unsigned long)dm->linearptr;
  if(((p&0xffff)+aui->card_dma_buffer_size)>65535)
@@ -233,7 +241,7 @@ static void MDma_ISA_AllocMem(struct mpxplay_audioout_info_s *aui)
 void MDma_ISA_FreeMem(struct mpxplay_audioout_info_s *aui)
 {
  if(aui->card_dma_dosmem){
-  MDma_free_dosmem(aui->card_dma_dosmem);
+  MDma_free_cardmem(aui->card_dma_dosmem);
   aui->card_dma_dosmem=NULL;
  }
  aui->card_DMABUFF=NULL;
@@ -409,10 +417,10 @@ unsigned int MDma_ISA_autodetect(struct mpxplay_audioout_info_s *aui)
 //**************************************************************************
 #ifdef __DOS__
 static char *newstack_pm_sc;
-static char __far *new_stack_sc;
-static void __far *old_stack_sc;
+static farptr new_stack_sc;
+static farptr old_stack_sc;
 static void (*new_irq_routine_sc)(struct mpxplay_audioout_info_s *);
-static void (__far __interrupt *oldhandler_sc)();
+int_handler_t oldhandler_sc;
 static unsigned char sc_irq_controller_mask;
 //static unsigned char sc_irq_used;
 
@@ -437,6 +445,30 @@ void stackcall_sc(struct mpxplay_audioout_info_s *,void *);
   "call edx" \
   "cli"\
   "lss esp,old_stack_sc"
+
+#if defined(DJGPP)
+#define loades() { asm("push %ds\n\t pop %es");}
+#define savefpu() {asm("sub $200, %esp\n\t fsave (%esp)");}
+#define clearfpu() {asm("finit");}
+#define restorefpu() {asm("frstor (%esp)\n\t add $200, %esp");}
+#define cld() {asm("cld");}
+void stackcall_sc(struct mpxplay_audioout_info_s* aui, void* pfun)
+{
+  asm(
+    "movw %%ss, %1 \n\t"
+    "movl %%esp, %0 \n\t"
+    "lss %2, %%esp \n\t"
+    "sti \n\t"
+    "push %3 \n\t"
+    "call *%4 \n\t"
+    "add $4, %%esp \n\t"
+    "cli \n\t"
+    "lss %0, %%esp \n\t"
+    :"+m"(old_stack_sc.off), "+m"(old_stack_sc.sel)
+    :"m"(new_stack_sc), "m"(aui), "m"(pfun)
+  );
+}
+#endif
 
 static void __interrupt __loadds newhandler_sc_special(void)
 {
@@ -495,7 +527,7 @@ static unsigned int setvect_soundcard_newirq(unsigned int irq_num,void (*irq_rou
   newstack_pm_sc=(char *)pds_malloc(IRQ_STACK_SIZE);
   if(newstack_pm_sc==NULL)
    return 0;
-  new_stack_sc=(char far *)(newstack_pm_sc+IRQ_STACK_SIZE);
+  new_stack_sc= pds_fardata((char far *)(newstack_pm_sc+IRQ_STACK_SIZE));
  }
 
  //set values
@@ -521,11 +553,11 @@ static unsigned int setvect_soundcard_newirq(unsigned int irq_num,void (*irq_rou
  }
 
  // install protected mode vector
- oldhandler_sc=(void (__far __interrupt *)())pds_dos_getvect(irq_num);
+ oldhandler_sc=(int_handler_t)pds_dos_getvect(irq_num);
  if((*card_infobits)&SNDCARD_SPECIAL_IRQ)
-  pds_dos_setvect(irq_num,newhandler_sc_special);
+  pds_dos_setvect(irq_num,pds_int_handler(newhandler_sc_special));
  else
-  pds_dos_setvect(irq_num,newhandler_sc_normal);
+  pds_dos_setvect(irq_num,pds_int_handler(newhandler_sc_normal));
 
  funcbit_disable(*card_infobits,AUINFOS_CARDINFOBIT_IRQSTACKBUSY);
  return 1;

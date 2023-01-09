@@ -803,7 +803,7 @@ unsigned int newfunc_newhandler08_maincycles_init(struct mainvars *mvp,void *cyc
 #elif defined(__DOS__)
 
 static unsigned int oldint08_timercount;
-void (__far __interrupt *oldint08_handler)();
+int_handler_t oldint08_handler;
 
 void loades(void);
 #pragma aux loades = "push ds" "pop es"
@@ -820,7 +820,7 @@ void restorefpu(void);
 void cld(void);
 #pragma aux cld="cld"
 
-#if defined(SBEMU) && defined(DJGPP)
+#if defined(DJGPP)
 #define loades() { asm("push %ds\n\t pop %es");}
 #define savefpu() {asm("sub $200, %esp\n\t fsave (%esp)");}
 #define clearfpu() {asm("finit");}
@@ -845,7 +845,7 @@ static void __interrupt __loadds newhandler_08(void)
  if((oldint08_timercount&0xFFFF0000) && !oldint08_running){
   oldint08_running=1;
   oldint08_timercount-=0x00010000;
-  oldint08_handler();
+  pds_call_int_handler(oldint08_handler);
   cld();
   oldint08_running=0;
  }else{
@@ -859,9 +859,9 @@ static void __interrupt __loadds newhandler_08(void)
 
 void newfunc_newhandler08_init(void)
 {
- if(!oldint08_handler){
-  oldint08_handler=(void (__far __interrupt *)())pds_dos_getvect(MPXPLAY_TIMER_INT);
-  pds_dos_setvect(MPXPLAY_TIMER_INT,newhandler_08);
+ if(!pds_valid_int_handler(oldint08_handler)){
+  oldint08_handler=(int_handler_t)pds_dos_getvect(MPXPLAY_TIMER_INT);
+  pds_dos_setvect(MPXPLAY_TIMER_INT, pds_int_handler(newhandler_08));
   outp(0x43, 0x34);
   outp(0x40, (INT08_DIVISOR_NEW&0xff));
   outp(0x40, (INT08_DIVISOR_NEW>>8));
@@ -877,7 +877,7 @@ void newfunc_newhandler08_close(void)
 {
  newfunc_timer_threads_suspend();
  mpxplay_timer_close();
- if(oldint08_handler){
+ if(pds_valid_int_handler(oldint08_handler)){
   pds_dos_setvect(MPXPLAY_TIMER_INT,oldint08_handler);
   outp(0x43, 0x34);
   outp(0x40, 0x00);

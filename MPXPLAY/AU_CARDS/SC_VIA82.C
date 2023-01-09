@@ -102,7 +102,7 @@ struct via82xx_card
  unsigned char   chiprev;
  struct pci_config_s  *pci_dev;
 
- dosmem_t *dm;
+ cardmem_t *dm;
  unsigned long *virtualpagetable;
  char *pcmout_buffer;
  long pcmout_bufsize;
@@ -254,7 +254,7 @@ static int VIA82XX_adetect(struct mpxplay_audioout_info_s *aui)
  // alloc buffers
  card->pcmout_bufsize=MDma_get_max_pcmoutbufsize(aui,0,PCMBUFFERPAGESIZE,2,0);
 
- card->dm=MDma_alloc_dosmem( VIRTUALPAGETABLESIZE   // virtualpagetable
+ card->dm=MDma_alloc_cardmem( VIRTUALPAGETABLESIZE   // virtualpagetable
                 +card->pcmout_bufsize   // pcm output
                 +4096 );                // to round
 
@@ -279,7 +279,7 @@ static void VIA82XX_close(struct mpxplay_audioout_info_s *aui)
  if(card){
   if(card->iobase)
    via82xx_chip_close(card);
-  MDma_free_dosmem(card->dm);
+  MDma_free_cardmem(card->dm);
   if(card->pci_dev)
    pds_free(card->pci_dev);
   pds_free(card);

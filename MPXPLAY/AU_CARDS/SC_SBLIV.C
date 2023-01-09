@@ -800,7 +800,7 @@ static unsigned int snd_emu10kx_buffer_init(struct emu10k1_card *card,struct mpx
  uint32_t pagecount,pcmbufp;
 
  card->pcmout_bufsize=MDma_get_max_pcmoutbufsize(aui,0,EMUPAGESIZE,2,0);
- card->dm=MDma_alloc_dosmem( MAXPAGES*sizeof(uint32_t)       // virtualpage
+ card->dm=MDma_alloc_cardmem( MAXPAGES*sizeof(uint32_t)       // virtualpage
                             +EMUPAGESIZE                     // silentpage
                             +card->pcmout_bufsize            // pcm output
                             +0x1000 );                       // to round
@@ -945,7 +945,7 @@ static unsigned int snd_p16v_selector(struct emu10k1_card *card,struct mpxplay_a
 static unsigned int snd_p16v_buffer_init(struct emu10k1_card *card,struct mpxplay_audioout_info_s *aui)
 {
  card->pcmout_bufsize=MDma_get_max_pcmoutbufsize(aui,0,AUDIGY2_P16V_DMABUF_ALIGN,AUDIGY2_P16V_BYTES_PER_SAMPLE,0);
- card->dm=MDma_alloc_dosmem(AUDIGY2_P16V_PERIODS*2*sizeof(uint32_t)+card->pcmout_bufsize);
+ card->dm=MDma_alloc_cardmem(AUDIGY2_P16V_PERIODS*2*sizeof(uint32_t)+card->pcmout_bufsize);
  card->virtualpagetable=(uint32_t *)card->dm->linearptr;
  card->pcmout_buffer=((char *)card->virtualpagetable)+AUDIGY2_P16V_PERIODS*2*sizeof(uint32_t);
  mpxplay_debugf(SBL_DEBUG_OUTPUT,"buffer init: pagetable:%8.8X pcmoutbuf:%8.8X size:%d",(unsigned long)card->virtualpagetable,(unsigned long)card->pcmout_buffer,card->pcmout_bufsize);
@@ -1260,7 +1260,7 @@ static void SBLIVE_close(struct mpxplay_audioout_info_s *aui)
   if(card->iobase)
    if(card->driver_funcs->hw_close)
     card->driver_funcs->hw_close(card);
-  MDma_free_dosmem(card->dm);
+  MDma_free_cardmem(card->dm);
   if(card->pci_dev)
    pds_free(card->pci_dev);
   pds_free(card);

@@ -228,6 +228,21 @@ typedef struct dosmem_t{
  char *linearptr;
 }dosmem_t;
 
+#if defined(DJGPP)
+typedef struct xmsmem_t{
+ unsigned short remap;
+ unsigned short xms;
+ unsigned short handle;
+ char *physicalptr;
+ char *linearptr;
+}xmsmem_t;
+typedef xmsmem_t cardmem_t;
+#define pds_cardmem_physicalptr(cardmem, ptr) ((cardmem)->physicalptr + ((char*)(ptr) - (cardmem)->linearptr))
+#else
+typedef dosmem_t cardmem_t;
+#define pds_cardmem_physicalptr(cardmem, ptr) (ptr)
+#endif
+
 //for DOS interrupt callings
 typedef struct rminfo{
  long EDI;
@@ -395,20 +410,46 @@ extern time_t pds_mkgmtime(struct tm *t_in);
 
 //dpmi.c
 #ifndef MPXPLAY_WIN32
+
 #if defined(DJGPP)
+#include <sys/segments.h>
 #define far
 #define __far
 #define __interrupt
 #define __loadds
-#endif
+typedef struct _farptr {unsigned long off;unsigned short sel;} farptr;//DJGPP has no 16:32 flat model far ptr.
+typedef farptr int_handler_t;
+static farptr pds_fardata(void* d) { farptr ptr = {(long)d, _my_ds()}; return ptr;}
+static void pds_call_int_handler(int_handler_t h) { asm("lcall *%0" ::"m"(h));}
+static int_handler_t pds_int_handler(void (*f)(void)) { int_handler_t h = {(long)f, _my_cs()}; return h;}
+static int pds_valid_int_handler(int_handler_t h) {return h.off && h.sel;}
+#else
+typedef void* far farptr;
+typedef void (__far __interrupt *int_handler_t)();
+#define pds_fardata(d) (d)
+static void pds_call_int_handler(int_handler_t h) {h();}
+#define pds_int_handler(f) (f)
+#define pds_valid_int_handler(h) (h)
+#endif//DJGPP
+
 #define PDS_INT2X_DOSMEM_SIZE  512
 extern long pds_dpmi_segment_to_selector(unsigned int segment);
 extern void far *pds_dpmi_getrmvect(unsigned int intno);
 extern void pds_dpmi_setrmvect(unsigned int intno, unsigned int segment,unsigned int offset);
+#if defined(DJGPP)
+extern farptr pds_dpmi_getexcvect(unsigned int intno);
+extern void pds_dpmi_setexcvect(unsigned int intno, farptr vect);
+extern farptr pds_dos_getvect(unsigned int intno);
+extern void pds_dos_setvect(unsigned int intno, farptr vect);
+
+extern int  pds_dpmi_xms_allocmem(xmsmem_t *,unsigned int size);
+extern void pds_dpmi_xms_freemem(xmsmem_t *);
+#else
 extern void far *pds_dpmi_getexcvect(unsigned int intno);
 extern void pds_dpmi_setexcvect(unsigned int intno, void far *vect);
 extern void far *pds_dos_getvect(unsigned int intno);
 extern void pds_dos_setvect(unsigned int intno, void far *vect);
+#endif
 extern int  pds_dpmi_dos_allocmem(dosmem_t *,unsigned int size);
 extern void pds_dpmi_dos_freemem(dosmem_t *);
 extern void pds_dpmi_realmodeint_call(unsigned int intnum,struct rminfo *rmi);
@@ -761,7 +802,7 @@ extern void pds_textdisplay_setcursor_position(unsigned int x,unsigned int y);
 extern void pds_textdisplay_setcursorshape(long);
 extern void pds_textdisplay_resetcolorpalette(void);
 #else // MPXPLAY_GUI_CONSOLE
-  #define pds_textdisplay_printf(text) // { fprintf(stdout, "%s", (text)); fprintf(stdout, "\n"); fflush(stdout); }
+  #define pds_textdisplay_printf(text) { fprintf(stdout, "%s", (text)); fprintf(stdout, "\n"); fflush(stdout); }
 #endif
 
 //threads.c (main.cpp)

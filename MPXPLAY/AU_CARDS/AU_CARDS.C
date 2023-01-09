@@ -232,7 +232,6 @@ auinit_retry:
    }
   }
  }else{
-
   // init/search card(s) via environment variable
   if(!(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_TESTCARD)){
    asip=&all_sndcard_info[0];
