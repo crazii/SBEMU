@@ -256,8 +256,8 @@ static unsigned int snd_hda_get_sub_nodes(struct intelhd_card_s *card, hda_nid_t
  parm = snd_hda_param_read(card, nid, AC_PAR_NODE_COUNT);
  if(parm<0)
   return 0;
- *start_id = (parm >> 16) & 0x7fff;
- return (parm & 0x7fff);
+ *start_id = (parm >> 16) & 0xff;
+ return (parm & 0xff);
 }
 
 static void snd_hda_search_audio_node(struct intelhd_card_s *card)
@@ -817,7 +817,7 @@ static void azx_setup_periods(struct intelhd_card_s *card)
 
  for(i=0; i<card->pcmout_num_periods; i++){
   unsigned int off  = i << 2;
-  unsigned int addr = ((unsigned int)card->pcmout_buffer) + i*card->pcmout_period_size;
+  unsigned int addr = ((unsigned int)pds_cardmem_physicalptr(card->dm,card->pcmout_buffer)) + i*card->pcmout_period_size;
   PDS_PUTB_LE32(&bdl[off  ],(uint32_t)addr);
   PDS_PUTB_LE32(&bdl[off+1],0);
   PDS_PUTB_LE32(&bdl[off+2],card->pcmout_period_size);
