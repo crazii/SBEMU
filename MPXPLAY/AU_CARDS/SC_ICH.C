@@ -52,7 +52,7 @@
 #define ICH_PO_BDBAR_REG  0x10  // PCM out buffer descriptor BAR
 #define ICH_PO_LVI_REG    0x15  // PCM out Last Valid Index (set it)
 #define ICH_PO_CIV_REG    0x14  // PCM out current Index value (RO?)
-#define ICH_PO_PICB_REG   0x18  // PCM out position in current buffer(RO)
+#define ICH_PO_PICB_REG   0x18  // PCM out position in current buffer(RO) (remaining, not processed pos)
 
 #define ICH_ACC_SEMA_REG  0x34  // codec write semiphore register
 #define ICH_CODEC_BUSY    0x01  // codec register I/O is happening self clearing
@@ -526,11 +526,12 @@ static long INTELICH_getbufpos(struct mpxplay_audioout_info_s *aui)
    continue;
   }
 
-  pcmpos=snd_intel_read_16(card,ICH_PO_PICB_REG); // position in the current period (in samples)
+  pcmpos=snd_intel_read_16(card,ICH_PO_PICB_REG); // position in the current period (remaining unprocessed in samples)
   pcmpos*=aui->bits_card>>3;
   pcmpos*=aui->chan_card;
+  //printf("%d %d %d %d\n",aui->bits_card, aui->chan_card, pcmpos, card->period_size_bytes);
   //mpxplay_debugf(ICH_DEBUG_OUTPUT,"pcmpos: %d",pcmpos);
-  if(!pcmpos || (pcmpos>card->period_size_bytes)){
+  if(pcmpos<card->period_size_bytes){
    if(snd_intel_read_8(card,ICH_PO_LVI_REG)==index){
     MDma_clearbuf(aui);
     snd_intel_write_8(card,ICH_PO_LVI_REG,(index-1)%ICH_DMABUF_PERIODS); // to keep playing in an endless loop

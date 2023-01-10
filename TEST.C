@@ -78,17 +78,9 @@ void TestSound()
     AU_prestart(&aui);
     AU_start(&aui);
     
-    /*aui.samplenum = samplecount;
+    aui.samplenum = samplecount;
     aui.pcm_sample = samples;
-    AU_writedata(&aui);*/
-
-    int step = header.sample_rate * 55 / 1000 * 2; //samples per xx ms (2  channel)
-    for(int i = 0; i < samplecount; i+=step)
-    {
-            aui.samplenum = step;
-            aui.pcm_sample = samples + i;
-            AU_writedata(&aui);
-            delay(55);
-    }
+    AU_writedata(&aui);
+    
     AU_wait_and_stop(&aui);
 }
