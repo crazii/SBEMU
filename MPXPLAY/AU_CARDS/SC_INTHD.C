@@ -1278,7 +1278,7 @@ static aucards_allmixerchan_s ihd_mixerset[]={
 };
 
 one_sndcard_info IHD_sndcard_info={
- "IHD",
+ "Intel HDA",
  SNDCARD_LOWLEVELHAND|SNDCARD_INT08_ALLOWED,
 
  NULL,                  // card_config

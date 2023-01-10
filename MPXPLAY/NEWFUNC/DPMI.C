@@ -222,14 +222,43 @@ farptr pds_dos_getvect(unsigned int intno)
 {
     __dpmi_paddr addr;
     __dpmi_get_protected_mode_interrupt_vector(intno, &addr);
-    farptr ptr = {addr.selector, addr.offset32};
+    farptr ptr = {addr.offset32, addr.selector};
     return ptr;
 }
 
+static _go32_dpmi_seginfo intaddr_go32[256];
+
 void pds_dos_setvect(unsigned int intno, farptr vect)
 {
- __dpmi_paddr addr = {vect.off, vect.sel};
- __dpmi_set_protected_mode_interrupt_vector(intno, &addr);
+ if(intaddr_go32[intno].pm_offset == vect.off && intaddr_go32[intno].pm_selector == vect.sel) //already set
+    return;
+
+_go32_dpmi_seginfo old_addr = intaddr_go32[intno];
+
+ if(vect.sel == _my_cs())
+ {
+    intaddr_go32[intno].pm_selector = vect.sel;
+    intaddr_go32[intno].pm_offset = vect.off;
+    _go32_interrupt_stack_size = 4096; //512 minimal
+    if(_go32_dpmi_allocate_iret_wrapper(&intaddr_go32[intno]) != 0)
+        return;
+    _go32_dpmi_set_protected_mode_interrupt_vector(intno, &intaddr_go32[intno]);
+ }
+ else
+ {
+    __dpmi_paddr addr = {vect.off, vect.sel};
+    __dpmi_set_protected_mode_interrupt_vector(intno, &addr);
+ }
+
+ if(old_addr.pm_selector != 0 || old_addr.pm_offset != 0) //release old wrapper after new wrapper is set
+ {
+    _go32_dpmi_free_iret_wrapper(&old_addr);
+    if(vect.sel != _my_cs())
+    {
+        intaddr_go32[intno].pm_selector = 0;
+        intaddr_go32[intno].pm_offset = 0;
+    }
+ }
 }
 
 int pds_dpmi_dos_allocmem(dosmem_t *dm,unsigned int size)

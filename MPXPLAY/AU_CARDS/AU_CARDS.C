@@ -338,6 +338,8 @@ auinit_retry:
   }
  }
 
+ printf("Found sound card: %s\n", aui->card_handler->shortname);
+
  if(intsoundconfig&INTSOUND_NOINT08)
   funcbit_disable(aui->card_handler->infobits,SNDCARD_INT08_ALLOWED);
  if(!(aui->card_handler->infobits&SNDCARD_INT08_ALLOWED))
@@ -563,8 +565,9 @@ void AU_clearbuffs(struct mpxplay_audioout_info_s *aui)
 void AU_setrate(struct mpxplay_audioout_info_s *aui,struct mpxplay_audio_decoder_info_s *adi)
 {
  unsigned int intsoundcntrl_save,new_cardcontrolbits;
-
+ #ifndef SBEMU
  aui->pei=aui->mvp->pei0;
+ #endif
 
  aui->chan_song=adi->outchannels;
  aui->bits_song=adi->bits;
@@ -604,7 +607,6 @@ void AU_setrate(struct mpxplay_audioout_info_s *aui,struct mpxplay_audio_decoder
     || ((aui->card_controlbits&AUINFOS_CARDCNTRLBIT_BITSTREAMOUT) && (aui->card_wave_id!=adi->wave_id))
     || (aui->card_handler->infobits&SNDCARD_SETRATE)
   ){
-
   if(aui->card_handler->infobits&SNDCARD_SETRATE){ // !!!
    if(aui->card_handler->card_stop)                //
     aui->card_handler->card_stop(aui);             //

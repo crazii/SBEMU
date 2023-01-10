@@ -420,7 +420,7 @@ extern time_t pds_mkgmtime(struct tm *t_in);
 typedef struct _farptr {unsigned long off;unsigned short sel;} farptr;//DJGPP has no 16:32 flat model far ptr.
 typedef farptr int_handler_t;
 static farptr pds_fardata(void* d) { farptr ptr = {(long)d, _my_ds()}; return ptr;}
-static void pds_call_int_handler(int_handler_t h) { asm("lcall *%0" ::"m"(h));}
+static void pds_call_int_handler(int_handler_t h) { asm("pushf\n\t lcall *%0" ::"m"(h));} //simulate a iret frame for handler
 static int_handler_t pds_int_handler(void (*f)(void)) { int_handler_t h = {(long)f, _my_cs()}; return h;}
 static int pds_valid_int_handler(int_handler_t h) {return h.off && h.sel;}
 #else

@@ -861,6 +861,7 @@ void newfunc_newhandler08_init(void)
 {
  if(!pds_valid_int_handler(oldint08_handler)){
   oldint08_handler=(int_handler_t)pds_dos_getvect(MPXPLAY_TIMER_INT);
+  //printf("INT08: %04x:%08x\n", oldint08_handler.sel, oldint08_handler.off);
   pds_dos_setvect(MPXPLAY_TIMER_INT, pds_int_handler(newhandler_08));
   outp(0x43, 0x34);
   outp(0x40, (INT08_DIVISOR_NEW&0xff));

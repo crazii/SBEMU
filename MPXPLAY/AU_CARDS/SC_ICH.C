@@ -15,8 +15,8 @@
 //function: Intel ICH audiocards low level routines
 //based on: ALSA (http://www.alsa-project.org) and ICH-DOS wav player from Jeff Leyda
 
-#define MPXPLAY_USE_DEBUGF 1
-#define ICH_DEBUG_OUTPUT stdout
+//#define MPXPLAY_USE_DEBUGF 1
+//#define ICH_DEBUG_OUTPUT stdout
 
 #include "mpxplay.h"
 #include <time.h>
@@ -194,7 +194,7 @@ static void snd_intel_chip_init(struct intel_card_s *card)
  retry=ICH_DEFAULT_RETRY;
  do{
   unsigned int cntreg=snd_intel_read_32(card,ICH_GLOB_CNT_REG);
-  if(!(cntreg&(cmd&(ICH_GLOB_CNT_AC97COLD|ICH_GLOB_CNT_AC97WARM))))
+  if(!(cntreg&ICH_GLOB_CNT_AC97WARM))
    break;
   pds_delay_10us(10);
  }while(--retry);
@@ -206,6 +206,9 @@ static void snd_intel_chip_init(struct intel_card_s *card)
 
  //snd_intel_codec_read(card,0); // clear semaphore flag (removed for ICH0)
  snd_intel_write_8(card,ICH_PO_CR_REG,ICH_PO_CR_RESET); // reset channels
+ #ifdef SBEMU
+ pds_mdelay(50);
+ #endif
 
  mpxplay_debugf(ICH_DEBUG_OUTPUT,"chip init end");
 }
@@ -289,7 +292,7 @@ static void snd_intel_prepare_playback(struct intel_card_s *card,struct mpxplay_
  table_base=card->virtualpagetable;
  period_size_samples=card->period_size_bytes/(aui->bits_card>>3);
  for(i=0; i<ICH_DMABUF_PERIODS; i++){
-  table_base[i*2]=(uint32_t)((char *)card->pcmout_buffer+(i*card->period_size_bytes));
+  table_base[i*2]=(uint32_t)pds_cardmem_physicalptr(card->dm,(char *)card->pcmout_buffer+(i*card->period_size_bytes));
   table_base[i*2+1]=period_size_samples;
  }
  snd_intel_write_32(card,ICH_PO_BDBAR_REG,(uint32_t)pds_cardmem_physicalptr(card->dm,table_base));
@@ -400,7 +403,6 @@ static void INTELICH_setrate(struct mpxplay_audioout_info_s *aui)
 {
  struct intel_card_s *card=aui->card_private_data;
  unsigned int dmabufsize;
-
  if((card->device_type==DEVICE_INTEL) && !card->ac97_clock_detected)
   snd_intel_measure_ac97_clock(aui); // called from here because pds_gettimeu() needs int08
 
@@ -571,7 +573,7 @@ static unsigned long INTELICH_readMIXER(struct mpxplay_audioout_info_s *aui,unsi
 }
 
 one_sndcard_info ICH_sndcard_info={
- "ICH",
+ "ICH AC97",
  SNDCARD_LOWLEVELHAND|SNDCARD_INT08_ALLOWED,
 
  NULL,
