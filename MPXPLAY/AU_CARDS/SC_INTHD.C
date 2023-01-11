@@ -57,6 +57,8 @@ struct intelhd_card_s
  uint32_t *table_buffer;
  char *pcmout_buffer;
  long pcmout_bufsize;
+ unsigned long* corb_buffer;
+ unsigned long long* rirb_buffer;
  unsigned long pcmout_dmasize;
  unsigned int  pcmout_num_periods;
  unsigned long pcmout_period_size;
@@ -177,6 +179,7 @@ static void azx_single_send_cmd(struct intelhd_card_s *chip,uint32_t val)
 {
  int timeout = 2000; // 200 ms
 
+#if !defined(SBEMU) //Immediate Commands are optional, some devices don't have it, use CORB
  while((azx_readw(chip, IRS) & ICH6_IRS_BUSY) && (--timeout))
   pds_delay_10us(10);
 
@@ -191,6 +194,28 @@ static void azx_single_send_cmd(struct intelhd_card_s *chip,uint32_t val)
 
  azx_writel(chip, IC, val);
  azx_writew(chip, IRS, azx_readw(chip, IRS) | (ICH6_IRS_VALID|ICH6_IRS_BUSY));
+#else
+ static int corbsizes[4] = {2, 16, 256, 0};
+ int corbsize = corbsizes[(azx_readw(chip, CORBSIZE)&0x3)];
+ int corbindex = azx_readw(chip, CORBWP)&0xFF;
+ do
+ {
+   int corbread = azx_readw(chip, CORBRP);
+   if(((corbindex+1)%corbsize) != corbread)
+    break;
+  pds_delay_10us(10);
+ }while(--timeout);
+
+#ifdef MPXPLAY_USE_DEBUGF
+ if(!timeout)
+  mpxplay_debugf(IHD_DEBUG_OUTPUT,"send cmd timeout %d", timeout);
+#endif
+
+ corbindex = (corbindex+1) % corbsize;
+ chip->corb_buffer[corbindex] = val;
+ azx_writew(chip, CORBWP, corbindex);
+ azx_writeb(chip, CORBCTL, 0x2); //start
+#endif
 }
 
 static void snd_hda_codec_write(struct intelhd_card_s *chip, hda_nid_t nid,
@@ -211,7 +236,7 @@ static void snd_hda_codec_write(struct intelhd_card_s *chip, hda_nid_t nid,
 static unsigned int azx_get_response(struct intelhd_card_s *chip)
 {
  int timeout = 2000; // 200 ms
-
+#if !defined(SBEMU) //Immediate Commands are optional, some devices don't have it, use CORB
  do{
   uint16_t irs = azx_readw(chip, IRS);
   if((irs&ICH6_IRS_VALID) && !(irs&ICH6_IRS_BUSY))
@@ -219,11 +244,29 @@ static unsigned int azx_get_response(struct intelhd_card_s *chip)
   pds_delay_10us(10);
  }while(--timeout);
 
+#ifdef MPXPLAY_USE_DEBUGF
+ if(!timeout)
+  mpxplay_debugf(IHD_DEBUG_OUTPUT,"read response timeout %d", timeout);
+#endif
+
 #ifdef INTHD_CODEC_EXTRA_DELAY_US
  pds_delay_10us(INTHD_CODEC_EXTRA_DELAY_US/10); // 0.1 ms
 #endif
-
- return azx_readl(chip, IR);;
+ return azx_readl(chip, IR);
+#else
+ do{
+  azx_writeb(chip, RIRBCTL, 0x3);
+  if(azx_readb(chip, RIRBSTS)&1)
+    break;
+  pds_delay_10us(10);
+  }while(--timeout);
+ if(!timeout)
+  mpxplay_debugf(IHD_DEBUG_OUTPUT,"read response timeout %d", timeout);
+  int rirbindex = azx_readw(chip, RIRBWP);
+  long long data = chip->rirb_buffer[rirbindex];
+  azx_writeb(chip, RIRBSTS, 1);
+  return (unsigned int)(data);
+#endif
 }
 
 static unsigned int snd_hda_codec_read(struct intelhd_card_s *chip, hda_nid_t nid,
@@ -639,6 +682,13 @@ static unsigned int azx_reset(struct intelhd_card_s *chip)
  // disable unsolicited responses (single cmd mode)
  azx_writel(chip, GCTL, (azx_readl(chip, GCTL) & (~ICH6_GCTL_UREN)));
 
+ // set CORB command DMA buffer
+ azx_writel(chip, CORBLBASE, (unsigned long)pds_cardmem_physicalptr(chip->dm, chip->corb_buffer));
+ //azx_writel(chip, CORBSIZE, 0);
+ azx_writel(chip, RIRBLBASE, (unsigned long)pds_cardmem_physicalptr(chip->dm, chip->rirb_buffer));
+ //azx_writel(chip, RIRBSIZE, 0); maybe only 1 supported
+ azx_writew(chip, RINTCNT, 1); //1 response for one interrupt each time
+
  pds_delay_10us(100);
 
  chip->codec_mask = azx_readw(chip, STATESTS);
@@ -675,7 +725,7 @@ static unsigned int snd_hda_get_max_bits(struct intelhd_card_s *card)
 static unsigned int snd_ihd_buffer_init(struct mpxplay_audioout_info_s *aui,struct intelhd_card_s *card)
 {
  unsigned int bytes_per_sample=(aui->bits_set>16)? 4:2;
- unsigned long allbufsize=BDL_SIZE+1024, gcap, sdo_offset;
+ unsigned long allbufsize=BDL_SIZE+1024 + (HDA_CORB_MAXSIZE+HDA_CORB_ALIGN+HDA_RIRB_MAXSIZE+HDA_RIRB_ALGIN), gcap, sdo_offset;
  unsigned int beginmem_aligned;
 
  allbufsize+=card->pcmout_bufsize=MDma_get_max_pcmoutbufsize(aui,0,AZX_PERIOD_SIZE,bytes_per_sample*aui->chan_card/2,aui->freq_set);
@@ -686,7 +736,9 @@ static unsigned int snd_ihd_buffer_init(struct mpxplay_audioout_info_s *aui,stru
  beginmem_aligned=(((unsigned long)card->dm->linearptr+1023)&(~1023));
  card->table_buffer=(uint32_t *)beginmem_aligned;
  card->pcmout_buffer=(char *)(beginmem_aligned+BDL_SIZE);
-
+ card->corb_buffer = (long*)(((uint32_t)card->pcmout_buffer + card->pcmout_bufsize + HDA_CORB_ALIGN-1)&(~(HDA_CORB_ALIGN-1)));
+ card->rirb_buffer = (long long*)(((uint32_t)card->corb_buffer + HDA_CORB_MAXSIZE + HDA_RIRB_ALGIN-1)&(~(HDA_RIRB_ALGIN-1)));
+ 
  gcap = (unsigned long)azx_readw(card,GCAP);
  if(!(card->config_select & AUCARDSCONFIG_IHD_USE_FIXED_SDO) && (gcap & 0xF000)) // number of playback streams
   sdo_offset = ((gcap >> 8) & 0x0F) * 0x20 + 0x80; // number of capture streams
@@ -762,10 +814,13 @@ static unsigned int snd_ihd_mixer_init(struct intelhd_card_s *card)
  if(card->dac_node[0]){
   card->supported_formats=card->dac_node[0]->supported_formats;
   if(!card->supported_formats)
-   card->supported_formats=0xffffffff; // !!! then manual try
+   card->supported_formats=snd_hda_param_read(card, card->afg_root_nodenum, AC_PAR_PCM);
+   //card->supported_formats=0xffffffff; // !!! then manual try
+   
   card->supported_max_freq=snd_hda_get_max_freq(card);
   card->supported_max_bits=snd_hda_get_max_bits(card);
  }
+ //printf("FORMATS: %x\n", card->supported_formats);
 
  for(i=0;i<MAX_PCM_VOLS;i++)
   if(card->pcm_vols[i].node){
@@ -869,10 +924,12 @@ static void azx_setup_controller(struct intelhd_card_s *card)
 static unsigned int snd_hda_calc_stream_format(struct mpxplay_audioout_info_s *aui,struct intelhd_card_s *card)
 {
  unsigned int i,val = 0;
-
+#if !defined(SBEMU)
  if((aui->freq_card<44100) && !aui->freq_set) // under 44100 it sounds terrible on my ALC888, rather we use the freq converter of Mpxplay
   aui->freq_card=44100;
- else if(card->supported_max_freq && (aui->freq_card>card->supported_max_freq))
+ else
+#endif
+ if(card->supported_max_freq && (aui->freq_card>card->supported_max_freq))
   aui->freq_card=card->supported_max_freq;
 
  for(i=0; rate_bits[i].hz; i++)
@@ -881,6 +938,7 @@ static unsigned int snd_hda_calc_stream_format(struct mpxplay_audioout_info_s *a
    val = rate_bits[i].hda_fmt;
    break;
   }
+  //printf("freq: %d\n", aui->freq_card);
 
  val |= aui->chan_card - 1;
 

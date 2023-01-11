@@ -478,6 +478,12 @@ enum {
 #define ICH6_REG_SD_BDLPL        0x18
 #define ICH6_REG_SD_BDLPU        0x1c
 
+/*CORB & RIRB */
+#define HDA_CORB_MAXSIZE 1024
+#define HDA_CORB_ALIGN 128
+#define HDA_RIRB_MAXSIZE 2048
+#define HDA_RIRB_ALGIN 128
+
 /* PCI space */
 #define ICH6_PCIREG_TCSEL    0x44
 
