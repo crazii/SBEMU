@@ -434,15 +434,18 @@ one_mixerfunc_info MIXER_FUNCINFO_seekspeed={
 
 unsigned int mixer_speed_lq(PCM_CV_TYPE_S *pcm16,unsigned int samplenum, unsigned int channels, unsigned int samplerate, unsigned int newrate)
 {
- const float instep=(float)samplerate/(float)newrate;
- const float inend=samplenum/channels;
+ const unsigned int instep=((samplerate/newrate)<<8) | ((256*(samplerate%newrate)/newrate)&0xFF);
+ const unsigned int inend=(samplenum/channels) << 8;
  PCM_CV_TYPE_S *pcm,*intmp;
  unsigned long ipi;
- float inpos = 0;
+ unsigned int inpos = 0;
  if(!samplenum)
   return 0;
+ assert(((samplenum/channels)&0xF0000000) == 0); //too many samples, need other approches.
  unsigned int buffcount = max(((float)samplenum*newrate+samplerate-1)/samplerate,samplenum);
  PCM_CV_TYPE_S* buff = (PCM_CV_TYPE_S*)malloc(buffcount*sizeof(PCM_CV_TYPE_S));
+
+ mpxplay_debugf(MPXPLAY_DEBUG_OUTPUT, "step: %08x, end: %08x\n", instep, inend);
 
  pcm = buff;
  intmp = pcm16;
@@ -451,19 +454,20 @@ unsigned int mixer_speed_lq(PCM_CV_TYPE_S *pcm16,unsigned int samplenum, unsigne
   unsigned int m1,m2;
   unsigned int ipi,ch;
   PCM_CV_TYPE_S *intmp1,*intmp2;
-  ipi = floor(inpos);
-  m2=(unsigned int)((inpos-(float)ipi)*65536);
-  m1=65536-m2;
+  ipi = inpos >> 8;
+  m2=inpos&0xFF;
+  m1=255-m2;
   ch=channels;
   ipi*=ch;
   intmp1=intmp+ipi;
   intmp2=intmp1+ch;
   do{
-   *pcm++= ((*intmp1++)*m1+(*intmp2++)*m2) / 65536;
+   *pcm++= ((*intmp1++)*m1+(*intmp2++)*m2) / 255;
   }while(--ch);
   inpos+=instep;
  }while(inpos<inend);
 
+ mpxplay_debugf(MPXPLAY_DEBUG_OUTPUT, "sample count: %d\n", pcm-buff);
  assert(pcm-buff <= buffcount);
  memcpy(pcm16, buff, (pcm-buff)*sizeof(PCM_CV_TYPE_S));
  free(buff);
