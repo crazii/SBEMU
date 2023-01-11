@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <dos.h>
+#include <assert.h>
 #include <PLATFORM.H>
 #include <MPXPLAY.H>
 #include <AU_MIXER/MIX_FUNC.H>
@@ -40,7 +41,7 @@ void TestSound()
     }
 
     printf("Fmt: %x, Channels: %d, Samplerate: %d, Byterate: %d, Bitpersample: %d\n", header.format_type, header.channels, header.sample_rate, header.byterate, header.bits_per_sample);
-    unsigned int samplecount = header.data_size * 8 / header.bits_per_sample / header.channels;
+    unsigned int samplecount = header.data_size * 8 / header.bits_per_sample;
 
     while(header.data_chunk_header != EndianSwap32(0x64617461)) //big endian 'data'
     {
@@ -53,8 +54,10 @@ void TestSound()
         }
     }
     printf("sample count: %d, data size: %d\n", samplecount, header.data_size);
+    int buffsize = (header.sample_rate < 44100) ? (((float)samplecount*44100+header.sample_rate-1)/header.sample_rate) : samplecount; //reserved space for frequency conversion
+    assert(buffsize >= samplecount);
 
-    short* samples = (short*)malloc(max(samplecount*2*2, header.data_size)); //16bit 2 channels
+    short* samples = (short*)malloc(max(buffsize*2*2, header.data_size)); //16bit 2 channels
     if(fread(samples, header.data_size, 1, fp) != 1)
     {
         printf("failed to read file data.\n");
@@ -73,8 +76,16 @@ void TestSound()
     }
     header.channels = 2;
 
-    mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, header.sample_rate, header.channels, header.channels, NULL, header.bits_per_sample, header.bits_per_sample/8, 0};
+    mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, /*header.sample_rate*/44100, header.channels, header.channels, NULL, header.bits_per_sample, header.bits_per_sample/8, 0};
     AU_setrate(&aui, &adi);
+    //AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 100);
+    
+    if(aui.freq_card != header.sample_rate) //soundcard not supported
+    {
+        printf("frequency: %d => %d\n", header.sample_rate, aui.freq_card);
+        samplecount = mixer_speed_lq(samples, samplecount, header.channels, header.sample_rate, aui.freq_card);
+    }
+
     AU_prestart(&aui);
     AU_start(&aui);
     

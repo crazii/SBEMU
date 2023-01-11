@@ -22,6 +22,9 @@ extern void aumixer_cvbits_float64le_to_float32le(PCM_CV_TYPE_S *pcm,unsigned in
 //cv_freq.c
 //extern unsigned int mixer_speed_hq(PCM_CV_TYPE_F *pcm,unsigned int samplenum_in);
 //extern unsigned int mixer_speed_lq(PCM_CV_TYPE_S *pcm,unsigned int samplenum_in);
+#ifdef SBEMU
+extern unsigned int mixer_speed_lq(PCM_CV_TYPE_S *pcm16, unsigned int samplenum, unsigned int channels, unsigned int samplerate, unsigned int newrate);
+#endif
 
 //cv_chan.c
 extern unsigned int cv_channels_1_to_n(PCM_CV_TYPE_S *pcm_sample,unsigned int samplenum,unsigned int newchannels,unsigned int bytespersample);
