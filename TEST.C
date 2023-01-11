@@ -84,7 +84,6 @@ void TestSound()
     mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, header.sample_rate, header.channels, header.channels, NULL, header.bits_per_sample, header.bits_per_sample/8, 0};
     #endif
     AU_setrate(&aui, &adi);
-    //AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 100);
     
     if(aui.freq_card != header.sample_rate) //soundcard not supported
     {
