@@ -798,7 +798,7 @@ void Channel::UpdateSynth( const Chip* chip ) {
 }
 
 template< bool opl3Mode>
-/*INLINE*/ void Channel::GeneratePercussion( Chip* chip, int32_t* output ) {
+/*INLINE*/ void Channel::GeneratePercussion( Chip* chip, int16_t* output ) {
 	Channel* chan = this;
 
 	//BassDrum
@@ -852,7 +852,7 @@ template< bool opl3Mode>
 }
 
 template<SynthMode mode>
-Channel* Channel::BlockTemplate( Chip* chip, uint32_t samples, int32_t* output ) {
+Channel* Channel::BlockTemplate( Chip* chip, uint32_t samples, int16_t* output ) {
 	switch( mode ) {
 	case sm2AM:
 	case sm3AM:
@@ -1199,8 +1199,8 @@ uint32_t Chip::WriteAddr( uint32_t port, uint8_t val ) {
 	return 0u;
 }
 
-int Chip::GenerateBlock2( Bitu total, int32_t* output ) {
-	int32_t* base = output;
+int Chip::GenerateBlock2( Bitu total, int16_t* output ) {
+	int16_t* base = output;
 	while ( total > 0 ) {
 		uint32_t samples = ForwardLFO( (uint32_t)total );
 		memset(output, 0, sizeof(int32_t) * samples);
@@ -1215,8 +1215,8 @@ int Chip::GenerateBlock2( Bitu total, int32_t* output ) {
 	return output - base;
 }
 
-int Chip::GenerateBlock3( Bitu total, int32_t* output  ) {
-	int32_t* base = output;
+int Chip::GenerateBlock3( Bitu total, int16_t* output  ) {
+	int16_t* base = output;
 	while ( total > 0 ) {
 		uint32_t samples = ForwardLFO( (uint32_t)total );
 		memset(output, 0, sizeof(int32_t) * samples *2);
@@ -1231,7 +1231,7 @@ int Chip::GenerateBlock3( Bitu total, int32_t* output  ) {
 	return output - base;
 }
 
-int Chip::Generate(int32_t* buffer, uint32_t samples, int* channels) {
+int Chip::Generate(int16_t* buffer, uint32_t samples, int* channels) {
 	if ( !opl3Active ) {
 		*channels = 1;
 		return GenerateBlock2( samples, buffer );

@@ -42,7 +42,7 @@ typedef Bits ( DB_FASTCALL *WaveHandler) ( Bitu i, Bitu volume );
 #endif
 
 typedef Bits ( DBOPL::Operator::*VolumeHandler) ( );
-typedef Channel* ( DBOPL::Channel::*SynthHandler) ( Chip* chip, uint32_t samples, int32_t* output );
+typedef Channel* ( DBOPL::Channel::*SynthHandler) ( Chip* chip, uint32_t samples, int16_t* output );
 
 //Different synth modes that can generate blocks of data
 typedef enum {
@@ -185,11 +185,11 @@ struct Channel {
 
 	//call this for the first channel
 	template< bool opl3Mode >
-	void GeneratePercussion( Chip* chip, int32_t* output );
+	void GeneratePercussion( Chip* chip, int16_t* output );
 
 	//Generate blocks of data in specific modes
 	template<SynthMode mode>
-	Channel* BlockTemplate( Chip* chip, uint32_t samples, int32_t* output );
+	Channel* BlockTemplate( Chip* chip, uint32_t samples, int16_t* output );
 	Channel();
 };
 
@@ -239,12 +239,12 @@ struct Chip {
 
 	uint32_t WriteAddr( uint32_t port, uint8_t val );
 
-	int GenerateBlock2( Bitu total, int32_t* output );
-	int GenerateBlock3( Bitu total, int32_t* output );
+	int GenerateBlock2( Bitu total, int16_t* output );
+	int GenerateBlock3( Bitu total, int16_t* output );
 
 	//Update the synth handlers in all channels
 	void UpdateSynths();
-	int Generate(int32_t* buffer, uint32_t samples, int* channels);
+	int Generate(int16_t* buffer, uint32_t samples, int* channels);
 	void Setup( uint32_t rate );
 
 	Chip( bool opl3Mode );

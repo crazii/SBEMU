@@ -8,7 +8,7 @@ extern "C"
 #endif
 
 void OPL3EMU_Init(int samplerate);
-int OPL3EMU_GenSamples(int32_t* pcm32, int count, int* channel);
+int OPL3EMU_GenSamples(int16_t* pcm16, int count, int* channel);
 
 uint32_t OPL3EMU_PrimaryRead(uint32_t val);
 uint32_t OPL3EMU_PrimaryWriteIndex(uint32_t val);

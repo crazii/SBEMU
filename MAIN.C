@@ -17,14 +17,14 @@ extern unsigned long TEST_SampleLen;
 
 mpxplay_audioout_info_s aui = {0};
 
-#define MAIN_USE_INT70 100
+#define MAIN_USE_INT70 1
 #define MAIN_INT70_FREQ 1024
 static DPMI_REG MAIN_TimerIntReg;
 static DPMI_ISR_HANDLE MAIN_TimerIntHandle;
 
 static int MAIN_InTimer = 0;
 static int MAIN_Int70Counter = 0;
-int32_t MAIN_OPL3_PCM32[16384];
+int16_t MAIN_OPL3_PCM[16384];
 static void MAIN_TimerInterrupt();
 static void MAIN_TimerInterruptPM();
 static void MAIN_TimerInterruptRM();
@@ -250,17 +250,14 @@ static void MAIN_TimerInterrupt()
         #else
         const int samples = (SBEMU_SAMPLERATE/**SBEMU_CHANNELS*/+freq-1) / freq;
         int channels = 0;
-        int actualsamples = OPL3EMU_GenSamples(MAIN_OPL3_PCM32, samples, &channels);
-
-        //always use 16bit PCM
-        cv_bits_n_to_m((int16_t*)MAIN_OPL3_PCM32, actualsamples, 4, 2);
+        int actualsamples = OPL3EMU_GenSamples(MAIN_OPL3_PCM, samples, &channels);
 
         //always use 2 channels
         if(channels == 1)
-            actualsamples = cv_channels_1_to_n((int16_t*)MAIN_OPL3_PCM32, actualsamples, 2, SBEMU_BITS/8);
+            actualsamples = cv_channels_1_to_n(MAIN_OPL3_PCM, actualsamples, 2, SBEMU_BITS/8);
 
         aui.samplenum = actualsamples;
-        aui.pcm_sample = (int16_t*)MAIN_OPL3_PCM32;
+        aui.pcm_sample = MAIN_OPL3_PCM;
         AU_writedata(&aui);
         #endif
     }
