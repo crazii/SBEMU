@@ -54,7 +54,6 @@ typedef struct
 //printf to screen if targetbuff==NULL
 void DBG_DumpB(uint8_t* StartPtr, unsigned n, DBG_DBuff* nullable buff);
 void DBG_DumpD(uint32_t* StartPtr, unsigned n, DBG_DBuff* nullable buff);
-void DBG_DumpReq8(uint8_t* req, DBG_DBuff* nullable buff);
 
 void DBG_DumpLB(uint32_t addr, unsigned n, DBG_DBuff* nullable buff);  //linear memory dump
 void DBG_DumpLD(uint32_t addr, unsigned n, DBG_DBuff* nullable buff);

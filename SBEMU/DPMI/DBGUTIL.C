@@ -213,12 +213,6 @@ void DBG_DumpD(uint32_t* StartPtr, unsigned n, DBG_DBuff* buff/* = NULL*/)
     return;
 }
 
-void DBG_DumpReq8(uint8_t* req, DBG_DBuff* buff/* = NULL*/)
-{
-    USB_Request* q = (USB_Request*)req;
-    DBG_Printf(buff, "Request: %x, %d, %d, %d, %d\n", q->bmRequestType, q->bRequest, q->wValue, q->wIndex, q->wLength);
-}
-
 void DBG_DumpLB(uint32_t addr, unsigned n, DBG_DBuff* buff/* = NULL*/)
 {
     uint8_t* b8 = (uint8_t*)alloca(n * sizeof(uint8_t));

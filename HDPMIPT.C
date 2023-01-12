@@ -9,7 +9,8 @@
 
 #include "HDPMIPT.H"
 
-#define HDPMIPT_SWITCH_STACK 1
+#define HDPMIPT_SWITCH_STACK 0 //TODO: debug
+#define HDPMIPT_STACKSIZE 16384
 
 typedef struct
 {
@@ -21,13 +22,21 @@ extern uint32_t __djgpp_stack_top;
 
 static const char* VENDOR_HDPMI = "HDPMI";    //vendor string
 static HDPMIPT_ENTRY HDPMIPT_Entry;
-static QEMM_IODT* HDPMIPT_Iodt;
-static int HDPMIPT_PortCount;
 #if HDPMIPT_SWITCH_STACK
-static int32_t HDPMIPT_OldESP[2];
+static uint32_t HDPMIPT_OldESP[2];
+static uint32_t HDPMIPT_NewStack[2];
 #endif
 
-uint32_t HDPMIPT_TrapHandler()
+static QEMM_IODT_LINK HDPMIPT_IODT_header;
+static QEMM_IODT_LINK* HDPMIPT_IODT_Link = &HDPMIPT_IODT_header;
+static uint32_t HDPMIPT_Handle;
+
+static uint16_t HDPMIPT_GetDS()
+{
+    asm("mov %ds, %ax");
+}
+
+static uint32_t __attribute__((noinline)) HDPMIPT_TrapHandler()
 {
     uint32_t port = 0, out = 0, value = 0;
     asm(
@@ -39,15 +48,20 @@ uint32_t HDPMIPT_TrapHandler()
     :"memory"
     );
 
-    for(int i = 0; i < HDPMIPT_PortCount; ++i)
+    QEMM_IODT_LINK* link = HDPMIPT_IODT_header.next;
+    while(link)
     {
-        if(HDPMIPT_Iodt[i].port == port)
-            return HDPMIPT_Iodt[i].handler(port, value, out);
+        for(int i = 0; i < link->count; ++i)
+        {
+            if(link->iodt[i].port == port)
+                return link->iodt[i].handler(port, value, out);
+        }
+        link = link->next;
     }
     return value;
 }
 
-void __attribute__((naked)) HDPMIPT_TrapHandlerWrapper()
+static void __attribute__((naked)) HDPMIPT_TrapHandlerWrapper()
 {
     //switch to local stack from trapped client's stack
     #if HDPMIPT_SWITCH_STACK
@@ -56,11 +70,9 @@ void __attribute__((naked)) HDPMIPT_TrapHandlerWrapper()
     "mov %%esp, %0 \n\t"
     "push %%ss \n\t"
     "pop %1 \n\t"
-    "push %%ds \n\t"
-    "push %2 \n\t"
-    "lss 0(%%esp), %%esp \n\t"
+    "lss %2, %%esp \n\t"
     :"=m"(HDPMIPT_OldESP[0]),"=m"(HDPMIPT_OldESP[1])
-    :"m"(__djgpp_stack_top)
+    :"m"(HDPMIPT_NewStack[0])
     :"memory"
     );
     #endif
@@ -70,10 +82,11 @@ void __attribute__((naked)) HDPMIPT_TrapHandlerWrapper()
     #if HDPMIPT_SWITCH_STACK
     asm("lss %0, %%esp" : :"m"(HDPMIPT_OldESP[0]) ); //restore stack
     #endif
+
     asm("lret"); //retf
 }
 
-int DPMIPT_GetVendorEntry(HDPMIPT_ENTRY* entry)
+static int HDPMIPT_GetVendorEntry(HDPMIPT_ENTRY* entry)
 {
     int result = 0;
     asm(
@@ -101,7 +114,7 @@ int DPMIPT_GetVendorEntry(HDPMIPT_ENTRY* entry)
     return (result&0xFF) == 0; //al=0 to succeed
 }
 
-uint32_t HDPMI_Internal_InstallTrap(const HDPMIPT_ENTRY* entry, int start, int end, void(*handler)(void))
+static uint32_t HDPMI_Internal_InstallTrap(const HDPMIPT_ENTRY* entry, int start, int end, void(*handler)(void))
 {
     uint32_t handle = 0;
     int count = end - start + 1;
@@ -131,7 +144,7 @@ uint32_t HDPMI_Internal_InstallTrap(const HDPMIPT_ENTRY* entry, int start, int e
     return handle;
 }
 
-BOOL HDPMI_Internal_UninstallTrap(const HDPMIPT_ENTRY* entry, uint32_t handle)
+static BOOL HDPMI_Internal_UninstallTrap(const HDPMIPT_ENTRY* entry, uint32_t handle)
 {
     BOOL result = FALSE;
     asm(
@@ -152,49 +165,59 @@ BOOL HDPMI_Internal_UninstallTrap(const HDPMIPT_ENTRY* entry, uint32_t handle)
 BOOL HDPMIPT_Install_IOPortTrap(uint16_t start, uint16_t end, QEMM_IODT* inputp iodt, uint16_t count, QEMM_IOPT* outputp iopt)
 {
     assert(iopt);
-    if(!DPMIPT_GetVendorEntry(&HDPMIPT_Entry))
+    if(HDPMIPT_IODT_header.next == NULL)
     {
-        HDPMIPT_Entry.es = 0;
-        HDPMIPT_Entry.edi = 0;
-        puts("Failed to get HDPMI Vendor entry point.\n");
-        return FALSE;
-    }
-    _LOG("HDPMI vendor entry: %04x:%08x\n", HDPMIPT_Entry.es, HDPMIPT_Entry.edi);
+        if(!HDPMIPT_GetVendorEntry(&HDPMIPT_Entry))
+        {
+            HDPMIPT_Entry.es = 0;
+            HDPMIPT_Entry.edi = 0;
+            puts("Failed to get HDPMI Vendor entry point.\n");
+            return FALSE;
+        }
+        _LOG("HDPMI vendor entry: %04x:%08x\n", HDPMIPT_Entry.es, HDPMIPT_Entry.edi);
 
-    uint32_t handle = HDPMI_Internal_InstallTrap(&HDPMIPT_Entry, start, end, &HDPMIPT_TrapHandlerWrapper);
-    if(!handle)
-    {
-        puts("Failed to intall HDPMI io port trap.\n");
-        return FALSE;
+        HDPMIPT_Handle = HDPMI_Internal_InstallTrap(&HDPMIPT_Entry, start, end, &HDPMIPT_TrapHandlerWrapper);
+        if(!HDPMIPT_Handle)
+        {
+            puts("Failed to intall HDPMI io port trap.\n");
+            return FALSE;
+        }
+
+        #if HDPMIPT_SWITCH_STACK
+        HDPMIPT_NewStack[0] = (uintptr_t)malloc(HDPMIPT_STACKSIZE) + HDPMIPT_STACKSIZE - 8;
+        HDPMIPT_NewStack[1] = HDPMIPT_GetDS();
+        #endif
     }
 
-    assert(!HDPMIPT_Iodt); //unique trap ports for now. TODO: use linked list to support multiple installlation calls
-    HDPMIPT_Iodt = malloc(sizeof(QEMM_IODT)*count);
+    QEMM_IODT* HDPMIPT_Iodt = (QEMM_IODT*)malloc(sizeof(QEMM_IODT)*count);
     memcpy(HDPMIPT_Iodt, iodt, sizeof(QEMM_IODT)*count);
-    HDPMIPT_PortCount = count;
-    //printf("Trap count:%d\n", HDPMIPT_PortCount);
 
-    iopt->memory = (uintptr_t)HDPMIPT_Iodt;
-    iopt->handle = handle;
-    iopt->func = 0;
+    QEMM_IODT_LINK* newlink = (QEMM_IODT_LINK*)malloc(sizeof(QEMM_IODT_LINK));
+    newlink->iodt = HDPMIPT_Iodt;
+    newlink->count = count;
+    newlink->prev = HDPMIPT_IODT_Link;
+    newlink->next = NULL;
+    HDPMIPT_IODT_Link->next = newlink;
+    HDPMIPT_IODT_Link = newlink;
+    iopt->memory = (uintptr_t)newlink;
     return TRUE;
 }
 
 BOOL HDPMIPT_Uninstall_IOPortTrap(QEMM_IOPT* inputp iopt)
 {
-    if(HDPMIPT_Entry.es == 0 || HDPMIPT_Entry.edi == 0)
+    CLIS();
+    QEMM_IODT_LINK* link = (QEMM_IODT_LINK*)iopt->memory;
+    link->prev->next = link->next;
+    if(link->next) link->next->prev = link->prev;
+    STIL();
+    free(link->iodt);
+    free(link);
+    if(HDPMIPT_IODT_header.next == NULL)
     {
-        //assert(FALSE);
-        return FALSE;
+        #if HDPMIPT_SWITCH_STACK
+        free((void*)(HDPMIPT_NewStack[0] - HDPMIPT_STACKSIZE + 8));
+        #endif
+        return HDPMI_Internal_UninstallTrap(&HDPMIPT_Entry, HDPMIPT_Handle);
     }
-    assert(iopt != NULL && iopt->memory == (uintptr_t)HDPMIPT_Iodt);
-
-    free(HDPMIPT_Iodt);
-    HDPMIPT_Iodt = NULL;
-    HDPMIPT_PortCount = 0;
-    iopt->memory = 0;
-
-    uint32_t handle = iopt->handle;
-    iopt->handle = 0;
-    return HDPMI_Internal_UninstallTrap(&HDPMIPT_Entry, handle);
+    return TRUE;
 }

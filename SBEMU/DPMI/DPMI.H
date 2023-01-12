@@ -2,6 +2,9 @@
 #define _DPMI_H_
 #include <PLATFORM.H>
 
+//configs
+#define DPMI_USE_XMS_HEAP 0
+
 //a DPMI wrapper for different compilers. Borland C++, DJGPP, WatCom etc.
 //the porpose of this file is to hide all __dpmi* or int 31h calls from outside
 
@@ -71,12 +74,15 @@ typedef struct//TSR/callback usage. state for linear DPMI_Load*/DPMI_Store*/DPMI
 
 typedef struct //old interrupt handler info returned by install isr. 
 {
-    uint32_t extra;
     uint32_t offset;
     uint16_t cs;
     uint16_t rm_offset;
     uint16_t rm_cs;
     uint8_t n; //INTn
+
+    //internal informations
+    uint32_t internal1[8];
+    uint32_t internal2[8];
 }DPMI_ISR_HANDLE;
 
 #ifdef __cplusplus
@@ -175,10 +181,13 @@ void DPMI_DOSFree(uint32_t segment);
 uint16_t DPMI_CallRealModeRETF(DPMI_REG* reg);
 uint16_t DPMI_CallRealModeINT(uint8_t i, DPMI_REG* reg);
 uint16_t DPMI_CallRealModeIRET(DPMI_REG* reg);
-//install interrupt service routine. ISR use normal return, no need to do IRET.
+//install interrupt service routine. ISR use normal return, no need to do IRET. this will install both PM & RM interrupt handler.
 //return 0 if succeed
-uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), DPMI_ISR_HANDLE* outputp handle);
+uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), void(*ISR_RM)(void), DPMI_REG* RMReg, DPMI_ISR_HANDLE* outputp handle);
 uint16_t DPMI_UninstallISR(DPMI_ISR_HANDLE* inputp handle);
+uint32_t DPMI_CallOldISR(DPMI_ISR_HANDLE* inputp handle);
+uint32_t DPMI_CallRealModeOldISR(DPMI_ISR_HANDLE* inputp handle);
+
 //allocate realmode callback. return: hiword: segment, lowword: offset. return 0 if fail
 //input: Fn is a common function with normal return. the RMCB will use RETF finally
 uint32_t DPMI_AllocateRMCB_RETF(void(*Fn)(void), DPMI_REG* reg);

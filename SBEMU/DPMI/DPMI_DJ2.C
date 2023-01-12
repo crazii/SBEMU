@@ -15,7 +15,7 @@
 
 extern DPMI_ADDRESSING DPMI_Addressing;
 
-int _crt0_startup_flags = _CRT0_FLAG_FILL_DEADBEEF | _CRT0_FLAG_UNIX_SBRK | _CRT0_FLAG_LOCK_MEMORY;
+int _crt0_startup_flags = /*_CRT0_FLAG_FILL_DEADBEEF | _CRT0_FLAG_UNIX_SBRK | */_CRT0_FLAG_LOCK_MEMORY;
 
 static uint32_t DPMI_DSBase = 0;
 static uint32_t DPMI_DSLimit = 0;
@@ -186,8 +186,9 @@ void DPMI_Init(void)
     signal(SIGABRT, sig_handler);
 
     DPMI_InitFlat();
-    
+#if DPMI_USE_XMS_HEAP
     Init_XMS();
+#endif
 
     __dpmi_meminfo info;    //1:1 map DOS memory. (0~640K). TODO: get 640K~1M mapping from VCPI
     info.handle = -1;
@@ -210,6 +211,7 @@ void DPMI_Init(void)
 
 static void DPMI_Shutdown(void)
 {
+#if DPMI_USE_XMS_HEAP
     #if NEW_IMPL
     _LOG("Cleanup TSR...\n");
     uint32_t size = mspace_mallinfo(XMS_Space).uordblks;
@@ -235,6 +237,14 @@ static void DPMI_Shutdown(void)
     }
     #endif
 
+    _LOG("Free XMS memory...\n");
+    if(XMS_Handle != 0)
+    {
+        XMS_Free(XMS_Handle);
+        XMS_Handle = 0;
+    }
+#endif
+
     _LOG("Free mapped space...\n");
     for(int i = 0; i < AddressMapCount; ++i)
     {
@@ -248,12 +258,6 @@ static void DPMI_Shutdown(void)
         __dpmi_free_physical_address_mapping(&info);
     }
     AddressMapCount = 0;
-    _LOG("Free XMS memory...\n");
-    if(XMS_Handle != 0)
-    {
-        XMS_Free(XMS_Handle);
-        XMS_Handle = 0;
-    }
 }
 
 uint32_t DPMI_L2P(uint32_t vaddr)
@@ -379,7 +383,7 @@ uint16_t DPMI_CallRealModeIRET(DPMI_REG* reg)
     return (uint16_t)__dpmi_simulate_real_mode_procedure_iret((__dpmi_regs*)reg);
 }
 
-uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), DPMI_ISR_HANDLE* outputp handle)
+uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), void(*ISR_RM)(void), DPMI_REG* RMReg, DPMI_ISR_HANDLE* outputp handle)
 {
     if(i < 0 || i > 255 || handle == NULL)
         return -1;
@@ -387,8 +391,13 @@ uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), DPMI_ISR_HANDLE* outputp h
     _go32_dpmi_seginfo go32pa;
     go32pa.pm_selector = (uint16_t)_my_cs();
     go32pa.pm_offset = (uintptr_t)ISR;
-    _go32_interrupt_stack_size = 2048; //512 minimal
+    //_go32_interrupt_stack_size = 2048; //512 minimal. default:16K
     if( _go32_dpmi_allocate_iret_wrapper(&go32pa) != 0)
+        return -1;
+
+    _go32_dpmi_seginfo go32pa_rm = go32pa;
+    go32pa_rm.pm_offset = (uintptr_t)ISR_RM;
+    if( _go32_dpmi_allocate_real_mode_callback_iret(&go32pa_rm, (_go32_dpmi_registers*)&RMReg) != 0)
         return -1;
 
     __dpmi_raddr ra;
@@ -400,10 +409,17 @@ uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), DPMI_ISR_HANDLE* outputp h
     handle->cs = pa.selector;
     handle->rm_cs = ra.segment;
     handle->rm_offset = ra.offset16;
-    handle->extra = go32pa.pm_offset;
     handle->n = i;
 
-    return (uint16_t)_go32_dpmi_set_protected_mode_interrupt_vector(i, &go32pa);
+    memcpy(handle->internal1, &go32pa, sizeof(go32pa));
+    memcpy(handle->internal2, &go32pa_rm, sizeof(go32pa_rm));
+
+    int result = _go32_dpmi_set_protected_mode_interrupt_vector(i, &go32pa);
+    ra.segment = go32pa.rm_segment;
+    ra.offset16 = go32pa.rm_offset;
+    result = __dpmi_set_real_mode_interrupt_vector(i, &ra) | result;
+
+    return (uint16_t)result;
 }
 
 uint16_t DPMI_UninstallISR(DPMI_ISR_HANDLE* inputp handle)
@@ -413,14 +429,34 @@ uint16_t DPMI_UninstallISR(DPMI_ISR_HANDLE* inputp handle)
      go32pa.pm_offset = handle->offset;
      int result = _go32_dpmi_set_protected_mode_interrupt_vector(handle->n, &go32pa);
 
-    //don't need restore real mode. dpmi server will do it.
     __dpmi_raddr ra;
     ra.segment = handle->rm_cs;
     ra.offset16 = handle->rm_offset;
     result = __dpmi_set_real_mode_interrupt_vector(handle->n, &ra) | result;
 
-    go32pa.pm_offset = handle->extra;
+    memcpy(&go32pa, handle->internal2, sizeof(go32pa));
+    result = _go32_dpmi_free_real_mode_callback(&go32pa) | result;
+
+    memcpy(&go32pa, handle->internal1, sizeof(go32pa));
     return (uint16_t)(_go32_dpmi_free_iret_wrapper(&go32pa) | result);
+}
+
+uint32_t DPMI_CallOldISR(DPMI_ISR_HANDLE* inputp handle)
+{
+    asm(
+        "pushfl \n\t"
+        "lcall *%0 \n\t"
+        ::"m"(*handle)
+    );
+    return 0;
+}
+
+uint32_t DPMI_CallRealModeOldISR(DPMI_ISR_HANDLE* inputp handle)
+{
+    DPMI_REG r = {0};
+    r.w.cs = handle->rm_cs;
+    r.w.ip = handle->rm_offset;
+    return DPMI_CallRealModeIRET(&r);
 }
 
 uint32_t DPMI_AllocateRMCB_RETF(void(*Fn)(void), DPMI_REG* reg)

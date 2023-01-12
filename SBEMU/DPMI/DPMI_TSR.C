@@ -243,6 +243,7 @@ switch_back:
 
 BOOL DPMI_TSR()
 {
+#if DPMI_USE_XMS_HEAP
     __djgpp_exception_toggle();
     //free all old app memory
     for(int i = 1; __djgpp_memory_handle_list[i].address; ++i)
@@ -276,6 +277,7 @@ BOOL DPMI_TSR()
     mem.size = ProgramSize;
     if( __dpmi_lock_linear_region(&mem) != 0)
         return FALSE;
+#endif
 
     DPMI_REG r = {0};
 

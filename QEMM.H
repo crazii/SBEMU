@@ -12,7 +12,8 @@ typedef uint32_t (*QEMM_IOTRAP_HANDLER)(uint32_t port, uint32_t val, uint32_t ou
 //user interface, not actual struct
 typedef struct QEMM_IODispatchTable
 {
-    uintptr_t    port;          //don't care about pointer size
+    uint16_t    port;
+    uint16_t    state; //used internally, no effect
     QEMM_IOTRAP_HANDLER handler;
 }QEMM_IODT;
 
@@ -24,10 +25,12 @@ typedef struct EMM_IOPorTrap
 }QEMM_IOPT;
 
 //used internally
-typedef struct QEMM_IODT_Link
+typedef struct QEMM_IODT_LINK
 {
     QEMM_IODT* iodt; //owner
-    QEMM_IODT* next; //observer
+    int count;
+    struct QEMM_IODT_LINK* prev; //observer
+    struct QEMM_IODT_LINK* next; //observer
 }QEMM_IODT_LINK;
 
 //get QEMM version
