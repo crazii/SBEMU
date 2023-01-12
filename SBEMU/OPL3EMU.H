@@ -7,16 +7,16 @@ extern "C"
 {
 #endif
 
-extern void OPL3EMU_Init(int freq);
-extern void OPL3EMU_GenSamples(int32_t* pcm32, int count);
+void OPL3EMU_Init(int samplerate);
+int OPL3EMU_GenSamples(int32_t* pcm32, int count, int* channel);
 
-extern int OPL3EMU_PrimaryRead(int val);
-extern int OPL3EMU_PrimaryWriteIndex(int val);
-extern int OPL3EMU_PrimaryWriteData(int val);
+uint32_t OPL3EMU_PrimaryRead(uint32_t val);
+uint32_t OPL3EMU_PrimaryWriteIndex(uint32_t val);
+uint32_t OPL3EMU_PrimaryWriteData(uint32_t val);
 
-extern int OPL3EMU_SecondaryRead(int val);
-extern int OPL3EMU_SecondaryWriteIndex(int val);
-extern int OPL3EMU_SecondaryWriteData(int val);
+uint32_t OPL3EMU_SecondaryRead(uint32_t val);
+uint32_t OPL3EMU_SecondaryWriteIndex(uint32_t val);
+uint32_t OPL3EMU_SecondaryWriteData(uint32_t val);
 
 #ifdef __cplusplus
 }

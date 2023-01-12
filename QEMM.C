@@ -190,7 +190,7 @@ BOOL QEMM_Uninstall_IOPortTrap(QEMM_IOPT* inputp iopt)
     free(link->iodt);
     free(link);
     
-    if(QEMM_IODT_header.next == NULL)
+    if(QEMM_IODT_header.next == NULL) //empty
     {
         DPMI_REG r = {0};
         r.w.cs = QEMM_EntryCS;

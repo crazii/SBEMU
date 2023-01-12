@@ -239,12 +239,12 @@ struct Chip {
 
 	uint32_t WriteAddr( uint32_t port, uint8_t val );
 
-	void GenerateBlock2( Bitu total, int32_t* output );
-	void GenerateBlock3( Bitu total, int32_t* output );
+	int GenerateBlock2( Bitu total, int32_t* output );
+	int GenerateBlock3( Bitu total, int32_t* output );
 
 	//Update the synth handlers in all channels
 	void UpdateSynths();
-	void Generate(int32_t* buffer, uint32_t samples );
+	int Generate(int32_t* buffer, uint32_t samples, int* channels);
 	void Setup( uint32_t rate );
 
 	Chip( bool opl3Mode );

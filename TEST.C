@@ -3,10 +3,9 @@
 #include <dos.h>
 #include <assert.h>
 #include <PLATFORM.H>
+#include <SBEMUCFG.H>
 #include <MPXPLAY.H>
 #include <AU_MIXER/MIX_FUNC.H>
-
-#define FIXED_44100 1
 
 typedef struct WAVHEADER {
     unsigned char riff[4];                          // RIFF string
@@ -26,7 +25,10 @@ typedef struct WAVHEADER {
 
 extern mpxplay_audioout_info_s aui;
 
-void TestSound()
+int16_t* TEST_Sample;
+unsigned int TEST_SampleLen;
+
+void TestSound(BOOL play)
 {
     FILE* fp = fopen("test.wav", "rb");
     if(!fp)
@@ -78,11 +80,7 @@ void TestSound()
     }
     header.channels = 2;
 
-    #if FIXED_44100
-    mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, 44100, header.channels, header.channels, NULL, header.bits_per_sample, header.bits_per_sample/8, 0};
-    #else
-    mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, header.sample_rate, header.channels, header.channels, NULL, header.bits_per_sample, header.bits_per_sample/8, 0};
-    #endif
+    mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, SBEMU_SAMPLERATE, header.channels, header.channels, NULL, header.bits_per_sample, header.bits_per_sample/8, 0};
     AU_setrate(&aui, &adi);
     
     if(aui.freq_card != header.sample_rate) //soundcard not supported
@@ -90,13 +88,17 @@ void TestSound()
         printf("frequency: %d => %d\n", header.sample_rate, aui.freq_card);
         samplecount = mixer_speed_lq(samples, samplecount, header.channels, header.sample_rate, aui.freq_card);
     }
+    TEST_Sample = samples;
+    TEST_SampleLen = samplecount;
 
-    AU_prestart(&aui);
-    AU_start(&aui);
+    if(play)
+    {
+        AU_prestart(&aui);
+        AU_start(&aui);
     
-    aui.samplenum = samplecount;
-    aui.pcm_sample = samples;
-    AU_writedata(&aui);
-    
-    AU_wait_and_stop(&aui);
+        aui.samplenum = samplecount;
+        aui.pcm_sample = samples;
+        AU_writedata(&aui);
+        AU_wait_and_stop(&aui);
+    }
 }

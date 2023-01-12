@@ -1199,7 +1199,8 @@ uint32_t Chip::WriteAddr( uint32_t port, uint8_t val ) {
 	return 0u;
 }
 
-void Chip::GenerateBlock2( Bitu total, int32_t* output ) {
+int Chip::GenerateBlock2( Bitu total, int32_t* output ) {
+	int32_t* base = output;
 	while ( total > 0 ) {
 		uint32_t samples = ForwardLFO( (uint32_t)total );
 		memset(output, 0, sizeof(int32_t) * samples);
@@ -1211,9 +1212,11 @@ void Chip::GenerateBlock2( Bitu total, int32_t* output ) {
 		total -= samples;
 		output += samples;
 	}
+	return output - base;
 }
 
-void Chip::GenerateBlock3( Bitu total, int32_t* output  ) {
+int Chip::GenerateBlock3( Bitu total, int32_t* output  ) {
+	int32_t* base = output;
 	while ( total > 0 ) {
 		uint32_t samples = ForwardLFO( (uint32_t)total );
 		memset(output, 0, sizeof(int32_t) * samples *2);
@@ -1225,13 +1228,16 @@ void Chip::GenerateBlock3( Bitu total, int32_t* output  ) {
 		total -= samples;
 		output += samples * 2;
 	}
+	return output - base;
 }
 
-void Chip::Generate(int32_t* buffer, uint32_t samples ) {
+int Chip::Generate(int32_t* buffer, uint32_t samples, int* channels) {
 	if ( !opl3Active ) {
-		GenerateBlock2( samples, buffer );
+		*channels = 1;
+		return GenerateBlock2( samples, buffer );
 	} else {
-		GenerateBlock3( samples, buffer );
+		*channels = 2;
+		return GenerateBlock3( samples, buffer );
 	}
 }
 

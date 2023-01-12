@@ -419,12 +419,12 @@ void AU_ini_interrupts(struct mpxplay_audioout_info_s *aui)
   newfunc_newhandler08_init();
   if(aui->card_handler->cardbuf_int_monitor)
    mpxplay_timer_addfunc(&aucards_dma_monitor,NULL,MPXPLAY_TIMERTYPE_INT08|MPXPLAY_TIMERTYPE_REPEAT|MPXPLAY_TIMERFLAG_OWNSTACK|MPXPLAY_TIMERFLAG_STI,0);
-  #ifndef SBEMU
   if(intsoundconfig&INTSOUND_DECODER){
+   #ifndef SBEMU
    mpxplay_timer_addfunc(&aucards_interrupt_decoder,NULL,MPXPLAY_TIMERTYPE_INT08|MPXPLAY_TIMERTYPE_REPEAT|MPXPLAY_TIMERFLAG_OWNSTCK2|MPXPLAY_TIMERFLAG_STI,0);
+   #endif
    aucards_writedata_func=&aucards_writedata_intsound;
   }
-  #endif
  }
 }
 
