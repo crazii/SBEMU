@@ -281,7 +281,7 @@ extern void AU_setmixer_outs(struct mpxplay_audioout_info_s *aui,unsigned int se
 extern void AU_setmixer_all(struct mpxplay_audioout_info_s *);
 extern void AU_clearbuffs(struct mpxplay_audioout_info_s *);
 extern void AU_pause_process(struct mpxplay_audioout_info_s *);
-extern void AU_writedata(struct mpxplay_audioout_info_s *);
+extern int  AU_writedata(struct mpxplay_audioout_info_s *);
 
 #ifdef __cplusplus
 }

@@ -167,6 +167,9 @@ extern "C" {
 #define INTSOUND_NOINTDEC  4  // disable interrupt decoder (intsoundconfig)
 #define INTSOUND_NOINT08   8  // disable int08 (intsoundconfig)
 #define INTSOUND_DOSSHELL  16 // intsoundconfig:-xs intsoundcontrol:ctrl-d
+#ifdef SBEMU
+#define INTSOUND_NOBUSYWAIT 32
+#endif
 #define INTSOUND_INT08RUN  1024 // int08 process is running (has not finished)
 
 //timer settings

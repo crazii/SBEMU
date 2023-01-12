@@ -61,8 +61,7 @@ uint32_t OPL3EMU_PrimaryWriteData(uint32_t val)
         if(val&(OPL3EMU_TIMER2_START|OPL3EMU_TIMER2_MASK))
             OPL3EMU_TimerCtrlReg[1] = val;
     }
-    if(val < 0x2 || val > 0x4)
-        OPL3EMU_Chip->WriteReg(OPL3EMU_IndexReg[OPL3EMU_PRIMARY], val);
+    OPL3EMU_Chip->WriteReg(OPL3EMU_IndexReg[OPL3EMU_PRIMARY], val);
     return val;
 }
 
@@ -88,7 +87,6 @@ uint32_t OPL3EMU_SecondaryWriteData(uint32_t val)
 {
     if(/*OPL3EMU_ADLG_CtrlEnable && */(OPL3EMU_IndexReg[OPL3EMU_SECONDARY] == OPL3EMU_ADLG_VOLL_REG_INDEX || OPL3EMU_IndexReg[OPL3EMU_SECONDARY] == OPL3EMU_ADLG_VOLR_REG_INDEX))
         OPL3EMU_ADLG_Volume[OPL3EMU_IndexReg[OPL3EMU_SECONDARY]-OPL3EMU_ADLG_VOLL_REG_INDEX] = val;
-    if(val < 0x2 || val > 0x4)
-        OPL3EMU_Chip->WriteReg(OPL3EMU_IndexReg[OPL3EMU_SECONDARY], val);
+    OPL3EMU_Chip->WriteReg(OPL3EMU_IndexReg[OPL3EMU_SECONDARY], val);
     return val;
 }
