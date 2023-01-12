@@ -456,13 +456,13 @@ unsigned int mixer_speed_lq(PCM_CV_TYPE_S *pcm16,unsigned int samplenum, unsigne
   PCM_CV_TYPE_S *intmp1,*intmp2;
   ipi = inpos >> 8;
   m2=inpos&0xFF;
-  m1=255-m2;
+  m1=256-m2;
   ch=channels;
   ipi*=ch;
   intmp1=intmp+ipi;
   intmp2=intmp1+ch;
   do{
-   *pcm++= ((*intmp1++)*m1+(*intmp2++)*m2) / 255;
+   *pcm++= ((*intmp1++)*m1+(*intmp2++)*m2) >> 8;
   }while(--ch);
   inpos+=instep;
  }while(inpos<inend);
