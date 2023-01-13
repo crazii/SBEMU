@@ -244,7 +244,7 @@ struct Chip {
 
 	//Update the synth handlers in all channels
 	void UpdateSynths();
-	int Generate(int16_t* buffer, uint32_t samples, int* channels);
+	int Generate(int16_t* buffer, uint32_t samples);
 	void Setup( uint32_t rate );
 
 	Chip( bool opl3Mode );

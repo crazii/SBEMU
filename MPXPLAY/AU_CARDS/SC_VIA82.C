@@ -546,7 +546,7 @@ static aucards_allmixerchan_s via82xx_mixerset[]={
 };
 
 one_sndcard_info VIA82XX_sndcard_info={
- "VIA",
+ "VIA VT82XX AC97",
  SNDCARD_LOWLEVELHAND|SNDCARD_INT08_ALLOWED,
 
  NULL,

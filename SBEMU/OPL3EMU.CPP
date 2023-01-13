@@ -31,9 +31,14 @@ void OPL3EMU_Init(int samplerate)
     OPL3EMU_Chip->Setup(samplerate);
 }
 
-int OPL3EMU_GenSamples(int16_t* pcm16, int count, int* channel)
+int OPL3EMU_GetMode()
 {
-    return OPL3EMU_Chip->Generate(pcm16, count, channel);
+    return OPL3EMU_Chip->opl3Active;
+}
+
+int OPL3EMU_GenSamples(int16_t* pcm16, int count)
+{
+    return OPL3EMU_Chip->Generate(pcm16, count);
 }
 
 uint32_t OPL3EMU_PrimaryRead(uint32_t val)

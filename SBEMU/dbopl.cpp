@@ -1231,12 +1231,10 @@ int Chip::GenerateBlock3( Bitu total, int16_t* output  ) {
 	return output - base;
 }
 
-int Chip::Generate(int16_t* buffer, uint32_t samples, int* channels) {
+int Chip::Generate(int16_t* buffer, uint32_t samples) {
 	if ( !opl3Active ) {
-		*channels = 1;
 		return GenerateBlock2( samples, buffer );
 	} else {
-		*channels = 2;
 		return GenerateBlock3( samples, buffer );
 	}
 }

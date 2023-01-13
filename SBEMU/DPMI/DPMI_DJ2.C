@@ -395,10 +395,14 @@ uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), void(*ISR_RM)(void), DPMI_
     if( _go32_dpmi_allocate_iret_wrapper(&go32pa) != 0)
         return -1;
 
-    _go32_dpmi_seginfo go32pa_rm = go32pa;
-    go32pa_rm.pm_offset = (uintptr_t)ISR_RM;
-    if( _go32_dpmi_allocate_real_mode_callback_iret(&go32pa_rm, (_go32_dpmi_registers*)&RMReg) != 0)
-        return -1;
+    _go32_dpmi_seginfo go32pa_rm = {0};
+    if(ISR_RM)
+    {
+        go32pa_rm = go32pa;
+        go32pa_rm.pm_offset = (uintptr_t)ISR_RM;
+        if( _go32_dpmi_allocate_real_mode_callback_iret(&go32pa_rm, (_go32_dpmi_registers*)&RMReg) != 0)
+            return -1;
+    }
 
     __dpmi_raddr ra;
     __dpmi_get_real_mode_interrupt_vector(i, &ra);
@@ -415,10 +419,12 @@ uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), void(*ISR_RM)(void), DPMI_
     memcpy(handle->internal2, &go32pa_rm, sizeof(go32pa_rm));
 
     int result = _go32_dpmi_set_protected_mode_interrupt_vector(i, &go32pa);
-    ra.segment = go32pa.rm_segment;
-    ra.offset16 = go32pa.rm_offset;
-    result = __dpmi_set_real_mode_interrupt_vector(i, &ra) | result;
-
+    if(ISR_RM)
+    {
+        ra.segment = go32pa.rm_segment;
+        ra.offset16 = go32pa.rm_offset;
+        result = __dpmi_set_real_mode_interrupt_vector(i, &ra) | result;
+    }
     return (uint16_t)result;
 }
 
@@ -435,7 +441,8 @@ uint16_t DPMI_UninstallISR(DPMI_ISR_HANDLE* inputp handle)
     result = __dpmi_set_real_mode_interrupt_vector(handle->n, &ra) | result;
 
     memcpy(&go32pa, handle->internal2, sizeof(go32pa));
-    result = _go32_dpmi_free_real_mode_callback(&go32pa) | result;
+    if(go32pa.pm_offset)
+        result = _go32_dpmi_free_real_mode_callback(&go32pa) | result;
 
     memcpy(&go32pa, handle->internal1, sizeof(go32pa));
     return (uint16_t)(_go32_dpmi_free_iret_wrapper(&go32pa) | result);

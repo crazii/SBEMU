@@ -8,7 +8,9 @@ extern "C"
 #endif
 
 void OPL3EMU_Init(int samplerate);
-int OPL3EMU_GenSamples(int16_t* pcm16, int count, int* channel);
+//get mode set by client. 0: OPL2, other:OPL3
+int OPL3EMU_GetMode();
+int OPL3EMU_GenSamples(int16_t* pcm16, int count);
 
 uint32_t OPL3EMU_PrimaryRead(uint32_t val);
 uint32_t OPL3EMU_PrimaryWriteIndex(uint32_t val);

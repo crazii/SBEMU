@@ -18,18 +18,15 @@ extern unsigned long TEST_SampleLen;
 mpxplay_audioout_info_s aui = {0};
 
 #define MAIN_USE_INT70 1
-#define MAIN_INT70_FREQ 100
-#define MAIN_PCM_SAMPLESIZE 16384
-static DPMI_REG MAIN_TimerIntReg;
+#define MAIN_INT70_FREQ 1024
+#define MAIN_PCM_SAMPLESIZE 32768
 static DPMI_ISR_HANDLE MAIN_TimerIntHandle;
-static int MAIN_InTimer = 0;
 static int MAIN_Int70Counter = 0;
 int16_t MAIN_PCM[MAIN_PCM_SAMPLESIZE];
 int MAIN_PCMStart;
 int MAIN_PCMEnd;
 static void MAIN_TimerInterrupt();
 static void MAIN_TimerInterruptPM();
-static void MAIN_TimerInterruptRM();
 static void MAIN_EnableInt70();
 
 static uint32_t MAIN_OPL3_388(uint32_t port, uint32_t val, uint32_t out)
@@ -81,7 +78,7 @@ int main(int argc, char* argv[])
 {
     if(argc == 1 || (argc == 2 && stricmp(argv[1],"/?") == 0))
     {
-        printf("SBEMU: Sound Blaster emulator for DOS AC97. Usage:\n");
+        printf("SBEMU: Sound Blaster emulator for AC97. Usage:\n");
         int i = 0;
         while(MAIN_Options[i].option)
         {
@@ -171,7 +168,7 @@ int main(int argc, char* argv[])
         TestSound(FALSE);
     }
 
-    if(DPMI_InstallISR(MAIN_USE_INT70 ? 0x70 : 0x08, MAIN_TimerInterruptPM, MAIN_TimerInterruptRM, &MAIN_TimerIntReg, &MAIN_TimerIntHandle) != 0)
+    if(DPMI_InstallISR(MAIN_USE_INT70 ? 0x70 : 0x08, MAIN_TimerInterruptPM, /*MAIN_TimerInterruptRM not needed for HDPMI*/NULL, &MAIN_TimerIntReg, &MAIN_TimerIntHandle) != 0)
     {
         printf("Error: Failed installing timer.\n");
         return 1;
@@ -195,10 +192,6 @@ int main(int argc, char* argv[])
 
 static void MAIN_TimerInterruptPM()
 {
-    if(MAIN_InTimer) //PM & RM duplicated calls
-        return;
-    MAIN_InTimer = TRUE;
-
     #if MAIN_USE_INT70
     if(++MAIN_Int70Counter >= 1024/MAIN_INT70_FREQ)
     #endif
@@ -211,29 +204,6 @@ static void MAIN_TimerInterruptPM()
     #if MAIN_USE_INT70
     MAIN_EnableInt70();
     #endif
-
-    MAIN_InTimer = FALSE;
-}
-
-static void MAIN_TimerInterruptRM()
-{
-    if(MAIN_InTimer) //PM & RM duplicated calls
-        return;
-    MAIN_InTimer = TRUE;
-
-    #if MAIN_USE_INT70
-    if(++MAIN_Int70Counter >= 1024/MAIN_INT70_FREQ)
-    #endif
-    {
-        MAIN_TimerInterrupt();
-        MAIN_Int70Counter = 0;
-    }
-    DPMI_CallRealModeOldISR(&MAIN_TimerIntHandle);
-    #if MAIN_USE_INT70
-    MAIN_EnableInt70();
-    #endif
-
-    MAIN_InTimer = FALSE;
 }
 
 static void MAIN_TimerInterrupt()
@@ -251,10 +221,8 @@ static void MAIN_TimerInterrupt()
         AU_writedata(&aui);
         #else
         const int SAMPLES = SBEMU_SAMPLERATE / freq;
-        int channels = 0;
-        int16_t testchannels[64];
-        OPL3EMU_GenSamples(testchannels, 1, &channels);
-        int samples = SAMPLES*channels;
+        int channels = OPL3EMU_GetMode() ? 2 : 1;
+        int samples = SAMPLES * channels;
         if(MAIN_PCMEnd - MAIN_PCMStart >= samples)
         {
             aui.samplenum = samples;
@@ -263,14 +231,14 @@ static void MAIN_TimerInterrupt()
             return;
         }
 
-        if(MAIN_PCMEnd + samples*2 >= MAIN_PCM_SAMPLESIZE)
+        if(MAIN_PCMEnd + samples*4 >= MAIN_PCM_SAMPLESIZE)
         {
             memcpy(MAIN_PCM, MAIN_PCM + MAIN_PCMStart, (MAIN_PCMEnd - MAIN_PCMStart)*sizeof(int16_t));
             MAIN_PCMEnd = MAIN_PCMEnd - MAIN_PCMStart;
             MAIN_PCMStart = 0;
         }
 
-        OPL3EMU_GenSamples(MAIN_PCM + MAIN_PCMEnd, samples/*-(MAIN_PCMEnd-MAIN_PCMStart)*/, &channels);
+        OPL3EMU_GenSamples(MAIN_PCM + MAIN_PCMEnd, samples);
         //always use 2 channels
         if(channels == 1)
             cv_channels_1_to_n(MAIN_PCM + MAIN_PCMEnd, samples, 2, SBEMU_BITS/8);
