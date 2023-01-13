@@ -18,7 +18,7 @@ extern unsigned long TEST_SampleLen;
 mpxplay_audioout_info_s aui = {0};
 
 #define MAIN_USE_INT70 1
-#define MAIN_INT70_FREQ 1024
+#define MAIN_INT70_FREQ 100
 #define MAIN_PCM_SAMPLESIZE 16384
 static DPMI_REG MAIN_TimerIntReg;
 static DPMI_ISR_HANDLE MAIN_TimerIntHandle;
@@ -250,32 +250,36 @@ static void MAIN_TimerInterrupt()
         cur += aui.samplenum;
         AU_writedata(&aui);
         #else
-        const int samples = (SBEMU_SAMPLERATE/**SBEMU_CHANNELS*/+freq-1) / freq + 4; //extra samples to avoid underrun
+        const int SAMPLES = SBEMU_SAMPLERATE / freq;
         int channels = 0;
-        if(MAIN_PCMEnd - MAIN_PCMStart >= samples*2)
+        int16_t testchannels[64];
+        OPL3EMU_GenSamples(testchannels, 1, &channels);
+        int samples = SAMPLES*channels;
+        if(MAIN_PCMEnd - MAIN_PCMStart >= samples)
         {
-            aui.samplenum = samples*2;
+            aui.samplenum = samples;
             aui.pcm_sample = MAIN_PCM + MAIN_PCMStart;
-            MAIN_PCMStart += samples*2 - AU_writedata(&aui);
+            MAIN_PCMStart += samples - AU_writedata(&aui);
             return;
         }
 
-        if(MAIN_PCMEnd + samples*4 >= MAIN_PCM_SAMPLESIZE)
+        if(MAIN_PCMEnd + samples*2 >= MAIN_PCM_SAMPLESIZE)
         {
             memcpy(MAIN_PCM, MAIN_PCM + MAIN_PCMStart, (MAIN_PCMEnd - MAIN_PCMStart)*sizeof(int16_t));
             MAIN_PCMEnd = MAIN_PCMEnd - MAIN_PCMStart;
             MAIN_PCMStart = 0;
         }
 
-        int actualsamples = OPL3EMU_GenSamples(MAIN_PCM + MAIN_PCMEnd, samples/*-(MAIN_PCMEnd-MAIN_PCMStart)*/, &channels);
+        OPL3EMU_GenSamples(MAIN_PCM + MAIN_PCMEnd, samples/*-(MAIN_PCMEnd-MAIN_PCMStart)*/, &channels);
         //always use 2 channels
         if(channels == 1)
-            actualsamples = cv_channels_1_to_n(MAIN_PCM + MAIN_PCMEnd, actualsamples, 2, SBEMU_BITS/8);
-        MAIN_PCMEnd += actualsamples;
+            cv_channels_1_to_n(MAIN_PCM + MAIN_PCMEnd, samples, 2, SBEMU_BITS/8);
+        samples *= 2;
+        MAIN_PCMEnd += samples;
 
-        aui.samplenum = actualsamples;
+        aui.samplenum = samples;
         aui.pcm_sample = MAIN_PCM + MAIN_PCMStart;
-        MAIN_PCMStart += actualsamples;
+        MAIN_PCMStart += samples;
         MAIN_PCMStart -= AU_writedata(&aui);
         #endif
     }
