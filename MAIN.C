@@ -112,6 +112,8 @@ int main(int argc, char* argv[])
     if(MAIN_Options[OPT_TEST].value) //test
     {
         AU_init(&aui);
+        if(!aui.card_handler)
+            return 0;
         AU_ini_interrupts(&aui);
         AU_setmixer_init(&aui);
         AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 100);
@@ -130,6 +132,8 @@ int main(int argc, char* argv[])
     }
 
     AU_init(&aui);
+    if(!aui.card_handler)
+        return 0;
     AU_ini_interrupts(&aui);
     AU_setmixer_init(&aui);
     AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 100);
@@ -168,7 +172,7 @@ int main(int argc, char* argv[])
         TestSound(FALSE);
     }
 
-    if(DPMI_InstallISR(MAIN_USE_INT70 ? 0x70 : 0x08, MAIN_TimerInterruptPM, /*MAIN_TimerInterruptRM not needed for HDPMI*/NULL, &MAIN_TimerIntReg, &MAIN_TimerIntHandle) != 0)
+    if(DPMI_InstallISR(MAIN_USE_INT70 ? 0x70 : 0x08, MAIN_TimerInterruptPM, &MAIN_TimerIntHandle) != 0)
     {
         printf("Error: Failed installing timer.\n");
         return 1;
