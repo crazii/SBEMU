@@ -17,14 +17,19 @@ extern unsigned long TEST_SampleLen;
 
 mpxplay_audioout_info_s aui = {0};
 
-#define MAIN_USE_INT70 1
-#define MAIN_INT70_FREQ 1024
+#define MAIN_USE_INT70 0
+#define MAIN_INT70_FREQ 100
 #define MAIN_PCM_SAMPLESIZE 32768
+#define MAIN_FREQ (MAIN_USE_INT70 ? MAIN_INT70_FREQ : 18)
+static const int MAIN_SAMPLES = (SBEMU_SAMPLERATE / MAIN_FREQ);
+static const int MAIN_PCM_COUNT = (MAIN_PCM_SAMPLESIZE / (MAIN_SAMPLES*SBEMU_CHANNELS) * MAIN_SAMPLES*SBEMU_CHANNELS);
+
 static DPMI_ISR_HANDLE MAIN_TimerIntHandle;
 static int MAIN_Int70Counter = 0;
-int16_t MAIN_PCM[MAIN_PCM_SAMPLESIZE];
+int16_t MAIN_PCM[MAIN_PCM_SAMPLESIZE+64];
 int MAIN_PCMStart;
 int MAIN_PCMEnd;
+int MAIN_PCMEndTag = MAIN_PCM_COUNT;
 static void MAIN_TimerInterrupt();
 static void MAIN_TimerInterruptPM();
 static void MAIN_EnableInt70();
@@ -204,6 +209,7 @@ static void MAIN_TimerInterruptPM()
         MAIN_Int70Counter = 0;
     }
     DPMI_CallOldISR(&MAIN_TimerIntHandle);
+    DPMI_CallRealModeOldISR(&MAIN_TimerIntHandle);
 
     #if MAIN_USE_INT70
     MAIN_EnableInt70();
@@ -214,9 +220,8 @@ static void MAIN_TimerInterrupt()
 {
     if(MAIN_Options[OPT_OPL].value)
     {
-        const int freq = MAIN_USE_INT70 ? MAIN_INT70_FREQ : 18;
         #if 0
-        const int samples = (SBEMU_SAMPLERATE/**SBEMU_CHANNELS*/+freq-1) / freq;
+        const int samples = (SBEMU_SAMPLERATE/**SBEMU_CHANNELS*/+MAIN_FREQ-1) / MAIN_FREQ;
         int16_t* buffer = TEST_Sample;
         static int cur = 0;
         aui.samplenum = min(samples, TEST_SampleLen-cur);
@@ -224,21 +229,18 @@ static void MAIN_TimerInterrupt()
         cur += aui.samplenum;
         AU_writedata(&aui);
         #else
-        const int SAMPLES = SBEMU_SAMPLERATE / freq;
-        int samples = SAMPLES + SAMPLES/4;
-        if(MAIN_PCMEnd + samples*4 >= MAIN_PCM_SAMPLESIZE)
+        int samples = MAIN_SAMPLES;
+        if((MAIN_PCMEnd - MAIN_PCMStart + MAIN_PCMEndTag)%MAIN_PCMEndTag >= MAIN_PCMEndTag) //buffer full
         {
-            if(MAIN_PCMEnd - MAIN_PCMStart >= SAMPLES*2)
-            {
-                aui.samplenum = SAMPLES*2;
-                aui.pcm_sample = MAIN_PCM + MAIN_PCMStart;
-                MAIN_PCMStart += SAMPLES*2 - AU_writedata(&aui);
-                return;
-            }
-            memcpy(MAIN_PCM, MAIN_PCM + MAIN_PCMStart, (MAIN_PCMEnd - MAIN_PCMStart)*sizeof(int16_t));
-            MAIN_PCMEnd = MAIN_PCMEnd - MAIN_PCMStart;
-            MAIN_PCMStart = 0;
+            aui.samplenum = MAIN_PCMEndTag;
+            aui.pcm_sample = MAIN_PCM + MAIN_PCMStart;
+            MAIN_PCMStart += aui.samplenum - AU_writedata(&aui);
+            if(MAIN_PCMStart >= MAIN_PCMEndTag)
+                MAIN_PCMStart = 0;
+            return;
         }
+        if(MAIN_PCMEnd == MAIN_PCMStart) //empty
+            samples += samples/4;
 
         OPL3EMU_GenSamples(MAIN_PCM + MAIN_PCMEnd, samples);
         //always use 2 channels
@@ -247,11 +249,17 @@ static void MAIN_TimerInterrupt()
             cv_channels_1_to_n(MAIN_PCM + MAIN_PCMEnd, samples, 2, SBEMU_BITS/8);
         samples *= 2;
         MAIN_PCMEnd += samples;
+        if(MAIN_PCMEnd >= MAIN_PCM_COUNT - MAIN_SAMPLES*4)
+        {
+            MAIN_PCMEndTag = MAIN_PCMEnd;
+            MAIN_PCMEnd = 0;
+        }
 
-        aui.samplenum = samples;
+        aui.samplenum = (MAIN_PCMEnd - MAIN_PCMStart + MAIN_PCMEndTag)%MAIN_PCMEndTag;
         aui.pcm_sample = MAIN_PCM + MAIN_PCMStart;
-        MAIN_PCMStart += samples;
-        MAIN_PCMStart -= AU_writedata(&aui);
+        MAIN_PCMStart += aui.samplenum - AU_writedata(&aui);
+        if(MAIN_PCMStart >= MAIN_PCMEndTag)
+            MAIN_PCMStart = 0;
         #endif
     }
 }
