@@ -225,18 +225,16 @@ static void MAIN_TimerInterrupt()
         AU_writedata(&aui);
         #else
         const int SAMPLES = SBEMU_SAMPLERATE / freq;
-        int channels = OPL3EMU_GetMode() ? 2 : 1;
-        int samples = SAMPLES * channels;
-        if(MAIN_PCMEnd - MAIN_PCMStart >= samples)
-        {
-            aui.samplenum = samples;
-            aui.pcm_sample = MAIN_PCM + MAIN_PCMStart;
-            MAIN_PCMStart += samples - AU_writedata(&aui);
-            return;
-        }
-
+        int samples = SAMPLES + SAMPLES/4;
         if(MAIN_PCMEnd + samples*4 >= MAIN_PCM_SAMPLESIZE)
         {
+            if(MAIN_PCMEnd - MAIN_PCMStart >= SAMPLES*2)
+            {
+                aui.samplenum = SAMPLES*2;
+                aui.pcm_sample = MAIN_PCM + MAIN_PCMStart;
+                MAIN_PCMStart += SAMPLES*2 - AU_writedata(&aui);
+                return;
+            }
             memcpy(MAIN_PCM, MAIN_PCM + MAIN_PCMStart, (MAIN_PCMEnd - MAIN_PCMStart)*sizeof(int16_t));
             MAIN_PCMEnd = MAIN_PCMEnd - MAIN_PCMStart;
             MAIN_PCMStart = 0;
@@ -244,6 +242,7 @@ static void MAIN_TimerInterrupt()
 
         OPL3EMU_GenSamples(MAIN_PCM + MAIN_PCMEnd, samples);
         //always use 2 channels
+        int channels = OPL3EMU_GetMode() ? 2 : 1;
         if(channels == 1)
             cv_channels_1_to_n(MAIN_PCM + MAIN_PCMEnd, samples, 2, SBEMU_BITS/8);
         samples *= 2;

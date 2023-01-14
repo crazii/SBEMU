@@ -46,12 +46,12 @@ static void aucards_interrupt_decoder(void);
 static void aucards_get_cpuusage_int08(void);
 
 #ifdef __DOS__
-extern one_sndcard_info ESS_sndcard_info;
 extern one_sndcard_info ES1371_sndcard_info;
 extern one_sndcard_info ICH_sndcard_info;
 extern one_sndcard_info IHD_sndcard_info;
 extern one_sndcard_info VIA82XX_sndcard_info;
 #ifndef SBEMU
+extern one_sndcard_info ESS_sndcard_info;
 extern one_sndcard_info WSS_sndcard_info;
 extern one_sndcard_info SB16_sndcard_info;
 extern one_sndcard_info SBLIVE_sndcard_info;
@@ -61,6 +61,7 @@ extern one_sndcard_info GUS_sndcard_info;
 extern one_sndcard_info SB_sndcard_info;
 extern one_sndcard_info MIDAS_sndcard_info;
 #else
+#undef AU_CARDS_LINK_ESS
 #undef AU_CARDS_LINK_WSS
 #undef AU_CARDS_LINK_SBLIVE
 #undef AU_CARDS_LINK_SB16
