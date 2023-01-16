@@ -236,6 +236,8 @@ extern uint8_t _AL;
 //align down
 #define align(x,a) ((uint32_t)((x)+(a)-1)&(uint32_t)(~((a)-1)))
 
+#define countof(x) (sizeof(x)/sizeof(x[0]))
+
 typedef enum {FALSE, TRUE}BOOLEAN;
 typedef int BOOL;
 

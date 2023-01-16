@@ -1,10 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <DPMI/DBGUTIL.H>
 #include <SBEMUCFG.H>
 #include <PIC.H>
 #include <OPL3EMU.H>
+#include <VDMA.H>
+#include <VIRQ.H>
+#include <SBEMU.H>
+#include <UNTRAPIO.H>
 #include "QEMM.H"
 #include "HDPMIPT.H"
 
@@ -20,13 +25,13 @@ mpxplay_audioout_info_s aui = {0};
 #define MAIN_USE_INT70 0
 #define MAIN_INT70_FREQ 100
 #define MAIN_PCM_SAMPLESIZE 32768
-#define MAIN_FREQ (MAIN_USE_INT70 ? MAIN_INT70_FREQ : 18)
+#define MAIN_FREQ (MAIN_USE_INT70 ? MAIN_INT70_FREQ : 18) //because some programs will assume default frequency on running/uninstalling its own timer, so we don't change the default
 static const int MAIN_SAMPLES = (SBEMU_SAMPLERATE / MAIN_FREQ);
 static const int MAIN_PCM_COUNT = (MAIN_PCM_SAMPLESIZE / (MAIN_SAMPLES*SBEMU_CHANNELS) * MAIN_SAMPLES*SBEMU_CHANNELS);
 
 static DPMI_ISR_HANDLE MAIN_TimerIntHandle;
 static int MAIN_Int70Counter = 0;
-int16_t MAIN_PCM[MAIN_PCM_SAMPLESIZE+64];
+int16_t MAIN_PCM[MAIN_PCM_SAMPLESIZE+128];
 int MAIN_PCMStart;
 int MAIN_PCMEnd;
 int MAIN_PCMEndTag = MAIN_PCM_COUNT;
@@ -51,6 +56,110 @@ static uint32_t MAIN_OPL3_38B(uint32_t port, uint32_t val, uint32_t out)
     return out ? OPL3EMU_SecondaryWriteData(val) : OPL3EMU_SecondaryRead(val);
 }
 
+static uint32_t MAIN_DMA(uint32_t port, uint32_t val, uint32_t out)
+{
+    return out ? (VDMA_Write(port, val), val) : (val &=~0xFF, val |= VDMA_Read(port));
+}
+
+static uint32_t MAIN_IRQ(uint32_t port, uint32_t val, uint32_t out)
+{
+    return out ? (VIRQ_Write(port, val), val) : (val &=~0xFF, val |= VIRQ_Read(port));
+}
+
+static uint32_t MAIN_SB_MixerAddr(uint32_t port, uint32_t val, uint32_t out)
+{
+    return out ? (SBEMU_Mixer_WriteAddr(port, val), val) : val;
+}
+static uint32_t MAIN_SB_MixerData(uint32_t port, uint32_t val, uint32_t out)
+{
+    return out ? (SBEMU_Mixer_Write(port, val), val) : (val &=~0xFF, val |= SBEMU_Mixer_Read(port));
+}
+static uint32_t MAIN_SB_DSP_Reset(uint32_t port, uint32_t val, uint32_t out)
+{
+    return out ? (SBEMU_DSP_Reset(port, val), val) : val;
+}
+static uint32_t MAIN_SB_DSP_Read(uint32_t port, uint32_t val, uint32_t out)
+{
+    return out ? val : (val &=~0xFF, val |= SBEMU_DSP_Read(port));
+}
+static uint32_t MAIN_SB_DSP_Write(uint32_t port, uint32_t val, uint32_t out)
+{
+    return out ? (SBEMU_DSP_Write(port, val), val) : val;
+}
+static uint32_t MAIN_SB_DSP_ReadStatus(uint32_t port, uint32_t val, uint32_t out)
+{
+    return out ? val : (val &=~0xFF, val |= SBEMU_DSP_ReadStatus(port));
+}
+static uint32_t MAIN_SB_DSP_ReadINT16BitACK(uint32_t port, uint32_t val, uint32_t out)
+{
+    return out ? val : (val &=~0xFF, val |= SBEMU_DSP_INT16ACK(port));
+}
+
+static QEMM_IODT MAIN_OPL3IODT[4] =
+{
+    0x388, &MAIN_OPL3_388,
+    0x389, &MAIN_OPL3_389,
+    0x38A, &MAIN_OPL3_38A,
+    0x38B, &MAIN_OPL3_38B
+};
+
+static QEMM_IODT MAIN_VDMA_IODT[20] =
+{
+    0x00, &MAIN_DMA,
+    0x01, &MAIN_DMA,
+    0x02, &MAIN_DMA,
+    0x03, &MAIN_DMA,
+    0x04, &MAIN_DMA,
+    0x05, &MAIN_DMA,
+    0x06, &MAIN_DMA,
+    0x07, &MAIN_DMA,
+    0x08, &MAIN_DMA,
+    0x09, &MAIN_DMA,
+    0x0A, &MAIN_DMA,
+    0x0B, &MAIN_DMA,
+    0x0C, &MAIN_DMA,
+    0x0D, &MAIN_DMA,
+    0x0E, &MAIN_DMA,
+    0x0F, &MAIN_DMA,
+    0x81, &MAIN_DMA,
+    0x82, &MAIN_DMA,
+    0x83, &MAIN_DMA,
+    0x87, &MAIN_DMA,
+};
+
+static QEMM_IODT MAIN_VIRQ_IODT[4] =
+{
+    0x20, &MAIN_IRQ,
+    0x21, &MAIN_IRQ,
+    0xA0, &MAIN_IRQ,
+    0xA1, &MAIN_IRQ,
+};
+
+static QEMM_IODT MAIN_SB_IODT[11] =
+{ //MAIN_Options[OPT_ADDR].value will be added at runtime
+    0x00, &MAIN_OPL3_388,
+    0x01, &MAIN_OPL3_389,
+    0x02, &MAIN_OPL3_38A,
+    0x03, &MAIN_OPL3_38B,
+    0x04, &MAIN_SB_MixerAddr,
+    0x05, &MAIN_SB_MixerData,
+    0x06, &MAIN_SB_DSP_Reset,
+    0x0A, &MAIN_SB_DSP_Read,
+    0x0C, &MAIN_SB_DSP_Write,
+    0x0E, &MAIN_SB_DSP_ReadStatus,
+    0x0F, &MAIN_SB_DSP_ReadINT16BitACK,
+};
+
+QEMM_IOPT MAIN_VDMA_IOPT;
+QEMM_IOPT MAIN_VIRQ_IOPT;
+QEMM_IOPT MAIN_SB_IOPT;
+QEMM_IOPT MAIN_VDMA_IOPT_PM1;
+QEMM_IOPT MAIN_VDMA_IOPT_PM2;
+QEMM_IOPT MAIN_VDMA_IOPT_PM3;
+QEMM_IOPT MAIN_VIRQ_IOPT_PM1;
+QEMM_IOPT MAIN_VIRQ_IOPT_PM2;
+QEMM_IOPT MAIN_SB_IOPT_PM;
+
 struct 
 {
     const char* option;
@@ -59,9 +168,9 @@ struct
 }MAIN_Options[] =
 {
     "/?", "Show help", FALSE,
-    "/A", "Specify Memory address", 0x220,
-    "/I", "Specify IRQ number", 5,
-    "/D", "Specify DMA channel", 1,
+    "/A", "Specify IO address, valid value: 220,240", 0x220,
+    "/I", "Specify IRQ number, valud value: 5,7", 5,
+    "/D", "Specify DMA channel, valid value: 0,1,3", 1,
     "/OPL", "Enable OPL3 emulation", TRUE,
     
     "/test", "tests sound", FALSE,
@@ -97,7 +206,23 @@ int main(int argc, char* argv[])
     }
     else
     {
-        //TODO: parse BLASTER env first.
+        //parse BLASTER env first.
+        {
+            char* blaster = getenv("BLASTER");
+            if(blaster != NULL)
+            {
+                char c;
+                while((c=toupper(*(blaster++))))
+                {
+                    if(c == 'I')
+                        MAIN_Options[OPT_IRQ].value = *(blaster) - '0';
+                    else if(c == 'D')
+                        MAIN_Options[OPT_DMA].value = *(blaster) - '0';
+                    else if(c == 'A')
+                        MAIN_Options[OPT_ADDR].value = strtol(blaster, &blaster, 16);
+                }
+            }
+        }
 
         for(int i = 1; i < argc; ++i)
         {
@@ -111,6 +236,22 @@ int main(int argc, char* argv[])
                     break;
                 }
             }
+        }
+
+        if(MAIN_Options[OPT_ADDR].value != 0x220 && MAIN_Options[OPT_ADDR].value != 0x240)
+        {
+            printf("Error: invalid IO port address.\n");
+            return 1;
+        }
+        if(MAIN_Options[OPT_IRQ].value != 0x5 && MAIN_Options[OPT_IRQ].value != 0x7)
+        {
+            printf("Error: invalid IRQ.\n");
+            return 1;
+        }
+        if(MAIN_Options[OPT_DMA].value != 0x0 && MAIN_Options[OPT_DMA].value != 0x1 && MAIN_Options[OPT_DMA].value != 0x3)
+        {
+            printf("Error: invalid DMA channel.\n");
+            return 1;
         }
     }
 
@@ -149,24 +290,25 @@ int main(int argc, char* argv[])
     AU_prestart(&aui);
     AU_start(&aui);
 
+    if(DPMI_InstallISR(MAIN_USE_INT70 ? 0x70 : 0x08, MAIN_TimerInterruptPM, &MAIN_TimerIntHandle) != 0)
+    {
+        printf("Error: Failed installing timer.\n");
+        return 1;
+    }
+    #if MAIN_USE_INT70
+    MAIN_EnableInt70();
+    #endif
+
     QEMM_IOPT OPL3IOPT;
     QEMM_IOPT OPL3IOPT_PM;
     if(MAIN_Options[OPT_OPL].value)
     {
-        static QEMM_IODT OPL3IODT[4] =
-        {
-            0x388, 0, &MAIN_OPL3_388,
-            0x389, 0, &MAIN_OPL3_389,
-            0x38A, 0, &MAIN_OPL3_38A,
-            0x38B, 0, &MAIN_OPL3_38B
-        };
-
-        if(!QEMM_Install_IOPortTrap(0x388, 0x38B, OPL3IODT, 4, &OPL3IOPT))
+        if(!QEMM_Install_IOPortTrap(MAIN_OPL3IODT, 4, &OPL3IOPT))
         {
             printf("Error: Failed installing IO port trap for QEMM.\n");
             return 1;
         }
-        if(!HDPMIPT_Install_IOPortTrap(0x388, 0x38B, OPL3IODT, 4, &OPL3IOPT_PM))
+        if(!HDPMIPT_Install_IOPortTrap(0x388, 0x38B, MAIN_OPL3IODT, 4, &OPL3IOPT_PM))
         {
             printf("Error: Failed installing IO port trap for HDPMI.\n");
             QEMM_Uninstall_IOPortTrap(&OPL3IOPT);
@@ -177,14 +319,38 @@ int main(int argc, char* argv[])
         TestSound(FALSE);
     }
 
-    if(DPMI_InstallISR(MAIN_USE_INT70 ? 0x70 : 0x08, MAIN_TimerInterruptPM, &MAIN_TimerIntHandle) != 0)
+    for(int i = 0; i < countof(MAIN_SB_IODT); ++i)
+        MAIN_SB_IODT[i].port += MAIN_Options[OPT_ADDR].value;
+
+    BOOL QEMMInstalledVDMA = QEMM_Install_IOPortTrap(MAIN_VDMA_IODT, countof(MAIN_VDMA_IODT), &MAIN_VDMA_IOPT);
+    BOOL QEMMInstalledVIRQ = QEMM_Install_IOPortTrap(MAIN_VIRQ_IODT, countof(MAIN_VIRQ_IODT), &MAIN_VIRQ_IOPT);
+    BOOL QEMMInstalledSB = QEMM_Install_IOPortTrap(MAIN_SB_IODT, countof(MAIN_SB_IODT), &MAIN_SB_IOPT);
+    if(!QEMMInstalledVDMA || !QEMMInstalledVIRQ || !QEMMInstalledSB)
     {
-        printf("Error: Failed installing timer.\n");
+        printf("Error: Failed installing IO port trap for QEMM.\n");
+        if(QEMMInstalledVDMA) QEMM_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT);
+        if(QEMMInstalledVIRQ) QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
+        if(QEMMInstalledSB) QEMM_Uninstall_IOPortTrap(&MAIN_SB_IOPT);
         return 1;
     }
-    #if MAIN_USE_INT70
-    MAIN_EnableInt70();
-    #endif
+
+    BOOL HDPMIInstalledVDMA1 = HDPMIPT_Install_IOPortTrap(0x0, 0xF, MAIN_VDMA_IODT, 16, &MAIN_VDMA_IOPT_PM1);
+    BOOL HDPMIInstalledVDMA2 = HDPMIPT_Install_IOPortTrap(0x81, 0x83, MAIN_VDMA_IODT+16, 3, &MAIN_VDMA_IOPT_PM2);
+    BOOL HDPMIInstalledVDMA3 = HDPMIPT_Install_IOPortTrap(0x87, 0x87, MAIN_VDMA_IODT+19, 1, &MAIN_VDMA_IOPT_PM3);
+    BOOL HDPMIInstalledVIRQ1 = HDPMIPT_Install_IOPortTrap(0x20, 0x21, MAIN_VIRQ_IODT, 2, &MAIN_VIRQ_IOPT_PM1);
+    BOOL HDPMIInstalledVIRQ2 = HDPMIPT_Install_IOPortTrap(0xA0, 0xA1, MAIN_VIRQ_IODT+2, 2, &MAIN_VIRQ_IOPT_PM2);
+    BOOL HDPMIInstalledSB = HDPMIPT_Install_IOPortTrap(MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_ADDR].value+0x0F, MAIN_SB_IODT, countof(MAIN_SB_IODT), &MAIN_SB_IOPT_PM);
+    if(!HDPMIInstalledVDMA1 || !HDPMIInstalledVDMA2 || !HDPMIInstalledVDMA3 || !HDPMIInstalledVIRQ1 || !HDPMIInstalledVIRQ2 || !HDPMIInstalledSB)
+    {
+        printf("Error: Failed installing IO port trap for HDPMI.\n");
+        if(HDPMIInstalledVDMA1) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT_PM1);
+        if(HDPMIInstalledVDMA2) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT_PM2);
+        if(HDPMIInstalledVDMA3) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT_PM3);
+        if(HDPMIInstalledVIRQ1) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM1);
+        if(HDPMIInstalledVIRQ2) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM2);
+        if(HDPMIInstalledSB) HDPMIPT_Uninstall_IOPortTrap(&MAIN_SB_IOPT_PM);
+        return 1;
+    }
 
     if(!DPMI_TSR())
     {
@@ -194,6 +360,16 @@ int main(int argc, char* argv[])
             HDPMIPT_Uninstall_IOPortTrap(&OPL3IOPT_PM);
         }
         DPMI_UninstallISR(&MAIN_TimerIntHandle);
+
+        QEMM_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT);
+        QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
+        QEMM_Uninstall_IOPortTrap(&MAIN_SB_IOPT);
+        HDPMIPT_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT_PM1);
+        HDPMIPT_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT_PM2);
+        HDPMIPT_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT_PM3);
+        HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM1);
+        HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM2);
+        HDPMIPT_Uninstall_IOPortTrap(&MAIN_SB_IOPT_PM);
         printf("Error: Failed installing TSR.\n");
     }
     return 0;
@@ -230,7 +406,7 @@ static void MAIN_TimerInterrupt()
         AU_writedata(&aui);
         #else
         int samples = MAIN_SAMPLES;
-        if((MAIN_PCMEnd - MAIN_PCMStart + MAIN_PCMEndTag)%MAIN_PCMEndTag >= MAIN_PCMEndTag) //buffer full
+        if((MAIN_PCMEnd - MAIN_PCMStart + MAIN_PCMEndTag)%MAIN_PCMEndTag >= MAIN_PCMEndTag-MAIN_SAMPLES*2) //buffer full
         {
             aui.samplenum = MAIN_PCMEndTag;
             aui.pcm_sample = MAIN_PCM + MAIN_PCMStart;
@@ -239,8 +415,8 @@ static void MAIN_TimerInterrupt()
                 MAIN_PCMStart = 0;
             return;
         }
-        if(MAIN_PCMEnd == MAIN_PCMStart) //empty
-            samples += samples/4;
+        if(MAIN_PCMEnd - MAIN_PCMStart < MAIN_SAMPLES) //(almost) empty
+            samples += samples/4; //extra samples to avoid underrun due to timer interrupt precision
 
         OPL3EMU_GenSamples(MAIN_PCM + MAIN_PCMEnd, samples);
         //always use 2 channels

@@ -10,12 +10,14 @@
 #include "QEMM.h"
 #include <DPMI/DPMI.H>
 #include <DPMI/DBGUTIL.H>
+#include <UNTRAPIO.H>
 
 static QEMM_IODT_LINK QEMM_IODT_header;
 static QEMM_IODT_LINK* QEMM_IODT_Link = &QEMM_IODT_header;
 static uint16_t QEMM_EntryIP;
 static uint16_t QEMM_EntryCS;
 
+static BOOL QEMM_InCallback;
 static uint16_t QEMM_OldCallbackIP;
 static uint16_t QEMM_OldCallbackCS;
 
@@ -36,11 +38,14 @@ static void QEMM_TrapHandler()
     uint8_t out = QEMM_TrapHandlerREG.h.cl;
     QEMM_IODT_LINK* link = QEMM_IODT_header.next;
 
+    //_LOG("Port trap: %x\n", port);
+    QEMM_InCallback = TRUE;
     while(link)
     {
         for(int i = 0; i < link->count; ++i)
         {
-            if(link->iodt[i].port == port)
+            //_LOG("handler: %x ", link->iodt[i].port&0xFFFF);
+            if((link->iodt[i].port&0xFFFF) == port)
             {
                 QEMM_TrapHandlerREG.w.flags &= ~CPU_CFLAG;
                 QEMM_TrapHandlerREG.h.al = link->iodt[i].handler(port, val, out);
@@ -49,11 +54,16 @@ static void QEMM_TrapHandler()
         }
         link = link->next;
     }
+    QEMM_InCallback = FALSE;
+    
     //QEMM_TrapHandlerREG.w.flags |= CPU_CFLAG;
-    DPMI_REG r = {0};
+    DPMI_REG r = QEMM_TrapHandlerREG;
     r.w.cs = QEMM_OldCallbackCS;
     r.w.ip = QEMM_OldCallbackIP;
+    r.w.ss = 0; r.w.sp = 0;
     DPMI_CallRealModeRETF(&r);
+    QEMM_TrapHandlerREG.w.flags |= r.w.flags&CPU_CFLAG;
+    QEMM_TrapHandlerREG.h.al = r.h.al;
 }
 
 //https://www.cs.cmu.edu/~ralf/papers/qpi.txt
@@ -61,18 +71,6 @@ static void QEMM_TrapHandler()
 //http://mirror.cs.msu.ru/oldlinux.org/Linux.old/docs/interrupts/int-html/rb-7414.htm
 uint16_t QEMM_GetVersion(void)
 {
-    /*DPMI_REG r = {0};
-    r.w.cx = 0x5145;
-    r.w.dx = 0x4d4d;
-    r.h.ah = 0x3f;
-    DPMI_CallRealModeINT(0x67, &r); //dead?
-    if(r.h.ah != 0)
-        return 0;
-    r.w.cs = r.w.es;
-    r.w.ip = r.w.di;
-    r.h.ah = 0x03;
-    DPMI_CallRealModeRETF(&r);*/
-
     //http://mirror.cs.msu.ru/oldlinux.org/Linux.old/docs/interrupts/int-html/rb-2830.htm
     int fd = 0;
     unsigned int result = _dos_open("QEMM386$", O_RDONLY, &fd);
@@ -96,7 +94,7 @@ uint16_t QEMM_GetVersion(void)
 }
 
 
-BOOL QEMM_Install_IOPortTrap(uint16_t start, uint16_t end, QEMM_IODT* inputp iodt, uint16_t count, QEMM_IOPT* outputp iopt)
+BOOL QEMM_Install_IOPortTrap(QEMM_IODT* inputp iodt, uint16_t count, QEMM_IOPT* outputp iopt)
 {
     if(QEMM_IODT_header.next == NULL) //no entries
     {
@@ -108,6 +106,7 @@ BOOL QEMM_Install_IOPortTrap(uint16_t start, uint16_t end, QEMM_IODT* inputp iod
             return FALSE;
         QEMM_OldCallbackIP = r.w.es;
         QEMM_OldCallbackCS = r.w.di;
+        //printf("QEMM old callback: %04x:%04x\n",r.w.es, r.w.di);
 
         uint32_t codesize = (uintptr_t)&QEMM_RM_WrapperEnd - (uintptr_t)&QEMM_RM_Wrapper;
         uint32_t dosmem = DPMI_HighMalloc((codesize + 4 + 15)>>4, TRUE);
@@ -133,6 +132,9 @@ BOOL QEMM_Install_IOPortTrap(uint16_t start, uint16_t end, QEMM_IODT* inputp iod
             DPMI_HighFree(dosmem);
             return FALSE;
         }
+
+        UnTrappedIO_Write = &QEMM_UntrappedIO_Write;
+        UnTrappedIO_Read = &QEMM_UntrappedIO_Read;
     }
     assert(QEMM_IODT_Link->next == NULL);
     QEMM_IODT* mem = (QEMM_IODT*)malloc(sizeof(QEMM_IODT)*count);
@@ -146,12 +148,12 @@ BOOL QEMM_Install_IOPortTrap(uint16_t start, uint16_t end, QEMM_IODT* inputp iod
         r.w.ax = 0x1A08;
         r.w.dx = mem[i].port;
         DPMI_CallRealModeRETF(&r);
-        mem[i].state = r.h.bl; //previously trapped state
+        mem[i].port |= (r.h.bl)<<16; //previously trapped state
 
         r.w.cs = QEMM_EntryCS;
         r.w.ip = QEMM_EntryIP;
         r.w.ax = 0x1A09;
-        r.w.dx = mem[i].port;
+        r.w.dx = mem[i].port&0xFFFF;
         DPMI_CallRealModeRETF(&r); //set port trapped
     }
 
@@ -160,8 +162,10 @@ BOOL QEMM_Install_IOPortTrap(uint16_t start, uint16_t end, QEMM_IODT* inputp iod
     newlink->count = count;
     newlink->prev = QEMM_IODT_Link;
     newlink->next = NULL;
+    CLIS();
     QEMM_IODT_Link->next = newlink;
     QEMM_IODT_Link = newlink;
+    STIL();
     iopt->memory = (uintptr_t)newlink;
     return TRUE;
 }
@@ -176,13 +180,13 @@ BOOL QEMM_Uninstall_IOPortTrap(QEMM_IOPT* inputp iopt)
 
     for(int i = 0; i < link->count; ++i)
     {
-        if(!link->iodt[i].state) //previously not trapped
+        if(!(link->iodt[i].port&0xFFFF0000L)) //previously not trapped
         {
             DPMI_REG r = {0};
             r.w.cs = QEMM_EntryCS;
             r.w.ip = QEMM_EntryIP;
             r.w.ax = 0x1A0A; //clear trapped
-            r.w.dx = link->iodt[i].port;
+            r.w.dx = link->iodt[i].port&0xFFFF;
             DPMI_CallRealModeRETF(&r);
         }
     }
@@ -203,3 +207,52 @@ BOOL QEMM_Uninstall_IOPortTrap(QEMM_IOPT* inputp iopt)
     }
     return TRUE;
 }
+
+void QEMM_UntrappedIO_Write(uint16_t port, uint8_t value)
+{
+#if 0
+    if(QEMM_InCallback && port == QEMM_TrapHandlerREG.w.dx && value == QEMM_TrapHandlerREG.h.al)
+    {
+        DPMI_REG r = QEMM_TrapHandlerREG;
+        r.w.cs = QEMM_OldCallbackCS;
+        r.w.ip = QEMM_OldCallbackIP;
+        r.w.ss = 0; r.w.sp = 0;
+        DPMI_CallRealModeRETF(&r);
+    }
+    else
+#endif
+    {
+        DPMI_REG r = {0};
+        r.w.cs = QEMM_EntryCS;
+        r.w.ip = QEMM_EntryIP;
+        r.w.ax = 0x1A01; //QPI_UntrappedIOWrite
+        r.h.bl = value;
+        r.w.dx = port;
+        DPMI_CallRealModeRETF(&r);
+    }
+}
+
+uint8_t QEMM_UntrappedIO_Read(uint16_t port)
+{
+#if 0
+    if(QEMM_InCallback && port == QEMM_TrapHandlerREG.w.dx)
+    {
+        DPMI_REG r = QEMM_TrapHandlerREG;
+        r.w.cs = QEMM_OldCallbackCS;
+        r.w.ip = QEMM_OldCallbackIP;
+        r.w.ss = 0; r.w.sp = 0;
+        DPMI_CallRealModeRETF(&r);
+        return r.h.al;
+    }
+    else
+#endif
+    {
+        DPMI_REG r = {0};
+        r.w.cs = QEMM_EntryCS;
+        r.w.ip = QEMM_EntryIP;
+        r.w.ax = 0x1A00; //QPI_UntrappedIORead
+        r.w.dx = port;
+        return DPMI_CallRealModeRETF(&r) == 0 && !(r.w.flags&CPU_CFLAG) ? r.h.bl : 0;
+    }
+}
+
