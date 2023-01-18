@@ -6,6 +6,7 @@
 #define __attribute__(x)
 #endif
 #include <DPMI/DBGUTIL.H>
+#include <UNTRAPIO.H>
 
 #include "HDPMIPT.H"
 
@@ -29,11 +30,12 @@ static uint32_t HDPMIPT_NewStack[2];
 
 static QEMM_IODT_LINK HDPMIPT_IODT_header;
 static QEMM_IODT_LINK* HDPMIPT_IODT_Link = &HDPMIPT_IODT_header;
-static uint32_t HDPMIPT_Handle;
 
 static uint16_t HDPMIPT_GetDS()
 {
-    asm("mov %ds, %ax");
+    uint16_t ds;
+    asm("mov %ds, %0":"=r"(ds));
+    return ds;
 }
 
 static uint32_t __attribute__((noinline)) HDPMIPT_TrapHandler()
@@ -48,16 +50,20 @@ static uint32_t __attribute__((noinline)) HDPMIPT_TrapHandler()
     :"memory"
     );
 
+    UntrappedIO_PM = TRUE;
+    //_LOG("Trapped PM: %x\n",port);
     QEMM_IODT_LINK* link = HDPMIPT_IODT_header.next;
     while(link)
     {
         for(int i = 0; i < link->count; ++i)
         {
+            //_LOG("port:%x\n",link->iodt[i].port);
             if(link->iodt[i].port == port)
                 return link->iodt[i].handler(port, value, out);
         }
         link = link->next;
     }
+    UntrappedIO_PM = FALSE;
     return value;
 }
 
@@ -175,31 +181,35 @@ BOOL HDPMIPT_Install_IOPortTrap(uint16_t start, uint16_t end, QEMM_IODT* inputp 
             return FALSE;
         }
         _LOG("HDPMI vendor entry: %04x:%08x\n", HDPMIPT_Entry.es, HDPMIPT_Entry.edi);
+    }
 
-        HDPMIPT_Handle = HDPMI_Internal_InstallTrap(&HDPMIPT_Entry, start, end, &HDPMIPT_TrapHandlerWrapper);
-        if(!HDPMIPT_Handle)
-        {
-            puts("Failed to intall HDPMI io port trap.\n");
-            return FALSE;
-        }
-
+    uint32_t handle = HDPMI_Internal_InstallTrap(&HDPMIPT_Entry, start, end, &HDPMIPT_TrapHandlerWrapper);
+    if(!handle)
+    {
+        puts("Failed to intall HDPMI io port trap.\n");
+        return FALSE;
+    }
+    
+    if(HDPMIPT_IODT_header.next == NULL)
+    {
         #if HDPMIPT_SWITCH_STACK
         HDPMIPT_NewStack[0] = (uintptr_t)malloc(HDPMIPT_STACKSIZE) + HDPMIPT_STACKSIZE - 8;
         HDPMIPT_NewStack[1] = HDPMIPT_GetDS();
         #endif
     }
-
-    QEMM_IODT* HDPMIPT_Iodt = (QEMM_IODT*)malloc(sizeof(QEMM_IODT)*count);
-    memcpy(HDPMIPT_Iodt, iodt, sizeof(QEMM_IODT)*count);
+    
+    QEMM_IODT* Iodt = (QEMM_IODT*)malloc(sizeof(QEMM_IODT)*count);
+    memcpy(Iodt, iodt, sizeof(QEMM_IODT)*count);
 
     QEMM_IODT_LINK* newlink = (QEMM_IODT_LINK*)malloc(sizeof(QEMM_IODT_LINK));
-    newlink->iodt = HDPMIPT_Iodt;
+    newlink->iodt = Iodt;
     newlink->count = count;
     newlink->prev = HDPMIPT_IODT_Link;
     newlink->next = NULL;
     HDPMIPT_IODT_Link->next = newlink;
     HDPMIPT_IODT_Link = newlink;
     iopt->memory = (uintptr_t)newlink;
+    iopt->handle = handle;
     return TRUE;
 }
 
@@ -209,15 +219,18 @@ BOOL HDPMIPT_Uninstall_IOPortTrap(QEMM_IOPT* inputp iopt)
     QEMM_IODT_LINK* link = (QEMM_IODT_LINK*)iopt->memory;
     link->prev->next = link->next;
     if(link->next) link->next->prev = link->prev;
+    if(HDPMIPT_IODT_Link == link)
+        HDPMIPT_IODT_Link = link->prev;
     STIL();
+    HDPMI_Internal_UninstallTrap(&HDPMIPT_Entry, iopt->handle);
     free(link->iodt);
     free(link);
+    
     if(HDPMIPT_IODT_header.next == NULL)
     {
         #if HDPMIPT_SWITCH_STACK
         free((void*)(HDPMIPT_NewStack[0] - HDPMIPT_STACKSIZE + 8));
         #endif
-        return HDPMI_Internal_UninstallTrap(&HDPMIPT_Entry, HDPMIPT_Handle);
     }
     return TRUE;
 }

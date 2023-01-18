@@ -16,7 +16,7 @@
 //based on: ALSA (http://www.alsa-project.org) and ICH-DOS wav player from Jeff Leyda
 
 //#define MPXPLAY_USE_DEBUGF 1
-//#define ICH_DEBUG_OUTPUT stdout
+#define ICH_DEBUG_OUTPUT stdout
 
 #include "mpxplay.h"
 #include <time.h>
@@ -378,7 +378,6 @@ static int INTELICH_adetect(struct mpxplay_audioout_info_s *aui)
   goto err_adetect;
  snd_intel_chip_init(card);
  snd_intel_ac97_init(card,aui->freq_set);
-
  return 1;
 
 err_adetect:

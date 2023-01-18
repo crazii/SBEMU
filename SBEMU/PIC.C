@@ -80,12 +80,13 @@ void PIC_MaskIRQ(uint8_t irq)
 void PIC_UnmaskIRQ(uint8_t irq)
 {
     uint16_t port = PIC_DATA1;
+    CLIS();    
     if(irq >= 8)
     {
+        outp(port, (uint8_t)(inp(port)&~0x4));
         port = PIC_DATA2;
         irq = (uint8_t)(irq - 8);
     }
-    CLIS();
     outp(port, (uint8_t)(inp(port)&~(1<<irq)));
     STIL();
 }

@@ -44,11 +44,12 @@ static void QEMM_TrapHandler()
     {
         for(int i = 0; i < link->count; ++i)
         {
-            //_LOG("handler: %x ", link->iodt[i].port&0xFFFF);
             if((link->iodt[i].port&0xFFFF) == port)
             {
+                //if(port >= 0x220 /*&& port <= 0x22F*/) _LOG("handler: %04x ", link->iodt[i].port&0xFFFF);
                 QEMM_TrapHandlerREG.w.flags &= ~CPU_CFLAG;
                 QEMM_TrapHandlerREG.h.al = link->iodt[i].handler(port, val, out);
+                //if(port >= 0x220 /*&& port <= 0x22F*/) _LOG("handler end: %04x ", link->iodt[i].port&0xFFFF);
                 return;
             }
         }
@@ -133,8 +134,8 @@ BOOL QEMM_Install_IOPortTrap(QEMM_IODT* inputp iodt, uint16_t count, QEMM_IOPT* 
             return FALSE;
         }
 
-        UnTrappedIO_Write = &QEMM_UntrappedIO_Write;
-        UnTrappedIO_Read = &QEMM_UntrappedIO_Read;
+        UntrappedIO_OUT_Handler = &QEMM_UntrappedIO_Write;
+        UntrappedIO_IN_Handler = &QEMM_UntrappedIO_Read;
     }
     assert(QEMM_IODT_Link->next == NULL);
     QEMM_IODT* mem = (QEMM_IODT*)malloc(sizeof(QEMM_IODT)*count);
@@ -176,6 +177,8 @@ BOOL QEMM_Uninstall_IOPortTrap(QEMM_IOPT* inputp iopt)
     QEMM_IODT_LINK* link = (QEMM_IODT_LINK*)iopt->memory;
     link->prev->next = link->next;
     if(link->next) link->next->prev = link->prev;
+    if(QEMM_IODT_Link == link)
+        QEMM_IODT_Link = link->prev;
     STIL();
 
     for(int i = 0; i < link->count; ++i)
