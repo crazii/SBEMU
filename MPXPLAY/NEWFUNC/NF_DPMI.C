@@ -299,7 +299,7 @@ static __dpmi_meminfo physicalmaps[PHYSICAL_MAP_COUNT];
 
 unsigned long pds_dpmi_map_physical_memory(unsigned long phys_addr,unsigned long memsize)
 {
- memsize = (memsize+1023)/1024*1024;
+ memsize = (memsize+4095)/4096*4096; //__dpmi_set_segment_limit need page aligned
  __dpmi_meminfo info = {0, memsize, phys_addr};
 
  int i = 0;
@@ -320,7 +320,10 @@ unsigned long pds_dpmi_map_physical_memory(unsigned long phys_addr,unsigned long
         __dpmi_free_physical_address_mapping(&info);
         info.address = base + limit + 1;
         if(__dpmi_allocate_linear_memory(&info, 0) != 0)
+        {
+            printf("DPMI map physical memory failed.\n");
             return 0;
+        }
         __dpmi_meminfo remap = info;
         remap.address = 0;
         remap.size = (memsize+4095)/4096;
@@ -431,26 +434,30 @@ int pds_xms_free(unsigned short handle)
 int pds_dpmi_xms_allocmem(xmsmem_t * mem,unsigned int size)
 {
     unsigned long addr;
-    size = (size+1023)/1024*1024;
+    size = (size+4095)/4096*4096; //__dpmi_set_segment_limit must be page aligned
     if( (mem->xms=pds_xms_alloc(size/1024, &addr)) )
     {
+        unsigned long base = 0;
+        unsigned long limit = __dpmi_get_segment_limit(_my_ds());
+        __dpmi_get_segment_base_address(_my_ds(), &base);
+        
         __dpmi_meminfo info = {0, size, addr};
         mem->remap = 0;
         do {
             if( __dpmi_physical_address_mapping(&info) == 0)
             {
-                unsigned long base = 0;
-                __dpmi_get_segment_base_address(_my_ds(), &base);
-                unsigned long limit = __dpmi_get_segment_limit(_my_ds());
                 if(info.address < base)
                 {
                     __dpmi_free_physical_address_mapping(&info);
                     info.address = base + limit + 1;
                     if(__dpmi_allocate_linear_memory(&info, 0) != 0)//TODO: handle error
+                    {
+                        printf("DPMI Failed allocate linear memory.\n");
                         break;
+                    }
                     __dpmi_meminfo remap = info;
                     remap.address = 0;
-                    remap.size = (size+4095)/4096;
+                    remap.size = size/4096;
                     if(__dpmi_map_device_in_memory_block(&remap, addr) != 0)
                         break;
                     mem->remap = 1;
@@ -466,6 +473,7 @@ int pds_dpmi_xms_allocmem(xmsmem_t * mem,unsigned int size)
         pds_xms_free(mem->xms);
         mem->xms = 0;
     }
+    printf("Failed allocatee XMS.\n");
     return 0;
 }
 
