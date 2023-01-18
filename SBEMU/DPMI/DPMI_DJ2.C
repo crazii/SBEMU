@@ -33,20 +33,30 @@ typedef struct _AddressMap
 #define ADDRMAP_TABLE_SIZE (256 / sizeof(AddressMap))
 
 static AddressMap AddresMapTable[ADDRMAP_TABLE_SIZE];
-static int AddressMapCount = 0;
 
 static void AddAddressMap(const __dpmi_meminfo* info, uint32_t PhysicalAddr)
 {
-    if(AddressMapCount == ADDRMAP_TABLE_SIZE)
+    for(int i = 0; i < ADDRMAP_TABLE_SIZE; ++i)
     {
-        //error
+        if(AddresMapTable[i].Handle == 0)
+        {
+            AddressMap* map = &AddresMapTable[i];
+            map->Handle = info->handle;
+            map->LinearAddr = info->address;
+            map->PhysicalAddr = PhysicalAddr;
+            map->Size = info->size;
+        }
     }
-    AddressMap* map = &AddresMapTable[AddressMapCount++];
+}
 
-    map->Handle = info->handle;
-    map->LinearAddr = info->address;
-    map->PhysicalAddr = PhysicalAddr;
-    map->Size = info->size;
+static int FindAddressMap(uint32_t linearaddr)
+{
+    for(int i = 0; i < ADDRMAP_TABLE_SIZE; ++i)
+    {
+        if(AddresMapTable[i].LinearAddr == linearaddr)
+            return i;
+    }
+    return -1;
 }
 
 static void DPMI_Shutdown(void);
@@ -246,9 +256,11 @@ static void DPMI_Shutdown(void)
 #endif
 
     _LOG("Free mapped space...\n");
-    for(int i = 0; i < AddressMapCount; ++i)
+    for(int i = 0; i < ADDRMAP_TABLE_SIZE; ++i)
     {
         AddressMap* map = &AddresMapTable[i];
+        if(!map->Handle)
+            continue;
         if(map->Handle == ~0UL)//XMS mapped
             continue;
         __dpmi_meminfo info;
@@ -257,14 +269,16 @@ static void DPMI_Shutdown(void)
         info.size = map->Size;
         __dpmi_free_physical_address_mapping(&info);
     }
-    AddressMapCount = 0;
+    _LOG("DPMI_Shutdown done.\n");
 }
 
 uint32_t DPMI_L2P(uint32_t vaddr)
 {
-    for(int i = 0; i < AddressMapCount; ++i)
+    for(int i = 0; i < ADDRMAP_TABLE_SIZE; ++i)
     {
         AddressMap* map = &AddresMapTable[i];
+        if(!map->Handle)
+            continue;
         if(map->LinearAddr <= vaddr && vaddr <= map->LinearAddr + map->Size)
         {
             int32_t offset = vaddr - map->LinearAddr;
@@ -279,9 +293,11 @@ uint32_t DPMI_L2P(uint32_t vaddr)
 
 uint32_t DPMI_P2L(uint32_t paddr)
 {
-    for(int i = 0; i < AddressMapCount; ++i)
+    for(int i = 0; i < ADDRMAP_TABLE_SIZE; ++i)
     {
         AddressMap* map = &AddresMapTable[i];
+        if(!map->Handle)
+            continue;
         if(map->PhysicalAddr <= paddr && paddr <= map->PhysicalAddr + map->Size)
         {
             int32_t offset = paddr - map->PhysicalAddr;
@@ -318,6 +334,23 @@ uint32_t DPMI_MapMemory(uint32_t physicaladdr, uint32_t size)
     assert(FALSE);
     exit(-1);
     return 0;
+}
+
+BOOL DPMI_UnmappMemory(uint32_t mappedaddr)
+{
+    int index = FindAddressMap(mappedaddr);
+    if(index == -1)
+        return FALSE;
+    AddressMap* map = &AddresMapTable[index];
+    if(map->Handle == 0 || map->Handle == ~0x0UL)
+        return FALSE;
+    __dpmi_meminfo info;
+    info.handle = map->Handle;
+    info.address = map->LinearAddr;
+    info.size = map->Size;
+    __dpmi_free_physical_address_mapping(&info);
+    memset(map, 0, sizeof(*map));
+    return TRUE;
 }
 
 void* DPMI_DMAMalloc(unsigned int size, unsigned int alignment/* = 4*/)
@@ -472,6 +505,7 @@ uint32_t DPMI_CallRealModeOldISR(DPMI_ISR_HANDLE* inputp handle)
     r.w.cs = handle->rm_cs;
     r.w.ip = handle->rm_offset;
     return DPMI_CallRealModeIRET(&r);
+    //return DPMI_CallRealModeINT(handle->n,&r);
 }
 
 uint32_t DPMI_AllocateRMCB_RETF(void(*Fn)(void), DPMI_REG* reg)

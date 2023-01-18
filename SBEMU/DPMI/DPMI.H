@@ -163,6 +163,7 @@ void* DPMI_L2PTR(uint32_t addr);
 //input physical addr must < 1M (0x100000)
 //http://www.delorie.com/djgpp/v2faq/faq18_7.html
 uint32_t DPMI_MapMemory(uint32_t physicaladdr, uint32_t size);
+BOOL DPMI_UnmappMemory(uint32_t mappedaddr);
 
 //the 'DMA' here doesn't involve DMA controller, but device directly accessing physical RAM, i.e. PCI bus master
 //memory allocated with this function is guaranteed to work with DPMI_L2P/DPMI_P2L

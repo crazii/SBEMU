@@ -2,6 +2,7 @@
 #define _SBEMU_H_
 //Sound blaster emulation
 //Sound Blaster Series Hardware Programming Guide: https://www.phatcode.net/articles.php?id=243
+//https://github.com/joncampbell123/dosbox-x/wiki/Hardware:Sound-Blaster:DSP-commands
 
 #include <stdint.h>
 
@@ -33,7 +34,11 @@
 #define SBEMU_CMD_SET_SAMPLERATE    0x41 //set sample rate
 #define SBEMU_CMD_DAC_SPEAKER_ON    0xD1
 #define SBEMU_CMD_DAC_SPEAKER_OFF   0xD3
+#define SBEMU_CMD_DSP_ID            0xE0
 #define SBEMU_CMD_DSP_GETVER        0xE1 //1st byte major, 2nd byte minor
+#define SBEMU_CMD_DSP_COPYRIGHT     0xE3
+#define SBEMU_CMD_TRIGGER_IRQ       0xF2
+#define SBEMU_CMD_TRIGGER_IRQ16     0xF3
 
 //time constant used
 #define SBEMU_CMD_8BIT_DIRECT       0x10
@@ -84,14 +89,17 @@ uint8_t SBEMU_DSP_INT16ACK(uint16_t port);
 void SBEMU_Init(int irq, int dma);
 uint8_t SBEMU_GetIRQ();
 uint8_t SBEMU_GetDMA();
+int SBEMU_HasStarted();
 void SBEMU_Stop();
 
 int SBEMU_GetDACSpeaker();
 int SBEMU_GetBits();
 int SBEMU_GetChannels();
 int SBEMU_GetSampleRate();
-int SBEMU_GetSampleCount();
+int SBEMU_GetSampleBytes();
 int SBEMU_GetAuto();
+int SBEMU_INT8ACKed();
+void SBEMU_ClearINT8ACK();
 
 #ifdef __cplusplus
 }
