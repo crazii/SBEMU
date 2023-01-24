@@ -3,7 +3,7 @@
 //IRQ virtualization
 //https://wiki.osdev.org/8259_PIC
 
-#include <stdint.h>
+#include "DPMI/DPMI.H"
 
 #ifdef __cplusplus
 extern "C"
@@ -13,7 +13,7 @@ extern "C"
 void VIRQ_Write(uint16_t port, uint8_t value);
 uint8_t VIRQ_Read(uint16_t port);
 
-void VIRQ_Invoke(uint8_t irq);
+void VIRQ_Invoke(uint8_t irq, DPMI_REG* regs, BOOL realmode);
 
 #ifdef __cplusplus
 }

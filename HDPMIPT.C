@@ -234,3 +234,28 @@ BOOL HDPMIPT_Uninstall_IOPortTrap(QEMM_IOPT* inputp iopt)
     }
     return TRUE;
 }
+
+
+BOOL HDPMIPT_GetInterruptContext(HDPMIPT_INTCONTEXT* context)
+{
+    if(HDPMIPT_Entry.es == 0 || HDPMIPT_Entry.edi == 0)
+    {
+        if(!HDPMIPT_GetVendorEntry(&HDPMIPT_Entry))
+            return FALSE;
+    }
+
+    BOOL result = FALSE;
+    asm(
+    "mov %2, %%ebx \n\t"     //EBX=context ptr
+    "mov $11, %%eax \n\t"   //ax=11, unistall port trap
+    "lcall *%1\n\t"
+    "jc 1f \n\t"
+    "mov $1, %%eax \n\t"
+    "mov %%eax, %0 \n\t"
+    "1: nop \n\t"
+    :"=m"(result)
+    :"m"(HDPMIPT_Entry),"m"(context)
+    :"eax","ebx","memory"
+    );
+    return result;
+}

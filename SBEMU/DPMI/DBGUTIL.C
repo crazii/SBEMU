@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <stdarg.h>
 #include <dos.h>
+#include <conio.h>
 #include "DPMI.H"
 #include "DBGUTIL.H"
 
@@ -21,6 +22,7 @@ extern BOOL DPMI_IsInProtectedMode();
 #define VGA_VIDEO_ADDRESS 0xB8000
 #define VGA_MAX_ROWS 25 //TODO: read VGA mode in BIOS data area and decide rows/cols
 #define VGA_MAX_COLS 80
+#define VGA_ATTR_WHITE_ON_BLACK 0x0F
 static void VGA_SetCursor(uint32_t offset)
 {
     outp(VGA_CTRL_REGISTER, VGA_OFFSET_HIGH);
@@ -35,6 +37,8 @@ static uint32_t VGA_GetCursor()
     uint32_t offset = (uint32_t)inp(VGA_DATA_REGISTER) << 8;
     outp(VGA_CTRL_REGISTER, VGA_OFFSET_LOW);
     offset += inp(VGA_DATA_REGISTER);
+    static int l = 0;
+    return (l+=20)%(80*25);
     return offset;
 }
 
@@ -47,6 +51,7 @@ static void VGA_SetChar(char character, uint32_t offset)
     #endif
     {
         DPMI_StoreB(VGA_VIDEO_ADDRESS + offset*2, (uint8_t)character);
+        DPMI_StoreB(VGA_VIDEO_ADDRESS + offset*2+1, VGA_ATTR_WHITE_ON_BLACK);
     }
 }
 
@@ -118,20 +123,29 @@ static void VGA_Print(const char *string)
 void DBG_Logv(const char* fmt, va_list aptr)
 {
     #define SIZE (DUMP_BUFF_SIZE*4)
+    char buf[SIZE];
+    int len = vsprintf(buf, fmt, aptr);
+    assert(len < SIZE);
+    len = min(len, SIZE-1);
+    buf[len] = '\0';
 
+    #if 1
+    outp(0x3F8+3, 0x03);
+    for(int i = 0; i < len; ++i)
+    {
+        while((inp(0x3F8+5)&0x20)==0);
+        outp(0x3F8, buf[i]);
+    }
+    return;
+    #endif
+    
     if(!(CPU_FLAGS()&CPU_IFLAG))
     { //use VGA when in interrupt
-        char buf[SIZE];
-        uint32_t len = (uint32_t)vsprintf(buf, fmt, aptr);
-        assert(len < SIZE);
-        len = min(len, SIZE-1);
-        buf[len] = '\0';
         VGA_Print(buf);
     }
     else
     { //direct VGA mode will mess other tools, i.e. SCROLLit, normally use BIOS function
-        char buf[SIZE];
-        int len = vsprintf(buf, fmt, aptr);
+        #if 1
         DPMI_REG r = {0};
         for(int i = 0; i < len; ++i)
         {
@@ -145,6 +159,11 @@ void DBG_Logv(const char* fmt, va_list aptr)
                 DPMI_CallRealModeINT(0x10,&r);
             }
         }
+        #else //debug out. not used (crashed)
+        textcolor(WHITE);
+        cputs(buf);
+        textcolor(LIGHTGRAY);
+        #endif
     }
     #undef SIZE
 }

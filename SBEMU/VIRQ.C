@@ -4,6 +4,7 @@
 #include "UNTRAPIO.H"
 #include "DPMI/DBGUTIL.H"
 #include <dos.h>
+#include <dpmi.h>
 
 static int VIRQ_Irq = -1;
 static uint8_t VIRQ_ISR[2];
@@ -16,8 +17,8 @@ void VIRQ_Write(uint16_t port, uint8_t value)
     //_LOG("VIRQW:%x,%x",port,value);
     if(VIRQ_IS_VIRTUALIZING())
     {
-        _LOG("VIRQW:%x,%x",port,value);
-        if(port&0x0F == 0x00)
+        _LOG("VIRQW:%x,%x\n",port,value);
+        if((port&0x0F) == 0x00)
         {
             int index = ((port==0x20) ? 0 : 1);
             VIRQ_OCW[index] = value;
@@ -31,6 +32,7 @@ void VIRQ_Write(uint16_t port, uint8_t value)
             if(value == 0x0B) //read ISR
                 return; //don't send to real PIC, will be handled in VIRQ_Read.
         }
+        return;
     }
     UntrappedIO_OUT(port, value);
 }
@@ -39,19 +41,28 @@ uint8_t VIRQ_Read(uint16_t port)
 {
     if(VIRQ_IS_VIRTUALIZING())
     {
-        _LOG("VIRQR:%x",port);
-        if((port&0x0F) == 0x01)
+        _LOG("VIRQR:%x\n",port);
+        if((port&0x0F) == 0x00)
         {
-            int index = ((port==0x21) ? 0 : 1);
-            return VIRQ_OCW[index] == 0x0B ? VIRQ_ISR[index] : UntrappedIO_IN(port);
+            int index = ((port==0x20) ? 0 : 1);
+            if(VIRQ_OCW[index] == 0x0B)//ISR
+            {
+                _LOG("VIRQRV: %x\n",VIRQ_ISR[index]);
+                return VIRQ_ISR[index];
+            }
+            //return VIRQ_OCW[index] == 0x0B ? VIRQ_ISR[index] : UntrappedIO_IN(port);
         }
+        _LOG("VIRQRV: 0\n");
+        return 0;
     }
     return UntrappedIO_IN(port);
 }
 
-void VIRQ_Invoke(uint8_t irq)
+void VIRQ_Invoke(uint8_t irq, DPMI_REG* regs, BOOL realmode)
 {
     _LOG("CALLINT %d\n", irq);
+    unsigned long addr;__dpmi_get_segment_base_address(regs->w.ds,&addr);
+    _LOG("DS: %04x %08x\n", regs->w.ds, addr);
     CLIS();
     VIRQ_ISR[0] = VIRQ_ISR[1] = 0;
     if(irq < 8) //master
@@ -62,17 +73,37 @@ void VIRQ_Invoke(uint8_t irq)
         VIRQ_ISR[1] = 1 << (irq-8);
     }
     VIRQ_Irq = irq;
-    DPMI_REG r = {0};
-    DPMI_CallRealModeINT(PIC_IRQ2VEC(irq), &r);
-    //int n = PIC_IRQ2VEC(irq);
-    //r.w.ip = DPMI_LoadW(n*4);
-    //r.w.cs = DPMI_LoadW(n*4+2);
-    //DPMI_CallRealModeIRET(&r);
-    //__dpmi_paddr pa;
-    //__dpmi_get_protected_mode_interrupt_vector(PIC_IRQ2VEC(irq), &pa);
-    //asm("pushfl \n\t lcall *%0" ::"m"(pa));
-    //asm("int $0x0F");
+    DPMI_REG r = *regs;
+    r.w.flags = 0;
+    r.w.ss = r.w.sp = 0;
+    //DPMI_CallRealModeINT(PIC_IRQ2VEC(irq), &r); //real mode vector are local in HDPMI, IVT changes not recorded after TSR, use raw IVT
+    if(1|| realmode)
+    {
+        int n = PIC_IRQ2VEC(irq);
+        r.w.ip = DPMI_LoadW(n*4);
+        r.w.cs = DPMI_LoadW(n*4+2);
+        DPMI_CallRealModeIRET(&r);
+    }
+    else if(0)
+    {
+        __dpmi_paddr pa;
+        __dpmi_get_protected_mode_interrupt_vector(PIC_IRQ2VEC(irq), &pa);
+        asm(
+        /*"push %%ds \n\t" "push %%es \n\t"
+        "push %%fs \n\t" "push %%gs \n\t"
+        "push %1 \n\t" "pop %%ds \n\t"
+        "push %2 \n\t" "pop %%es \n\t"
+        "push %3 \n\t" "pop %%fs \n\t"
+        "push %4 \n\t" "pop %%gs \n\t"*/
+        "pushfl \n\t lcall *%0 \n\t"
+        //"int $0x0D \n\t"
+        /*"pop %%gs \n\t" "pop %%fs \n\t"
+        "pop %%es \n\t" "pop %%ds \n\t"*/
+        ::"m"(pa)
+        /*,"m"(r.w.ds),"m"(r.w.es),"m"(r.w.fs),"m"(r.w.gs)*/);
+    }
+    //asm("int $0x0D");
     VIRQ_Irq = -1;
     STIL();
-    _LOG("CALLINTEND", irq);
+    _LOG("CALLINTEND\n", irq);
 }

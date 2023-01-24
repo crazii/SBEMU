@@ -17,6 +17,9 @@
 //#define MPXPLAY_USE_DEBUGF 1
 #define MPXPLAY_DEBUG_OUTPUT stdout
 
+#ifdef SBEMU
+#include <DPMI/DBGUTIL.H>
+#endif
 #include "mpxplay.h"
 #include <math.h>
 #include <stdlib.h>
@@ -434,7 +437,7 @@ one_mixerfunc_info MIXER_FUNCINFO_seekspeed={
 
 unsigned int mixer_speed_lq(PCM_CV_TYPE_S *pcm16,unsigned int samplenum, unsigned int channels, unsigned int samplerate, unsigned int newrate)
 {
- const unsigned int instep=((samplerate/newrate)<<8) | ((256*(samplerate%newrate)/newrate)&0xFF);
+ const unsigned int instep=((samplerate/newrate)<<8) | (((256*(samplerate%newrate)+newrate/2)/newrate)&0xFF);
  const unsigned int inend=(samplenum/channels) << 8;
  PCM_CV_TYPE_S *pcm,*intmp;
  unsigned long ipi;
@@ -442,7 +445,7 @@ unsigned int mixer_speed_lq(PCM_CV_TYPE_S *pcm16,unsigned int samplenum, unsigne
  if(!samplenum)
   return 0;
  assert(((samplenum/channels)&0xF0000000) == 0); //too many samples, need other approches.
- unsigned int buffcount = max(((float)samplenum*newrate+samplerate-1)/samplerate,samplenum);
+ unsigned int buffcount = max(((long long)samplenum*newrate+samplerate-1)/samplerate,samplenum)+2;
  PCM_CV_TYPE_S* buff = (PCM_CV_TYPE_S*)malloc(buffcount*sizeof(PCM_CV_TYPE_S));
 
  mpxplay_debugf(MPXPLAY_DEBUG_OUTPUT, "step: %08x, end: %08x\n", instep, inend);
@@ -468,6 +471,7 @@ unsigned int mixer_speed_lq(PCM_CV_TYPE_S *pcm16,unsigned int samplenum, unsigne
  }while(inpos<inend);
 
  mpxplay_debugf(MPXPLAY_DEBUG_OUTPUT, "sample count: %d\n", pcm-buff);
+ //_LOG("MIXER_SPEED_LQ: %d, %d\n", pcm-buff, buffcount);
  assert(pcm-buff <= buffcount);
  memcpy(pcm16, buff, (pcm-buff)*sizeof(PCM_CV_TYPE_S));
  free(buff);

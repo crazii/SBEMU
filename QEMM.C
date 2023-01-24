@@ -24,6 +24,7 @@ static uint16_t QEMM_OldCallbackCS;
 static void __NAKED QEMM_RM_Wrapper()
 {//al=data,cl=out,dx=port
     _ASM_BEGIN16
+        _ASM(cli)
         _ASM(call dword ptr cs:[0])
         _ASM(retf)
     _ASM_END16
@@ -46,10 +47,10 @@ static void QEMM_TrapHandler()
         {
             if((link->iodt[i].port&0xFFFF) == port)
             {
-                //if(port >= 0x220 /*&& port <= 0x22F*/) _LOG("handler: %04x ", link->iodt[i].port&0xFFFF);
                 QEMM_TrapHandlerREG.w.flags &= ~CPU_CFLAG;
+                //uint8_t val2 = link->iodt[i].handler(port, val, out);
+                //QEMM_TrapHandlerREG.h.al = out ? QEMM_TrapHandlerREG.h.al : val2;
                 QEMM_TrapHandlerREG.h.al = link->iodt[i].handler(port, val, out);
-                //if(port >= 0x220 /*&& port <= 0x22F*/) _LOG("handler end: %04x ", link->iodt[i].port&0xFFFF);
                 return;
             }
         }

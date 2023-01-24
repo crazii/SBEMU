@@ -38,6 +38,8 @@ uint8_t VDMA_Read(uint16_t port);
 
 uint32_t VDMA_GetAddress(int channel);
 uint32_t VDMA_GetCounter(int channel);
+int32_t VDMA_GetIndex(int channel);
+int32_t VDMA_SetIndex(int channel, int32_t index);
 int DMA_GetAuto();
 
 #ifdef __cplusplus

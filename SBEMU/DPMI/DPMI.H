@@ -4,7 +4,6 @@
 
 //configs
 #define DPMI_USE_XMS_HEAP 0
-#define DPMI_USE_RM_ISR 0 //hdpmi doesn't need rm isr. in real mode, interrupt will be routed to pm isr
 
 //a DPMI wrapper for different compilers. Borland C++, DJGPP, WatCom etc.
 //the porpose of this file is to hide all __dpmi* or int 31h calls from outside
@@ -185,11 +184,8 @@ uint16_t DPMI_CallRealModeINT(uint8_t i, DPMI_REG* reg);
 uint16_t DPMI_CallRealModeIRET(DPMI_REG* reg);
 //install interrupt service routine. ISR use normal return, no need to do IRET.
 //return 0 if succeed
-uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), 
-#if DPMI_USE_RM_ISR
-void(*ISR_RM)(void), DPMI_REG* RMReg, 
-#endif
-DPMI_ISR_HANDLE* outputp handle);
+uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), DPMI_ISR_HANDLE* outputp handle);
+uint16_t DPMI_InstallRealModeISR(uint8_t i, void(*ISR_RM)(void), DPMI_REG* RMReg, DPMI_ISR_HANDLE* outputp handle);
 
 uint16_t DPMI_UninstallISR(DPMI_ISR_HANDLE* inputp handle);
 uint32_t DPMI_CallOldISR(DPMI_ISR_HANDLE* inputp handle);
