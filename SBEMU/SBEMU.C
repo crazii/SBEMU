@@ -23,6 +23,7 @@ static int SBEMU_TriggerIRQ = 0;
 static uint8_t SBEMU_IRQMap[4] = {2,5,7,10};
 static uint8_t SBEMU_MixerRegIndex = 0;
 static uint8_t SBEMU_idbyte;
+static uint8_t SBEMU_WS;
 static int SBEMU_TimeConstantMapMono[][2] =
 {
     0xA5, 11025,
@@ -262,7 +263,9 @@ uint8_t SBEMU_DSP_Read(uint16_t port)
 uint8_t SBEMU_DSP_WriteStatus(uint16_t port)
 {
     _LOG("SBEMU: DSP WS\n");
-    return 0; //ready for write (bit7 clear)
+    //return 0; //ready for write (bit7 clear)
+    SBEMU_WS += 0x80; //some games will wait on busy first
+    return SBEMU_WS;
 }
 
 uint8_t SBEMU_DSP_ReadStatus(uint16_t port)
