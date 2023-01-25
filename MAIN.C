@@ -22,13 +22,21 @@ extern int16_t* TEST_Sample;
 extern unsigned long TEST_SampleLen;
 
 mpxplay_audioout_info_s aui = {0};
-
-#define MAIN_USE_INT70 0
+#define MAIN_USE_TIMER 0
+#if MAIN_USE_TIMER
+#define MAIN_USE_INT70 1
 #define MAIN_INT70_FREQ 1024 //1024 max
-#define MAIN_PCM_SAMPLESIZE 32768
 #define MAIN_FREQ (MAIN_USE_INT70 ? MAIN_INT70_FREQ : 18) //because some programs will assume default frequency on running/uninstalling its own timer, so we don't change the default
 #define MAIN_SAMPLES (SBEMU_SAMPLERATE / MAIN_FREQ)
+#define MAIN_PCM_SAMPLESIZE 32768
 static const int MAIN_PCM_COUNT = (MAIN_PCM_SAMPLESIZE / (MAIN_SAMPLES*SBEMU_CHANNELS) * MAIN_SAMPLES*SBEMU_CHANNELS);
+static int16_t MAIN_OPLPCM[MAIN_SAMPLES*8+256];
+static int MAIN_PCMEndTag = MAIN_PCM_COUNT;
+#else
+#define MAIN_USE_INT70 0
+#define MAIN_PCM_SAMPLESIZE 8192
+static int16_t MAIN_OPLPCM[MAIN_PCM_SAMPLESIZE+256];
+#endif
 
 static DPMI_ISR_HANDLE MAIN_TimerIntHandlePM;
 static DPMI_REG MAIN_TimerPMReg = {0};
@@ -39,14 +47,13 @@ static uint32_t MAIN_DMA_Size = 0;
 static uint32_t MAIN_DMA_MappedAddr = 0;
 static uint32_t MAIN_SBBytes = 0;
 static int16_t MAIN_PCM[MAIN_PCM_SAMPLESIZE+256];
-static int16_t MAIN_OPLPCM[MAIN_SAMPLES*8+256];
+
 static int MAIN_PCMStart;
 static int MAIN_PCMEnd;
-static int MAIN_PCMEndTag = MAIN_PCM_COUNT;
-static void MAIN_TimerInterrupt();
+static void MAIN_Interrupt();
 //need capture both RM & PM context to issue virq
-static void MAIN_TimerInterruptPM();
-static void MAIN_TimerInterruptRM();
+static void MAIN_InterruptPM();
+static void MAIN_InterruptRM();
 static void MAIN_EnableInt70();
 
 static uint32_t MAIN_OPL3_388(uint32_t port, uint32_t val, uint32_t out)
@@ -322,13 +329,14 @@ int main(int argc, char* argv[])
         //TestSound(FALSE);
     }
 
-    SBEMU_Init(MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value);
+    SBEMU_Init(MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value, &MAIN_Interrupt);
     for(int i = 0; i < countof(MAIN_SB_IODT); ++i)
         MAIN_SB_IODT[i].port += MAIN_Options[OPT_ADDR].value;
     QEMM_IODT* SB_Iodt = MAIN_Options[OPT_OPL].value ? MAIN_SB_IODT : MAIN_SB_IODT+4;
     int SB_IodtCount = MAIN_Options[OPT_OPL].value ? countof(MAIN_SB_IODT) : countof(MAIN_SB_IODT)-4;
     //MAIN_SB_IODT[countof(MAIN_SB_IODT)-1].port = DPMI_LoadW(DPMI_SEGOFF2L(0x40,0x63)) + 6;
-
+    
+    /*
     BOOL QEMMInstalledVDMA = QEMM_Install_IOPortTrap(MAIN_VDMA_IODT, countof(MAIN_VDMA_IODT), &MAIN_VDMA_IOPT);
     #if MAIN_USE_INT70 //will crash with VIRQ installed, do it temporarily. TODO: figure out why
     BOOL QEMMInstalledVIRQ = TRUE;
@@ -343,16 +351,21 @@ int main(int argc, char* argv[])
     BOOL HDPMIInstalledVIRQ1 = HDPMIPT_Install_IOPortTrap(0x20, 0x21, MAIN_VIRQ_IODT, 2, &MAIN_VIRQ_IOPT_PM1);
     BOOL HDPMIInstalledVIRQ2 = HDPMIPT_Install_IOPortTrap(0xA0, 0xA1, MAIN_VIRQ_IODT+2, 2, &MAIN_VIRQ_IOPT_PM2);
     BOOL HDPMIInstalledSB = HDPMIPT_Install_IOPortTrap(MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_ADDR].value+0x0F, SB_Iodt, SB_IodtCount, &MAIN_SB_IOPT_PM);
-
-    BOOL PM_ISR = DPMI_InstallISR(MAIN_USE_INT70 ? 0x70 : 0x08, MAIN_TimerInterruptPM, &MAIN_TimerIntHandlePM) == 0;
+    */
+    #if MAIN_USE_TIMER
+    BOOL PM_ISR = DPMI_InstallISR(MAIN_USE_INT70 ? 0x70 : 0x08, MAIN_InterruptPM, &MAIN_TimerIntHandlePM) == 0;
     #if MAIN_USE_INT70
     MAIN_EnableInt70();
+    #endif
+    #else
+    BOOL PM_ISR = DPMI_InstallISR(PIC_IRQ2VEC(aui.card_irq), MAIN_InterruptPM, &MAIN_TimerIntHandlePM) == 0;
+    PIC_UnmaskIRQ(aui.card_irq);    
     #endif
 
     BOOL TSR = TRUE;
     if(!PM_ISR
-    || !QEMMInstalledVDMA || !QEMMInstalledVIRQ || !QEMMInstalledSB
-    || !HDPMIInstalledVDMA1 || !HDPMIInstalledVDMA2 || !HDPMIInstalledVDMA3 || !HDPMIInstalledVIRQ1 || !HDPMIInstalledVIRQ2 || !HDPMIInstalledSB
+    //|| !QEMMInstalledVDMA || !QEMMInstalledVIRQ || !QEMMInstalledSB
+    //|| !HDPMIInstalledVDMA1 || !HDPMIInstalledVDMA2 || !HDPMIInstalledVDMA3 || !HDPMIInstalledVIRQ1 || !HDPMIInstalledVIRQ2 || !HDPMIInstalledSB
     || !(TSR=DPMI_TSR()))
     {
         if(MAIN_Options[OPT_OPL].value)
@@ -360,7 +373,7 @@ int main(int argc, char* argv[])
             QEMM_Uninstall_IOPortTrap(&OPL3IOPT);
             HDPMIPT_Uninstall_IOPortTrap(&OPL3IOPT_PM);
         }
-
+        /*
         if(!QEMMInstalledVDMA || !QEMMInstalledVIRQ || !QEMMInstalledSB)
             printf("Error: Failed installing IO port trap for QEMM.\n");
         if(QEMMInstalledVDMA) QEMM_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT);
@@ -377,7 +390,7 @@ int main(int argc, char* argv[])
         if(HDPMIInstalledVIRQ1) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM1);
         if(HDPMIInstalledVIRQ2) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM2);
         if(HDPMIInstalledSB) HDPMIPT_Uninstall_IOPortTrap(&MAIN_SB_IOPT_PM);
-
+        */
         if(!PM_ISR)
             printf("Error: Failed installing timer.\n");
         if(PM_ISR) DPMI_UninstallISR(&MAIN_TimerIntHandlePM);
@@ -388,9 +401,8 @@ int main(int argc, char* argv[])
     return 1;
 }
 
-static void MAIN_TimerInterruptPM()
+static void MAIN_InterruptPM()
 {
-    CLIS();
     #if MAIN_USE_INT70
     if(++MAIN_Int70Counter >= (1024/MAIN_INT70_FREQ))
     #endif
@@ -418,7 +430,7 @@ static void MAIN_TimerInterruptPM()
         DBG_DumpREG(&MAIN_TimerPMReg);//while(1);
         #endif
 
-        MAIN_TimerInterrupt();
+        MAIN_Interrupt();
     }
     
     DPMI_CallOldISR(&MAIN_TimerIntHandlePM);
@@ -426,9 +438,12 @@ static void MAIN_TimerInterruptPM()
     #if MAIN_USE_INT70
     MAIN_EnableInt70();
     #endif
+    #if !MAIN_USE_TIMER
+    PIC_UnmaskIRQ(aui.card_irq);
+    #endif
 }
 
-static void MAIN_TimerInterrupt()
+static void MAIN_Interrupt()
 {
     #if 0
     const int samples = MAIN_SAMPLES*2;
@@ -439,7 +454,17 @@ static void MAIN_TimerInterrupt()
     cur += aui.samplenum;
     AU_writedata(&aui);
     #else
+    #if MAIN_USE_TIMER
     int samples = MAIN_SAMPLES;
+    #else
+    if(aui.card_handler->irq_routine) aui.card_handler->irq_routine(&aui);
+    aui.card_outbytes = aui.card_dmasize;
+    int samples = AU_cardbuf_space(&aui) / sizeof(int16_t) / 2; //16 bit, 2 channels
+    if(samples == 0)
+        return;
+    #endif
+
+    #if MAIN_USE_TIMER
     if((MAIN_PCMEnd - MAIN_PCMStart + MAIN_PCMEndTag)%MAIN_PCMEndTag >= MAIN_PCMEndTag-MAIN_SAMPLES*4) //buffer full
     {
         aui.samplenum = MAIN_PCMEnd >= MAIN_PCMStart ? MAIN_PCMEnd - MAIN_PCMStart : MAIN_PCMEndTag - MAIN_PCMStart;
@@ -454,6 +479,7 @@ static void MAIN_TimerInterrupt()
         }
         return;
     }
+    #endif
     /*if(MAIN_PCMEnd >= MAIN_PCMStart && MAIN_PCMEnd - MAIN_PCMStart < MAIN_SAMPLES*4) //(almost) empty
         samples += samples/2; //extra samples to avoid underrun due to timer interrupt precision
     //_LOG("PTR: %d, %d, %d\n", MAIN_PCMEnd, MAIN_PCMStart, MAIN_PCMEnd - MAIN_PCMStart);*/
@@ -529,12 +555,6 @@ static void MAIN_TimerInterrupt()
             }
         } while(DMA_GetAuto() && (pos < samples) && SBEMU_HasStarted());
         samples = pos;
-        /*while(pos < samples)
-        {
-            MAIN_PCM[MAIN_PCMEnd+pos*2] = 0;
-            MAIN_PCM[MAIN_PCMEnd+pos*2+1] = 0;
-            ++pos;
-        }*/
         //_LOG("digital end\n");
     }
     else if(!MAIN_Options[OPT_OPL].value)
@@ -562,14 +582,14 @@ static void MAIN_TimerInterrupt()
         }
     }
     samples *= 2; //to stereo
-    MAIN_PCMEnd += samples;
 
+    #if MAIN_USE_TIMER
+    MAIN_PCMEnd += samples;
     if(MAIN_PCMEnd >= MAIN_PCM_COUNT - MAIN_SAMPLES*4)
     {
         MAIN_PCMEndTag = MAIN_PCMEnd;
         MAIN_PCMEnd = 0;
     }
-
     aui.samplenum = MAIN_PCMEnd >= MAIN_PCMStart ? MAIN_PCMEnd - MAIN_PCMStart : MAIN_PCMEndTag - MAIN_PCMStart;
     aui.pcm_sample = MAIN_PCM + MAIN_PCMStart;
     MAIN_PCMStart += aui.samplenum - AU_writedata(&aui);
@@ -580,15 +600,21 @@ static void MAIN_TimerInterrupt()
         aui.pcm_sample = MAIN_PCM + MAIN_PCMStart;
         MAIN_PCMStart += aui.samplenum - AU_writedata(&aui);
     }
+    #else
+    aui.samplenum = samples;
+    aui.pcm_sample = MAIN_PCM + MAIN_PCMStart;
+    AU_writedata(&aui);
+    #endif
+
     //_LOG("TIMEREND\n");
     #endif
 }
+
 
 static void MAIN_EnableInt70()
 {
     CLIS();
     PIC_UnmaskIRQ(8);
-
     outp(0x70, 0x0A);
     int freq = inp(0x71);
     if(freq != 0x26) //1024

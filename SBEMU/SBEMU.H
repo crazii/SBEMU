@@ -88,7 +88,7 @@ uint8_t SBEMU_DSP_ReadStatus(uint16_t port); //read buffer status.
 uint8_t SBEMU_DSP_INT16ACK(uint16_t port);
 
 //used by emulations
-void SBEMU_Init(int irq, int dma);
+void SBEMU_Init(int irq, int dma, void(*startCB)(void));
 uint8_t SBEMU_GetIRQ();
 uint8_t SBEMU_GetDMA();
 int SBEMU_HasStarted();

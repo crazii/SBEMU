@@ -6,6 +6,7 @@
 #define SBEMU_RESET_START 0
 #define SBEMU_RESET_END 1
 #define SBEMU_RESET_POLL 2
+void(*SBEMU_StartCB)(void);
 static int SBEMU_ResetState = SBEMU_RESET_END;
 static int SBEMU_Started = 0;
 static int SBEMU_IRQ = 5;
@@ -90,6 +91,7 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
     _LOG("SBEMU: DSP write %02x, original: %02x\n", value, SBEMU_DSPCMD);
     if(SBEMU_HighSpeed)
         return;
+    int OldStarted = SBEMU_Started;
     if(SBEMU_DSPCMD == 0)
     {
         SBEMU_DSPCMD = value;
@@ -109,7 +111,6 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
     }
     else
     {
-        int OldStarted = SBEMU_Started;
         switch(SBEMU_DSPCMD)
         {
             case SBEMU_CMD_SET_TIMECONST:
@@ -210,7 +211,11 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
         }
         if(SBEMU_DSPCMD_Subindex >= 2)
             SBEMU_DSPCMD = 0;
-        /*if(SBEMU_Started && !OldStarted && SBEMU_Samples < 16)//handle driver detection
+    }
+    if(SBEMU_Started && !OldStarted)//handle driver detection
+    {
+        if(SBEMU_StartCB) SBEMU_StartCB();
+        /*if(SBEMU_Samples < 16)
         {
             SBEMU_Started = 0;
             SBEMU_MixerRegs[SBEMU_MIXERREG_INT_STS] = (SBEMU_Bits==8) ? 0x01 : 0x02;
@@ -286,10 +291,11 @@ uint8_t SBEMU_DSP_INT16ACK(uint16_t port)
     return 0xFF;
 }
 
-void SBEMU_Init(int irq, int dma)
+void SBEMU_Init(int irq, int dma, void(*startCB)(void))
 {
     SBEMU_IRQ = irq;
     SBEMU_DMA = dma;
+    SBEMU_StartCB = startCB;
 }
 
 uint8_t SBEMU_GetIRQ()

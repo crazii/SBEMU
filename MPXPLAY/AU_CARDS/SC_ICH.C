@@ -31,9 +31,13 @@
 #define ICH_PO_CR_REG     0x1b  // PCM out Control Register
 #define ICH_PO_CR_START   0x01  // start codec
 #define ICH_PO_CR_RESET   0x02  // reset codec
+#define ICH_PO_CR_LVBIE   0x04  // last valid buffer interrupt enable
+#define ICH_PO_CR_IOCE    0x10  // IOC enable
 
 #define ICH_PO_SR_REG     0x16  // PCM out Status register
 #define ICH_PO_SR_DCH     0x01  // DMA controller halted
+#define ICH_PO_SR_LVBCI   0x04  // last valid buffer completion interrupt
+#define ICH_PO_SR_BCIS    0x08  // buffer completion interrupt status (IOC)
 
 #define ICH_GLOB_CNT_REG       0x2c  // Global control register
 #define ICH_GLOB_CNT_ACLINKOFF 0x00000008 // turn off ac97 link
@@ -63,6 +67,8 @@
 #define ICH_DMABUF_ALIGN (ICH_DMABUF_PERIODS*ICH_MAX_CHANNELS*ICH_MAX_BYTES) // 256
 
 #define ICH_DEFAULT_RETRY 1000
+
+#define ICH_BD_IOC        0x8000
 
 typedef struct intel_card_s
 {
@@ -208,6 +214,7 @@ static void snd_intel_chip_init(struct intel_card_s *card)
  snd_intel_write_8(card,ICH_PO_CR_REG,ICH_PO_CR_RESET); // reset channels
  #ifdef SBEMU
  pds_mdelay(50);
+ snd_intel_write_8(card,ICH_PO_CR_REG,/*ICH_PO_CR_LVBIE*/ICH_PO_CR_IOCE);
  #endif
 
  mpxplay_debugf(ICH_DEBUG_OUTPUT,"chip init end");
@@ -293,7 +300,7 @@ static void snd_intel_prepare_playback(struct intel_card_s *card,struct mpxplay_
  period_size_samples=card->period_size_bytes/(aui->bits_card>>3);
  for(i=0; i<ICH_DMABUF_PERIODS; i++){
   table_base[i*2]=(uint32_t)pds_cardmem_physicalptr(card->dm,(char *)card->pcmout_buffer+(i*card->period_size_bytes));
-  table_base[i*2+1]=period_size_samples;
+  table_base[i*2+1]=period_size_samples | (ICH_BD_IOC<<16);
  }
  snd_intel_write_32(card,ICH_PO_BDBAR_REG,(uint32_t)pds_cardmem_physicalptr(card->dm,table_base));
 
@@ -367,8 +374,8 @@ static int INTELICH_adetect(struct mpxplay_audioout_info_s *aui)
  card->baseport_codec = pcibios_ReadConfig_Dword(card->pci_dev, PCIR_NAMBAR)&0xfff0;
  if(!card->baseport_codec)
   goto err_adetect;
- card->irq = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
-
+ aui->card_irq = card->irq = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
+ 
  card->device_type=card->pci_dev->device_type;
 
  mpxplay_debugf(ICH_DEBUG_OUTPUT,"vend_id:%4.4X dev_id:%4.4X devtype:%s bmport:%4.4X mixport:%4.4X irq:%d",
@@ -572,6 +579,18 @@ static unsigned long INTELICH_readMIXER(struct mpxplay_audioout_info_s *aui,unsi
  return snd_intel_codec_read(card,reg);
 }
 
+#ifdef SBEMU
+static void INTELICH_IRQRoutine(mpxplay_audioout_info_s* aui)
+{
+  intel_card_s *card=aui->card_private_data;
+  if(snd_intel_read_8(card,ICH_PO_SR_REG)&ICH_PO_SR_LVBCI)
+    snd_intel_write_8(card, ICH_PO_SR_REG, ICH_PO_SR_LVBCI);
+
+  if(snd_intel_read_8(card,ICH_PO_SR_REG)&ICH_PO_SR_BCIS)
+    snd_intel_write_8(card, ICH_PO_SR_REG, ICH_PO_SR_BCIS);
+}
+#endif
+
 one_sndcard_info ICH_sndcard_info={
  "ICH AC97",
  SNDCARD_LOWLEVELHAND|SNDCARD_INT08_ALLOWED,
@@ -589,7 +608,11 @@ one_sndcard_info ICH_sndcard_info={
  &INTELICH_getbufpos,
  &MDma_clearbuf,
  NULL, // ICH doesn't need dma-monitor (LVI handles it)
+ #ifdef SBEMU
+ &INTELICH_IRQRoutine,
+ #else
  NULL,
+ #endif
 
  &INTELICH_writeMIXER,
  &INTELICH_readMIXER,

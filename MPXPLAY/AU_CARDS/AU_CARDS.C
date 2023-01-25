@@ -33,7 +33,9 @@ typedef int (*aucards_writedata_t)(struct mpxplay_audioout_info_s *aui,unsigned 
 static unsigned int cardinit(struct mpxplay_audioout_info_s *aui);
 static unsigned int carddetect(struct mpxplay_audioout_info_s *aui, unsigned int retry);
 
+#ifndef SBEMU
 static unsigned int AU_cardbuf_space(struct mpxplay_audioout_info_s *aui);
+#endif
 static int aucards_writedata_normal(struct mpxplay_audioout_info_s *aui,unsigned long outbytes_left);
 static int aucards_writedata_intsound(struct mpxplay_audioout_info_s *aui,unsigned long outbytes_left);
 #ifdef SBEMU
@@ -878,7 +880,10 @@ void AU_setmixer_all(struct mpxplay_audioout_info_s *aui)
 //-------------------------------------------------------------------------
 #define SOUNDCARD_BUFFER_PROTECTION 32 // in bytes (requried for PCI cards)
 
-static unsigned int AU_cardbuf_space(struct mpxplay_audioout_info_s *aui)
+#ifndef SBEMU
+static
+#endif
+unsigned int AU_cardbuf_space(struct mpxplay_audioout_info_s *aui)
 {
  unsigned long buffer_protection;
 
@@ -910,7 +915,7 @@ static unsigned int AU_cardbuf_space(struct mpxplay_audioout_info_s *aui)
      if(bufpos>=aui->card_outbytes)
       aui->card_dmalastput=bufpos-aui->card_outbytes;
      else
-      aui->card_dmalastput=aui->card_dmasize+bufpos-aui->card_outbytes;
+      aui->card_dmalastput=aui->card_dmasize+bufpos-aui->card_outbytes+aui->card_bytespersign;
      funcbit_smp_disable(aui->card_infobits,AUINFOS_CARDINFOBIT_DMAUNDERRUN);
     }
    }else{
