@@ -96,17 +96,46 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
     {
         SBEMU_DSPCMD = value;
         SBEMU_DSPCMD_Subindex = 0;
-        if(SBEMU_DSPCMD == SBEMU_CMD_TRIGGER_IRQ)
+        switch(SBEMU_DSPCMD)
         {
-            SBEMU_TriggerIRQ = 1;
-            SBEMU_DSPCMD = 0;
-        }
-        if(SBEMU_DSPCMD == SBEMU_CMD_DAC_SPEAKER_ON || SBEMU_DSPCMD == SBEMU_CMD_DAC_SPEAKER_OFF)
-            SBEMU_DSPCMD = 0;
-        if(SBEMU_DSPCMD == SBEMU_CMD_HALT_DMA || SBEMU_DSPCMD == SBEMU_CMD_CONTINUE_DMA)
-        {
-            SBEMU_Started = SBEMU_DSPCMD == SBEMU_CMD_CONTINUE_DMA;
-            SBEMU_DSPCMD = 0;
+            case SBEMU_CMD_TRIGGER_IRQ:
+            {
+                SBEMU_TriggerIRQ = 1;
+                SBEMU_DSPCMD = 0;
+            }
+            break;
+            case SBEMU_CMD_DAC_SPEAKER_ON:
+            case SBEMU_CMD_DAC_SPEAKER_OFF:
+                SBEMU_DSPCMD = 0;
+                break;
+            case SBEMU_CMD_HALT_DMA:
+            case SBEMU_CMD_CONTINUE_DMA:
+            {
+                SBEMU_Started = SBEMU_DSPCMD == SBEMU_CMD_CONTINUE_DMA;
+                SBEMU_DSPCMD = 0;
+            }
+            break;
+            case SBEMU_CMD_8BIT_OUT_AUTO_HS:
+            case SBEMU_CMD_8BIT_OUT_AUTO:
+            {
+                SBEMU_Auto = TRUE;
+                SBEMU_Bits = 8;
+                SBEMU_HighSpeed = (SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_AUTO_HS);
+                SBEMU_Started = TRUE; //start transfer
+                SBEMU_DSPCMD = 0;
+            }
+            break;
+            case SBEMU_CMD_EXIT_16BIT_AUTO:
+            case SBEMU_CMD_EXIT_8BIT_AUTO:
+            {
+                if(SBEMU_Auto)
+                {
+                    SBEMU_Auto = FALSE;
+                    SBEMU_Started = FALSE;
+                }
+                SBEMU_DSPCMD = 0;
+            }
+            break;
         }
     }
     else
@@ -118,7 +147,7 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                 SBEMU_SampleRate = 0;
                 for(int i = 0; i < 3; ++i)
                 {
-                    if(value >= SBEMU_TimeConstantMapMono[i][0]-1 && value <= SBEMU_TimeConstantMapMono[i][0]+1)
+                    if(value >= SBEMU_TimeConstantMapMono[i][0]-3 && value <= SBEMU_TimeConstantMapMono[i][0]+3)
                     {
                         SBEMU_SampleRate = SBEMU_TimeConstantMapMono[i][1] / SBEMU_GetChannels();
                         break;
@@ -142,31 +171,8 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                     SBEMU_Started = (SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_1 || SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_1_HS); //start transfer
                     SBEMU_HighSpeed = (SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_AUTO_HS);
                     if(SBEMU_Started)
-                    {
                         SBEMU_Bits = 8;
-                    }
-                }  
-            }
-            break;
-            case SBEMU_CMD_8BIT_OUT_AUTO_HS:
-            case SBEMU_CMD_8BIT_OUT_AUTO:
-            {
-                SBEMU_Auto = TRUE;
-                SBEMU_Bits = 8;
-                SBEMU_HighSpeed = (SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_AUTO_HS);
-                SBEMU_Started = TRUE; //start transfer
-                SBEMU_DSPCMD_Subindex = 2;
-            }
-            break;
-            case SBEMU_CMD_EXIT_16BIT_AUTO:
-            case SBEMU_CMD_EXIT_8BIT_AUTO:
-            {
-                if(SBEMU_Auto)
-                {
-                    SBEMU_Auto = FALSE;
-                    SBEMU_Started = FALSE;
                 }
-                SBEMU_DSPCMD_Subindex = 2;
             }
             break;
             case SBEMU_CMD_8OR16_OUT_1: //command start: sample rate, next command: mode
@@ -214,12 +220,17 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
     }
     if(SBEMU_Started && !OldStarted)//handle driver detection
     {
-        if(SBEMU_StartCB) SBEMU_StartCB();
+        if(SBEMU_StartCB)
+        {
+            //CLIS();
+            //SBEMU_StartCB(); //if don't do this, need always output 0 PCM to keep interrupt alive for now
+            //STIL();
+        }
         /*if(SBEMU_Samples < 16)
         {
             SBEMU_Started = 0;
             SBEMU_MixerRegs[SBEMU_MIXERREG_INT_STS] = (SBEMU_Bits==8) ? 0x01 : 0x02;
-            VIRQ_Invoke(SBEMU_IRQ);
+            VIRQ_Invoke(SBEMU_IRQ, NULL, FALSE);
         }*/
     }
 }

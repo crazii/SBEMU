@@ -437,7 +437,7 @@ one_mixerfunc_info MIXER_FUNCINFO_seekspeed={
 
 unsigned int mixer_speed_lq(PCM_CV_TYPE_S *pcm16,unsigned int samplenum, unsigned int channels, unsigned int samplerate, unsigned int newrate)
 {
- const unsigned int instep=((samplerate/newrate)<<8) | (((256*(samplerate%newrate)+newrate/2)/newrate)&0xFF);
+ const unsigned int instep=((samplerate/newrate)<<8) | (((256*(samplerate%newrate)+newrate-1)/newrate)&0xFF);
  const unsigned int inend=(samplenum/channels) << 8;
  PCM_CV_TYPE_S *pcm,*intmp;
  unsigned long ipi;

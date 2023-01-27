@@ -36,6 +36,7 @@ extern "C"
 void VDMA_Write(uint16_t port, uint8_t byte);
 uint8_t VDMA_Read(uint16_t port);
 
+void VDMA_Virtualize(int channel, int enable);
 uint32_t VDMA_GetAddress(int channel);
 uint32_t VDMA_GetCounter(int channel);
 int32_t VDMA_GetIndex(int channel);

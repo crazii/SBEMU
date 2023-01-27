@@ -39,7 +39,7 @@ static void QEMM_TrapHandler()
     uint8_t out = QEMM_TrapHandlerREG.h.cl;
     QEMM_IODT_LINK* link = QEMM_IODT_header.next;
 
-    //_LOG("Port trap: %x\n", port);
+    //_LOG("Port trap: %s %x\n", out ? "out" : "in", port);
     QEMM_InCallback = TRUE;
     while(link)
     {

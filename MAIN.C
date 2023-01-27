@@ -38,6 +38,8 @@ static int MAIN_PCMEndTag = MAIN_PCM_COUNT;
 static int16_t MAIN_OPLPCM[MAIN_PCM_SAMPLESIZE+256];
 #endif
 
+#define MAIN_TRAP_PIC_ONDEMAND 1
+
 static DPMI_ISR_HANDLE MAIN_TimerIntHandlePM;
 static DPMI_REG MAIN_TimerPMReg = {0};
 static int MAIN_TimerINTV86;
@@ -111,9 +113,9 @@ static uint32_t MAIN_SB_DSP_ReadINT16BitACK(uint32_t port, uint32_t val, uint32_
 {
     return out ? val : (val &=~0xFF, val |= SBEMU_DSP_INT16ACK(port));
 }
-static uint32_t MAIN_SB_Delay(uint32_t port, uint32_t val, uint32_t out)
+static uint32_t MAIN_SB_MilesDelay(uint32_t port, uint32_t val, uint32_t out)
 {
-    //if(!out) {volatile long x = 0; while(x++<0x7FFFF0L);}
+    if(!out) {volatile long x = 0; while(x++<0x7FFFF0L);}
     return out ? (UntrappedIO_OUT(port, val),val) : (val &=~0xFF, val |=UntrappedIO_IN(port));
 }
 
@@ -170,7 +172,7 @@ static QEMM_IODT MAIN_SB_IODT[12] =
     0x0C, &MAIN_SB_DSP_Write,
     0x0E, &MAIN_SB_DSP_ReadStatus,
     0x0F, &MAIN_SB_DSP_ReadINT16BitACK,
-    //0x00, &MAIN_SB_Delay
+    //0x00, &MAIN_SB_MilesDelay   //extra delay for miles sound detection
 };
 
 QEMM_IOPT MAIN_VDMA_IOPT;
@@ -326,19 +328,21 @@ int main(int argc, char* argv[])
         }
 
         OPL3EMU_Init(aui.freq_card);
+        printf("OPL3 enabled at port 388h.\n");
         //TestSound(FALSE);
     }
 
     SBEMU_Init(MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value, &MAIN_Interrupt);
+    VDMA_Virtualize(MAIN_Options[OPT_DMA].value, TRUE);
     for(int i = 0; i < countof(MAIN_SB_IODT); ++i)
         MAIN_SB_IODT[i].port += MAIN_Options[OPT_ADDR].value;
     QEMM_IODT* SB_Iodt = MAIN_Options[OPT_OPL].value ? MAIN_SB_IODT : MAIN_SB_IODT+4;
     int SB_IodtCount = MAIN_Options[OPT_OPL].value ? countof(MAIN_SB_IODT) : countof(MAIN_SB_IODT)-4;
     //MAIN_SB_IODT[countof(MAIN_SB_IODT)-1].port = DPMI_LoadW(DPMI_SEGOFF2L(0x40,0x63)) + 6;
-    
-    /*
+    printf("Sound Blaster emulation enabled at Adress: %x, IRQ: %x, DMA: %x", MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value);
+
     BOOL QEMMInstalledVDMA = QEMM_Install_IOPortTrap(MAIN_VDMA_IODT, countof(MAIN_VDMA_IODT), &MAIN_VDMA_IOPT);
-    #if MAIN_USE_INT70 //will crash with VIRQ installed, do it temporarily. TODO: figure out why
+    #if MAIN_TRAP_PIC_ONDEMAND || MAIN_USE_INT70 //will crash with VIRQ installed, do it temporarily. TODO: figure out why
     BOOL QEMMInstalledVIRQ = TRUE;
     #else
     BOOL QEMMInstalledVIRQ = QEMM_Install_IOPortTrap(MAIN_VIRQ_IODT, countof(MAIN_VIRQ_IODT), &MAIN_VIRQ_IOPT);
@@ -351,7 +355,7 @@ int main(int argc, char* argv[])
     BOOL HDPMIInstalledVIRQ1 = HDPMIPT_Install_IOPortTrap(0x20, 0x21, MAIN_VIRQ_IODT, 2, &MAIN_VIRQ_IOPT_PM1);
     BOOL HDPMIInstalledVIRQ2 = HDPMIPT_Install_IOPortTrap(0xA0, 0xA1, MAIN_VIRQ_IODT+2, 2, &MAIN_VIRQ_IOPT_PM2);
     BOOL HDPMIInstalledSB = HDPMIPT_Install_IOPortTrap(MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_ADDR].value+0x0F, SB_Iodt, SB_IodtCount, &MAIN_SB_IOPT_PM);
-    */
+
     #if MAIN_USE_TIMER
     BOOL PM_ISR = DPMI_InstallISR(MAIN_USE_INT70 ? 0x70 : 0x08, MAIN_InterruptPM, &MAIN_TimerIntHandlePM) == 0;
     #if MAIN_USE_INT70
@@ -359,13 +363,13 @@ int main(int argc, char* argv[])
     #endif
     #else
     BOOL PM_ISR = DPMI_InstallISR(PIC_IRQ2VEC(aui.card_irq), MAIN_InterruptPM, &MAIN_TimerIntHandlePM) == 0;
-    PIC_UnmaskIRQ(aui.card_irq);    
+    PIC_UnmaskIRQ(aui.card_irq);
     #endif
 
     BOOL TSR = TRUE;
     if(!PM_ISR
-    //|| !QEMMInstalledVDMA || !QEMMInstalledVIRQ || !QEMMInstalledSB
-    //|| !HDPMIInstalledVDMA1 || !HDPMIInstalledVDMA2 || !HDPMIInstalledVDMA3 || !HDPMIInstalledVIRQ1 || !HDPMIInstalledVIRQ2 || !HDPMIInstalledSB
+    || !QEMMInstalledVDMA || !QEMMInstalledVIRQ || !QEMMInstalledSB
+    || !HDPMIInstalledVDMA1 || !HDPMIInstalledVDMA2 || !HDPMIInstalledVDMA3 || !HDPMIInstalledVIRQ1 || !HDPMIInstalledVIRQ2 || !HDPMIInstalledSB
     || !(TSR=DPMI_TSR()))
     {
         if(MAIN_Options[OPT_OPL].value)
@@ -373,11 +377,11 @@ int main(int argc, char* argv[])
             QEMM_Uninstall_IOPortTrap(&OPL3IOPT);
             HDPMIPT_Uninstall_IOPortTrap(&OPL3IOPT_PM);
         }
-        /*
+
         if(!QEMMInstalledVDMA || !QEMMInstalledVIRQ || !QEMMInstalledSB)
             printf("Error: Failed installing IO port trap for QEMM.\n");
         if(QEMMInstalledVDMA) QEMM_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT);
-        #if !MAIN_USE_INT70
+        #if !(MAIN_USE_INT70 || MAIN_TRAP_PIC_ONDEMAND)
         if(QEMMInstalledVIRQ) QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
         #endif
         if(QEMMInstalledSB) QEMM_Uninstall_IOPortTrap(&MAIN_SB_IOPT);
@@ -390,7 +394,7 @@ int main(int argc, char* argv[])
         if(HDPMIInstalledVIRQ1) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM1);
         if(HDPMIInstalledVIRQ2) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM2);
         if(HDPMIInstalledSB) HDPMIPT_Uninstall_IOPortTrap(&MAIN_SB_IOPT_PM);
-        */
+
         if(!PM_ISR)
             printf("Error: Failed installing timer.\n");
         if(PM_ISR) DPMI_UninstallISR(&MAIN_TimerIntHandlePM);
@@ -417,15 +421,16 @@ static void MAIN_InterruptPM()
             MAIN_TimerINTV86 = context.IsV86;
             MAIN_TimerPMReg.w.ds = context.DS;
             MAIN_TimerPMReg.w.es = context.ES;
-            MAIN_TimerPMReg.w.fs = context.GS;
-            MAIN_TimerPMReg.w.gs = context.FS;
+            MAIN_TimerPMReg.w.fs = context.FS;
+            MAIN_TimerPMReg.w.gs = context.GS;
         }
         else
         {
             memset(&MAIN_TimerPMReg, 0, sizeof(MAIN_TimerPMReg));
             MAIN_TimerINTV86 = FALSE;
         }
-        //_LOG("DS:%04x\n", MAIN_TimerPMReg.w.ds);
+        //unsigned long addr; __dpmi_get_segment_base_address(MAIN_TimerPMReg.w.ds,&addr);
+        //_LOG("DS:%04x %08x ES:%04x FS:%04x GS:%04x\n", MAIN_TimerPMReg.w.ds,addr,MAIN_TimerPMReg.w.es,MAIN_TimerPMReg.w.fs,MAIN_TimerPMReg.w.gs);
         #if DEBUG && 0
         DBG_DumpREG(&MAIN_TimerPMReg);//while(1);
         #endif
@@ -433,8 +438,9 @@ static void MAIN_InterruptPM()
         MAIN_Interrupt();
     }
     
-    DPMI_CallOldISR(&MAIN_TimerIntHandlePM);
+    //DPMI_CallOldISR(&MAIN_TimerIntHandlePM);
     //DPMI_CallRealModeOldISR(&MAIN_TimerIntHandlePM);
+    PIC_SendEOI();
     #if MAIN_USE_INT70
     MAIN_EnableInt70();
     #endif
@@ -481,8 +487,8 @@ static void MAIN_Interrupt()
     }
     #endif
     /*if(MAIN_PCMEnd >= MAIN_PCMStart && MAIN_PCMEnd - MAIN_PCMStart < MAIN_SAMPLES*4) //(almost) empty
-        samples += samples/2; //extra samples to avoid underrun due to timer interrupt precision
-    //_LOG("PTR: %d, %d, %d\n", MAIN_PCMEnd, MAIN_PCMStart, MAIN_PCMEnd - MAIN_PCMStart);*/
+        samples += samples/2; //extra samples to avoid underrun due to timer interrupt precision*/
+    //_LOG("PTR: %d, %d, %d\n", MAIN_PCMEnd, MAIN_PCMStart, MAIN_PCMEnd - MAIN_PCMStart);
 
     BOOL digital = SBEMU_HasStarted();
     if(digital)
@@ -496,6 +502,7 @@ static void MAIN_Interrupt()
         int samplebytes = SBEMU_GetBits()/8;
         int channels = SBEMU_GetChannels();
         //_LOG("sample rate: %d %d\n", SB_Rate, aui.freq_card);
+        //_LOG("DMA index: %x\n", DMA_Index);
         if(DMA_Index == -1)
         {
             DMA_Index = 0;
@@ -510,18 +517,18 @@ static void MAIN_Interrupt()
             }
             if(MAIN_DMA_MappedAddr == 0)
                 MAIN_DMA_MappedAddr = DMA_Addr <= 640*1024 ? DMA_Addr : DPMI_MapMemory(DMA_Addr, DMA_Count);
-            //_LOG("DMA_ADDR:%x, %x\n",DMA_Addr, MAIN_DMA_MappedAddr);
+            _LOG("DMA_ADDR:%x, %x\n",DMA_Addr, MAIN_DMA_MappedAddr);
         }
         //_LOG("digital start\n");
         int pos = 0;
         do {
             int count = min(samples-pos, (DMA_Count-DMA_Index)/samplebytes/channels);
             count = min(count, (SB_Bytes-MAIN_SBBytes)/samplebytes/channels);
-            if(SB_Rate <= aui.freq_card)
+            if(SB_Rate < aui.freq_card)
                 count = max(2, count*SB_Rate/(aui.freq_card+SB_Rate/2));
-            else
+            else if(SB_Rate > aui.freq_card)
                 count *= (SB_Rate + aui.freq_card/2)/aui.freq_card;
-            //_LOG("samples:%d %d ", samples, count);
+            //_LOG("samples:%d %d, %d %d, %d %d\n", samples, count, DMA_Count, DMA_Index, SB_Bytes, MAIN_SBBytes);
             int bytes = count * samplebytes * channels;
 
             DPMI_CopyLinear(DPMI_PTR2L(MAIN_PCM+MAIN_PCMEnd+pos*2), MAIN_DMA_MappedAddr+DMA_Index, bytes);
@@ -541,24 +548,29 @@ static void MAIN_Interrupt()
             if(MAIN_SBBytes >= SB_Bytes)
             {
                 //_LOG("INT:%d,%d,%d,%d\n",MAIN_SBBytes,SBEMU_GetSampleBytes(),MAIN_DMAIndex,DMA_Count);
+                MAIN_SBBytes = 0;                
                 if(!SBEMU_GetAuto())
                     SBEMU_Stop();
-                MAIN_SBBytes = 0;
-                #if MAIN_USE_INT70
+                //if(!PIC_IS_IRQ_MASKED(PIC_GetIRQMask(), SBEMU_GetIRQ()))
+                //{
+                #if MAIN_USE_INT70 || MAIN_TRAP_PIC_ONDEMAND
                 QEMM_Install_IOPortTrap(MAIN_VIRQ_IODT, countof(MAIN_VIRQ_IODT), &MAIN_VIRQ_IOPT);
                 #endif
                 VIRQ_Invoke(SBEMU_GetIRQ(), &MAIN_TimerPMReg, MAIN_TimerINTV86);
-                #if MAIN_USE_INT70
+                #if MAIN_USE_INT70 || MAIN_TRAP_PIC_ONDEMAND
                 QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
                 #endif
                 SB_Bytes = SBEMU_GetSampleBytes();
+                //}
+                if(DMA_Count <= 4) //detection routine?
+                    break;
             }
         } while(DMA_GetAuto() && (pos < samples) && SBEMU_HasStarted());
-        samples = pos;
-        //_LOG("digital end\n");
+        _LOG("digital end %d %d\n", samples, pos);
+        samples = min(samples, pos);
     }
     else if(!MAIN_Options[OPT_OPL].value)
-        return;
+        memset(MAIN_PCM+MAIN_PCMStart, 0, samples*sizeof(int16_t)*2); //output muted samples.
 
     if(MAIN_Options[OPT_OPL].value)
     {

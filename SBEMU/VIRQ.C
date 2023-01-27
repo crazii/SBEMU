@@ -17,7 +17,7 @@ void VIRQ_Write(uint16_t port, uint8_t value)
     //_LOG("VIRQW:%x,%x",port,value);
     if(VIRQ_IS_VIRTUALIZING())
     {
-        _LOG("VIRQW:%x,%x\n",port,value);
+        //_LOG("VIRQW:%x,%x\n",port,value);
         if((port&0x0F) == 0x00)
         {
             int index = ((port==0x20) ? 0 : 1);
@@ -41,18 +41,18 @@ uint8_t VIRQ_Read(uint16_t port)
 {
     if(VIRQ_IS_VIRTUALIZING())
     {
-        _LOG("VIRQR:%x\n",port);
+        //_LOG("VIRQR:%x\n",port);
         if((port&0x0F) == 0x00)
         {
             int index = ((port==0x20) ? 0 : 1);
             if(VIRQ_OCW[index] == 0x0B)//ISR
             {
-                _LOG("VIRQRV: %x\n",VIRQ_ISR[index]);
+                //_LOG("VIRQRV: %x\n",VIRQ_ISR[index]);
                 return VIRQ_ISR[index];
             }
             //return VIRQ_OCW[index] == 0x0B ? VIRQ_ISR[index] : UntrappedIO_IN(port);
         }
-        _LOG("VIRQRV: 0\n");
+        //_LOG("VIRQRV: 0\n");
         return 0;
     }
     return UntrappedIO_IN(port);
@@ -61,9 +61,11 @@ uint8_t VIRQ_Read(uint16_t port)
 void VIRQ_Invoke(uint8_t irq, DPMI_REG* regs, BOOL realmode)
 {
     _LOG("CALLINT %d\n", irq);
-    unsigned long addr;__dpmi_get_segment_base_address(regs->w.ds,&addr);
-    _LOG("DS: %04x %08x\n", regs->w.ds, addr);
+    //unsigned long addr;__dpmi_get_segment_base_address(regs->w.ds,&addr);
+    //_LOG("DS: %04x %08x, %04x %04x %04x\n", regs->w.ds, addr, regs->w.es, regs->w.fs, regs->w.gs);
     CLIS();
+    int mask = PIC_GetIRQMask();
+    PIC_SetIRQMask(0xFFFF);
     VIRQ_ISR[0] = VIRQ_ISR[1] = 0;
     if(irq < 8) //master
         VIRQ_ISR[0] = 1 << irq;
@@ -73,11 +75,11 @@ void VIRQ_Invoke(uint8_t irq, DPMI_REG* regs, BOOL realmode)
         VIRQ_ISR[1] = 1 << (irq-8);
     }
     VIRQ_Irq = irq;
-    DPMI_REG r = *regs;
+    DPMI_REG r = {0};//*regs;
     r.w.flags = 0;
     r.w.ss = r.w.sp = 0;
     //DPMI_CallRealModeINT(PIC_IRQ2VEC(irq), &r); //real mode vector are local in HDPMI, IVT changes not recorded after TSR, use raw IVT
-    if(1|| realmode)
+    if(1||realmode)
     {
         int n = PIC_IRQ2VEC(irq);
         r.w.ip = DPMI_LoadW(n*4);
@@ -104,6 +106,7 @@ void VIRQ_Invoke(uint8_t irq, DPMI_REG* regs, BOOL realmode)
     }
     //asm("int $0x0D");
     VIRQ_Irq = -1;
+    PIC_SetIRQMask(mask);
     STIL();
     _LOG("CALLINTEND\n", irq);
 }

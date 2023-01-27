@@ -10,7 +10,7 @@
 
 #include "HDPMIPT.H"
 
-#define HDPMIPT_SWITCH_STACK 0 //TODO: debug
+#define HDPMIPT_SWITCH_STACK 1 //TODO: debug
 #define HDPMIPT_STACKSIZE 16384
 
 typedef struct
@@ -34,7 +34,7 @@ static QEMM_IODT_LINK* HDPMIPT_IODT_Link = &HDPMIPT_IODT_header;
 static uint16_t HDPMIPT_GetDS()
 {
     uint16_t ds;
-    asm("mov %ds, %0":"=r"(ds));
+    asm("mov %%ds, %0":"=r"(ds));
     return ds;
 }
 
@@ -51,13 +51,14 @@ static uint32_t __attribute__((noinline)) HDPMIPT_TrapHandler()
     );
 
     UntrappedIO_PM = TRUE;
-    //_LOG("Trapped PM: %x\n",port);
+    //if(port >= 0x220 && port <= 0x22F)
+    //_LOG("Trapped PM: %s %x\n", out ? "out" : "in", port);
     QEMM_IODT_LINK* link = HDPMIPT_IODT_header.next;
     while(link)
     {
         for(int i = 0; i < link->count; ++i)
         {
-            //_LOG("port:%x\n",link->iodt[i].port);
+            //_LOG("port: %s %04x, %04x\n",out ? "out" : "in",link->iodt[i].port, value);
             if(link->iodt[i].port == port)
                 return link->iodt[i].handler(port, value, out);
         }
