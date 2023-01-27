@@ -444,7 +444,7 @@ unsigned int mixer_speed_lq(PCM_CV_TYPE_S *pcm16,unsigned int samplenum, unsigne
  unsigned int inpos = 0;
  if(!samplenum)
   return 0;
- assert(((samplenum/channels)&0xF0000000) == 0); //too many samples, need other approches.
+ assert(((samplenum/channels)&0xFF000000) == 0); //too many samples, need other approches.
  unsigned int buffcount = max(((long long)samplenum*newrate+samplerate-1)/samplerate,samplenum)+2;
  PCM_CV_TYPE_S* buff = (PCM_CV_TYPE_S*)malloc(buffcount*sizeof(PCM_CV_TYPE_S));
 
@@ -454,7 +454,7 @@ unsigned int mixer_speed_lq(PCM_CV_TYPE_S *pcm16,unsigned int samplenum, unsigne
  intmp = pcm16;
 
  do{
-  unsigned int m1,m2;
+  int m1,m2;
   unsigned int ipi,ch;
   PCM_CV_TYPE_S *intmp1,*intmp2;
   ipi = inpos >> 8;
