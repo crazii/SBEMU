@@ -33,7 +33,11 @@
 #define AUCARDSCONFIG_IHD_USE_FIXED_SDO  (1<<1) // don't read stream offset (for sd_addr) from GCAP (use 0x100)
 
 #define INTHD_MAX_CHANNELS 8
+#ifdef SBEMU
+#define AZX_PERIOD_SIZE 1024
+#else
 #define AZX_PERIOD_SIZE 4096
+#endif
 
 struct intelhd_card_s
 {
@@ -771,7 +775,11 @@ static void snd_ihd_hw_init(struct intelhd_card_s *card)
  azx_writeb(card, STATESTS, STATESTS_INT_MASK);
  azx_writeb(card, RIRBSTS, RIRB_INT_MASK);
  azx_writel(card, INTSTS, ICH6_INT_CTRL_EN | ICH6_INT_ALL_STREAM);
+ #ifdef SBEMU
+ azx_writel(card, INTCTL, azx_readl(card, INTCTL) | ICH6_INT_CTRL_EN | ICH6_INT_GLOBAL_EN | ICH6_INT_ALL_STREAM);
+ #else
  azx_writel(card, INTCTL, azx_readl(card, INTCTL) | ICH6_INT_CTRL_EN | ICH6_INT_GLOBAL_EN);
+ #endif
 
  azx_writel(card, DPLBASE, 0);
  azx_writel(card, DPUBASE, 0);
@@ -876,7 +884,11 @@ static void azx_setup_periods(struct intelhd_card_s *card)
   PDS_PUTB_LE32(&bdl[off  ],(uint32_t)addr);
   PDS_PUTB_LE32(&bdl[off+1],0);
   PDS_PUTB_LE32(&bdl[off+2],card->pcmout_period_size);
+  #ifdef SBEMU
+  PDS_PUTB_LE32(&bdl[off+3],0x01);
+  #else
   PDS_PUTB_LE32(&bdl[off+3],0x00); // 0x01 enable interrupt
+  #endif
  }
 }
 
@@ -913,6 +925,9 @@ static void azx_setup_controller(struct intelhd_card_s *card)
  azx_sd_writel(card, SD_BDLPL, (uint32_t)pds_cardmem_physicalptr(card->dm, card->table_buffer));
  azx_sd_writel(card, SD_BDLPU, 0); // upper 32 bit
  //azx_sd_writel(card, SD_CTL,azx_sd_readl(card, SD_CTL) | SD_INT_MASK);
+ #ifdef SBEMU
+ azx_sd_writel(card, SD_CTL,azx_sd_readl(card, SD_CTL) | SD_INT_COMPLETE);
+ #endif
  pds_delay_10us(100);
 
  if(card->dac_node[0])
@@ -1201,6 +1216,9 @@ static int INTELHD_adetect(struct mpxplay_audioout_info_s *aui)
   goto err_adetect;
 
  aui->card_DMABUFF=card->pcmout_buffer;
+ #ifdef SBEMU
+ aui->card_irq = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
+ #endif
 
  mpxplay_debugf(IHD_DEBUG_OUTPUT,"IHD board type: %s (%4.4X%4.4X) ",card->pci_dev->device_name,(long)card->pci_dev->vendor_id,(long)card->pci_dev->device_id);
 
@@ -1330,6 +1348,18 @@ static unsigned long INTELHD_readMIXER(struct mpxplay_audioout_info_s *aui,unsig
  return snd_hda_get_vol_mute(card,reg,0,HDA_OUTPUT,0);
 }
 
+#ifdef SBEMU
+static void INTELHD_IRQRoutine(mpxplay_audioout_info_s* aui)
+{
+  struct intelhd_card_s *card=aui->card_private_data;
+  azx_sd_writeb(card, SD_STS, SD_INT_MASK); //ack all
+
+  //ack CORB/RIRB status
+  azx_writeb(card, CORBSTS, 0x01);
+  azx_writeb(card, RIRBSTS, RIRB_INT_MASK);
+}
+#endif
+
 static aucards_allmixerchan_s ihd_mixerset[]={
  &ihd_master_vol,
  NULL
@@ -1352,7 +1382,11 @@ one_sndcard_info IHD_sndcard_info={
  &INTELHD_getbufpos,
  &MDma_clearbuf,
  &MDma_interrupt_monitor,
+ #if SBEMU
+ &INTELHD_IRQRoutine,
+ #else
  NULL,
+ #endif
 
  &INTELHD_writeMIXER,
  &INTELHD_readMIXER,
