@@ -1,6 +1,9 @@
 #include <dos.h>
 #include "PIC.H"
 //reference: https://wiki.osdev.org/PIC
+#include "UNTRAPIO.H"
+#define inp UntrappedIO_IN
+#define outp UntrappedIO_OUT
 
 //master PIC
 #define PIC_PORT1 0x20
