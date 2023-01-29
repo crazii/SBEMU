@@ -437,15 +437,15 @@ one_mixerfunc_info MIXER_FUNCINFO_seekspeed={
 
 unsigned int mixer_speed_lq(PCM_CV_TYPE_S *pcm16,unsigned int samplenum, unsigned int channels, unsigned int samplerate, unsigned int newrate)
 {
- const unsigned int instep=((samplerate/newrate)<<8) | (((256*(samplerate%newrate)+newrate-1)/newrate)&0xFF);
- const unsigned int inend=(samplenum/channels) << 8;
+ const unsigned int instep=((samplerate/newrate)<<12) | (((4096*(samplerate%newrate)+newrate-1)/newrate)&0xFFF);
+ const unsigned int inend=(samplenum/channels) << 12;
  PCM_CV_TYPE_S *pcm,*intmp;
  unsigned long ipi;
- unsigned int inpos = 0;
+ unsigned int inpos = 0;//((instep>>12)==0) ? instep/2 : 0;
  if(!samplenum)
   return 0;
- assert(((samplenum/channels)&0xFF000000) == 0); //too many samples, need other approches.
- unsigned int buffcount = max(((long long)samplenum*newrate+samplerate-1)/samplerate,samplenum)+2;
+ assert(((samplenum/channels)&0xFFF00000) == 0); //too many samples, need other approches.
+ unsigned int buffcount = max(((unsigned long long)samplenum*newrate+samplerate-1)/samplerate,samplenum)+2;
  PCM_CV_TYPE_S* buff = (PCM_CV_TYPE_S*)malloc(buffcount*sizeof(PCM_CV_TYPE_S));
 
  mpxplay_debugf(MPXPLAY_DEBUG_OUTPUT, "step: %08x, end: %08x\n", instep, inend);
@@ -457,15 +457,15 @@ unsigned int mixer_speed_lq(PCM_CV_TYPE_S *pcm16,unsigned int samplenum, unsigne
   int m1,m2;
   unsigned int ipi,ch;
   PCM_CV_TYPE_S *intmp1,*intmp2;
-  ipi = inpos >> 8;
-  m2=inpos&0xFF;
-  m1=256-m2;
+  ipi = inpos >> 12;
+  m2=inpos&0xFFF;
+  m1=4096-m2;
   ch=channels;
   ipi*=ch;
   intmp1=intmp+ipi;
   intmp2=intmp1+ch;
   do{
-   *pcm++= ((*intmp1++)*m1+(*intmp2++)*m2) >> 8;
+   *pcm++= ((*intmp1++)*m1+(*intmp2++)*m2)/4096;// >> 12; //don't use shift, signed right shift impl defined, maybe logical shift
   }while(--ch);
   inpos+=instep;
  }while(inpos<inend);
