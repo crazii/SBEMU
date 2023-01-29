@@ -256,7 +256,7 @@ typedef struct one_sndcard_info{
  long (*cardbuf_pos)(struct mpxplay_audioout_info_s *);  // get the buffer (playing) position (usually the DMA buffer get-position)(returns negative number on error)
  void (*cardbuf_clear)(struct mpxplay_audioout_info_s *);// clear the soundcard buffer (usually the DMA buffer)
  void (*cardbuf_int_monitor)(struct mpxplay_audioout_info_s *); // interrupt (DMA) monitor function
- void (*irq_routine)(struct mpxplay_audioout_info_s *);  // as is
+ int (*irq_routine)(struct mpxplay_audioout_info_s *);  // as is
 
  void (*card_writemixer)(struct mpxplay_audioout_info_s *,unsigned long mixreg,unsigned long value);
  unsigned long (*card_readmixer)(struct mpxplay_audioout_info_s *,unsigned long mixreg);

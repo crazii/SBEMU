@@ -66,9 +66,10 @@ static long ESS_bits,ESS_div0;
 
 static void ess_select_mixerinfo(unsigned int hardware);
 
-static void ESS_irq_routine(struct mpxplay_audioout_info_s *aui)
+static int ESS_irq_routine(struct mpxplay_audioout_info_s *aui)
 {
  // I don't know, what's here... but ess works without irq too
+ return 0;
 }
 
 static int ESS_command(unsigned int baseport,unsigned int data)

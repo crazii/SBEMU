@@ -580,14 +580,14 @@ static unsigned long INTELICH_readMIXER(struct mpxplay_audioout_info_s *aui,unsi
 }
 
 #ifdef SBEMU
-static void INTELICH_IRQRoutine(mpxplay_audioout_info_s* aui)
+static int INTELICH_IRQRoutine(mpxplay_audioout_info_s* aui)
 {
   intel_card_s *card=aui->card_private_data;
-  if(snd_intel_read_8(card,ICH_PO_SR_REG)&ICH_PO_SR_LVBCI)
-    snd_intel_write_8(card, ICH_PO_SR_REG, ICH_PO_SR_LVBCI);
-
-  if(snd_intel_read_8(card,ICH_PO_SR_REG)&ICH_PO_SR_BCIS)
-    snd_intel_write_8(card, ICH_PO_SR_REG, ICH_PO_SR_BCIS);
+  int status = snd_intel_read_8(card,ICH_PO_SR_REG);
+  status &=ICH_PO_SR_LVBCI|ICH_PO_SR_BCIS|ICH_PO_SR_DCH;
+  if(status)
+    snd_intel_write_8(card, ICH_PO_SR_REG, status); //ack
+  return status != 0;
 }
 #endif
 

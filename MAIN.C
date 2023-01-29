@@ -159,7 +159,7 @@ static QEMM_IODT MAIN_VIRQ_IODT[4] =
     0xA1, &MAIN_IRQ,
 };
 
-static QEMM_IODT MAIN_SB_IODT[12] =
+static QEMM_IODT MAIN_SB_IODT[13] =
 { //MAIN_Options[OPT_ADDR].value will be added at runtime
     0x00, &MAIN_OPL3_388,
     0x01, &MAIN_OPL3_389,
@@ -168,6 +168,8 @@ static QEMM_IODT MAIN_SB_IODT[12] =
     0x04, &MAIN_SB_MixerAddr,
     0x05, &MAIN_SB_MixerData,
     0x06, &MAIN_SB_DSP_Reset,
+    0x08, &MAIN_OPL3_388,
+    0x09, &MAIN_OPL3_389,
     0x0A, &MAIN_SB_DSP_Read,
     0x0C, &MAIN_SB_DSP_Write,
     0x0E, &MAIN_SB_DSP_ReadStatus,
@@ -407,7 +409,9 @@ int main(int argc, char* argv[])
 
 static void MAIN_InterruptPM()
 {
-    #if MAIN_USE_INT70
+    #if !MAIN_USE_TIMER
+    if(aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui))
+    #elif MAIN_USE_INT70
     if(++MAIN_Int70Counter >= (1024/MAIN_INT70_FREQ))
     #endif
     {
@@ -416,7 +420,7 @@ static void MAIN_InterruptPM()
         //assmues the same context of its own, we need get the timer's context and restore it
         //on virtual irq call
         HDPMIPT_INTCONTEXT context;
-        if(HDPMIPT_GetInterruptContext(&context))
+        if(0 && HDPMIPT_GetInterruptContext(&context))
         {
             MAIN_TimerINTV86 = context.IsV86;
             MAIN_TimerPMReg.w.ds = context.DS;
@@ -436,11 +440,12 @@ static void MAIN_InterruptPM()
         #endif
 
         MAIN_Interrupt();
+        PIC_SendEOI();
     }
-    
-    //DPMI_CallOldISR(&MAIN_TimerIntHandlePM);
+    else
+      DPMI_CallOldISR(&MAIN_TimerIntHandlePM);
     //DPMI_CallRealModeOldISR(&MAIN_TimerIntHandlePM);
-    PIC_SendEOI();
+
     #if MAIN_USE_INT70
     MAIN_EnableInt70();
     #endif
@@ -463,7 +468,6 @@ static void MAIN_Interrupt()
     #if MAIN_USE_TIMER
     int samples = MAIN_SAMPLES;
     #else
-    if(aui.card_handler->irq_routine) aui.card_handler->irq_routine(&aui);
     aui.card_outbytes = aui.card_dmasize;
     int samples = AU_cardbuf_space(&aui) / sizeof(int16_t) / 2; //16 bit, 2 channels
     if(samples == 0)
@@ -517,17 +521,18 @@ static void MAIN_Interrupt()
             }
             if(MAIN_DMA_MappedAddr == 0)
                 MAIN_DMA_MappedAddr = DMA_Addr <= 640*1024 ? DMA_Addr : DPMI_MapMemory(DMA_Addr, DMA_Count);
-            _LOG("DMA_ADDR:%x, %x\n",DMA_Addr, MAIN_DMA_MappedAddr);
+            //_LOG("DMA_ADDR:%x, %x\n",DMA_Addr, MAIN_DMA_MappedAddr);
         }
         //_LOG("digital start\n");
         int pos = 0;
         do {
-            int count = min(samples-pos, (DMA_Count-DMA_Index)/samplebytes/channels);
-            count = min(count, (SB_Bytes-MAIN_SBBytes)/samplebytes/channels);
+            int count = samples-pos;
             if(SB_Rate < aui.freq_card)
-                count = max(2, count*SB_Rate/(aui.freq_card+SB_Rate/2));
+                count = max(2, count/((aui.freq_card+SB_Rate-1)/SB_Rate));
             else if(SB_Rate > aui.freq_card)
-                count *= (SB_Rate + aui.freq_card/2)/aui.freq_card;
+                count *= (SB_Rate + aui.freq_card/2)/aui.freq_card;        
+            count = min(count, (DMA_Count-DMA_Index)/samplebytes/channels);
+            count = min(count, (SB_Bytes-MAIN_SBBytes)/samplebytes/channels);
             //_LOG("samples:%d %d, %d %d, %d %d\n", samples, count, DMA_Count, DMA_Index, SB_Bytes, MAIN_SBBytes);
             int bytes = count * samplebytes * channels;
 
@@ -566,7 +571,9 @@ static void MAIN_Interrupt()
                     break;
             }
         } while(DMA_GetAuto() && (pos < samples) && SBEMU_HasStarted());
-        _LOG("digital end %d %d\n", samples, pos);
+        //_LOG("digital end %d %d\n", samples, pos);
+        //for(int i = pos; i < samples; ++i)
+        //    MAIN_PCM[MAIN_PCMEnd+i*2+1] = MAIN_PCM[MAIN_PCMEnd+i*2] = 0;
         samples = min(samples, pos);
     }
     else if(!MAIN_Options[OPT_OPL].value)

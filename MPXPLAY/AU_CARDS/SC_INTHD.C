@@ -1349,14 +1349,21 @@ static unsigned long INTELHD_readMIXER(struct mpxplay_audioout_info_s *aui,unsig
 }
 
 #ifdef SBEMU
-static void INTELHD_IRQRoutine(mpxplay_audioout_info_s* aui)
+static int INTELHD_IRQRoutine(mpxplay_audioout_info_s* aui)
 {
   struct intelhd_card_s *card=aui->card_private_data;
-  azx_sd_writeb(card, SD_STS, SD_INT_MASK); //ack all
+  int status = azx_sd_readb(card, SD_STS)&SD_INT_MASK;
+  if(status)
+    azx_sd_writeb(card, SD_STS, status); //ack all
 
   //ack CORB/RIRB status
-  azx_writeb(card, CORBSTS, 0x01);
-  azx_writeb(card, RIRBSTS, RIRB_INT_MASK);
+  int corbsts = azx_readb(card, CORBSTS)&0x1;
+  int rirbsts = azx_readb(card, RIRBSTS)&RIRB_INT_MASK;
+  if(corbsts)
+    azx_writeb(card, CORBSTS, corbsts);
+  if(rirbsts)
+    azx_writeb(card, RIRBSTS, rirbsts);
+  return status || corbsts || rirbsts;
 }
 #endif
 
