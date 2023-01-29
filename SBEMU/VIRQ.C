@@ -58,11 +58,9 @@ uint8_t VIRQ_Read(uint16_t port)
     return UntrappedIO_IN(port);
 }
 
-void VIRQ_Invoke(uint8_t irq, DPMI_REG* regs, BOOL realmode)
+void VIRQ_Invoke(uint8_t irq)
 {
     _LOG("CALLINT %d\n", irq);
-    //unsigned long addr;__dpmi_get_segment_base_address(regs->w.ds,&addr);
-    //_LOG("DS: %04x %08x, %04x %04x %04x\n", regs->w.ds, addr, regs->w.es, regs->w.fs, regs->w.gs);
     CLIS();
     int mask = PIC_GetIRQMask();
     PIC_SetIRQMask(0xFFFF);
@@ -75,11 +73,11 @@ void VIRQ_Invoke(uint8_t irq, DPMI_REG* regs, BOOL realmode)
         VIRQ_ISR[1] = 1 << (irq-8);
     }
     VIRQ_Irq = irq;
-    DPMI_REG r = {0};//*regs;
+    DPMI_REG r = {0};
     r.w.flags = 0;
     r.w.ss = r.w.sp = 0;
     //DPMI_CallRealModeINT(PIC_IRQ2VEC(irq), &r); //real mode vector are local in HDPMI, IVT changes not recorded after TSR, use raw IVT
-    if(1||realmode)
+    if(1)
     {
         int n = PIC_IRQ2VEC(irq);
         r.w.ip = DPMI_LoadW(n*4);
@@ -91,18 +89,9 @@ void VIRQ_Invoke(uint8_t irq, DPMI_REG* regs, BOOL realmode)
         __dpmi_paddr pa;
         __dpmi_get_protected_mode_interrupt_vector(PIC_IRQ2VEC(irq), &pa);
         asm(
-        /*"push %%ds \n\t" "push %%es \n\t"
-        "push %%fs \n\t" "push %%gs \n\t"
-        "push %1 \n\t" "pop %%ds \n\t"
-        "push %2 \n\t" "pop %%es \n\t"
-        "push %3 \n\t" "pop %%fs \n\t"
-        "push %4 \n\t" "pop %%gs \n\t"*/
         "pushfl \n\t lcall *%0 \n\t"
         //"int $0x0D \n\t"
-        /*"pop %%gs \n\t" "pop %%fs \n\t"
-        "pop %%es \n\t" "pop %%ds \n\t"*/
-        ::"m"(pa)
-        /*,"m"(r.w.ds),"m"(r.w.es),"m"(r.w.fs),"m"(r.w.gs)*/);
+        ::"m"(pa));
     }
     //asm("int $0x0D");
     VIRQ_Irq = -1;
