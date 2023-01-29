@@ -6,6 +6,7 @@ static uint16_t VDMA_Regs[16];
 static int32_t VDMA_Index[16];
 static uint8_t VDMA_PageAddr[16];
 static uint8_t VDMA_VMask[8];
+static uint8_t VDMA_Complete[8];
 static const uint8_t VDMA_PortChannelMap[16] =
 {
     -1, 2, 3, 1, -1, -1, -1, 0,
@@ -60,7 +61,24 @@ uint8_t VDMA_Read(uint16_t port)
                 return ((counter>>8)&0xFF);
         }
     }
-    return UntrappedIO_IN(port);
+
+    uint8_t result = UntrappedIO_IN(port);
+
+    if(port == VDMA_REG_STATUS_CMD)
+    {
+        for(int i = 0; i < 4; ++i)
+        {
+            if(VDMA_VMask[i])
+            {
+                result &= ~((1<<i) | (1<<(i+4)));
+                result |= VDMA_Complete[i] ? (1<<i) : 0;
+                //result |= !VDMA_Complete[i] && VDMA_Index[i] != -1 && VDMA_Index[i] < VDMA_GetCounter(i) ? (1<<(i+4)) : 0;
+                VDMA_Complete[i] = 0; //clear on read
+            }
+        }
+        _LOG("VDMA status: %02x\n", result);
+    }
+    return result;
 }
 
 void VDMA_Virtualize(int channel, int enable)
@@ -89,7 +107,7 @@ int32_t VDMA_SetIndex(int channel, int32_t index)
     uint32_t counter = VDMA_GetCounter(channel);
     if(index >= counter)
     {
-        if(DMA_GetAuto())
+        if(VDMA_GetAuto())
             index = 0;
         else
             index = -1;
@@ -97,7 +115,12 @@ int32_t VDMA_SetIndex(int channel, int32_t index)
     return VDMA_Index[channel] = index;
 }
 
-int DMA_GetAuto()
+int VDMA_GetAuto()
 {
     return VDMA_Regs[0x0B]&(1<<4);
+}
+
+void VDMA_ToggleComplete(int channel)
+{
+    VDMA_Complete[channel] = 1;
 }

@@ -100,6 +100,8 @@ int SBEMU_GetChannels();
 int SBEMU_GetSampleRate();
 int SBEMU_GetSampleBytes();
 int SBEMU_GetAuto();
+int SBEMU_GetPos(); //get pos in bytes
+int SBEMU_SetPos(int pos); //set pos in bytes
 
 #ifdef __cplusplus
 }

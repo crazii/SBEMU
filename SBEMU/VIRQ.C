@@ -14,10 +14,10 @@ static uint8_t VIRQ_OCW[2];
 
 void VIRQ_Write(uint16_t port, uint8_t value)
 {
-    //_LOG("VIRQW:%x,%x",port,value);
+    //_LOG("VIRQW:%x,%x\n",port,value);
     if(VIRQ_IS_VIRTUALIZING())
     {
-        //_LOG("VIRQW:%x,%x\n",port,value);
+        _LOG("VIRQW:%x,%x\n",port,value);
         if((port&0x0F) == 0x00)
         {
             int index = ((port==0x20) ? 0 : 1);
@@ -41,7 +41,7 @@ uint8_t VIRQ_Read(uint16_t port)
 {
     if(VIRQ_IS_VIRTUALIZING())
     {
-        //_LOG("VIRQR:%x\n",port);
+        _LOG("VIRQR:%x\n",port);
         if((port&0x0F) == 0x00)
         {
             int index = ((port==0x20) ? 0 : 1);

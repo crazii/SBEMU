@@ -38,7 +38,7 @@
 #define ICH_PO_SR_DCH     0x01  // DMA controller halted
 #define ICH_PO_SR_LVBCI   0x04  // last valid buffer completion interrupt
 #define ICH_PO_SR_BCIS    0x08  // buffer completion interrupt status (IOC)
-#define ICH_PO_SR_FIFO    0x10  // FIFO error (R/WC)
+#define ICH_PO_SR_FIFO    0x10
 
 #define ICH_GLOB_CNT_REG       0x2c  // Global control register
 #define ICH_GLOB_CNT_ACLINKOFF 0x00000008 // turn off ac97 link

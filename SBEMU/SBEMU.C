@@ -1,7 +1,6 @@
 #include "PLATFORM.H"
 #include "DPMI/DBGUTIL.H"
 #include "SBEMU.H"
-#include "VIRQ.H"
 
 #define SBEMU_RESET_START 0
 #define SBEMU_RESET_END 1
@@ -21,6 +20,7 @@ static int SBEMU_DSPCMD = 0;
 static int SBEMU_DSPCMD_Subindex = 0;
 static int SBEMU_DSPDATA_Subindex = 0;
 static int SBEMU_TriggerIRQ = 0;
+static int SBEMU_Pos = 0;
 static uint8_t SBEMU_IRQMap[4] = {2,5,7,10};
 static uint8_t SBEMU_MixerRegIndex = 0;
 static uint8_t SBEMU_idbyte;
@@ -81,6 +81,7 @@ void SBEMU_DSP_Reset(uint16_t port, uint8_t value)
         SBEMU_Samples = 0;
         SBEMU_Auto = 0;
         SBEMU_Bits = 8;
+        SBEMU_Pos = 0;
     }
     if(value == 0 && SBEMU_ResetState == SBEMU_RESET_START)
         SBEMU_ResetState = SBEMU_RESET_POLL;
@@ -123,6 +124,7 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                 SBEMU_HighSpeed = (SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_AUTO_HS);
                 SBEMU_Started = TRUE; //start transfer
                 SBEMU_DSPCMD = 0;
+                SBEMU_Pos = 0;
             }
             break;
             case SBEMU_CMD_EXIT_16BIT_AUTO:
@@ -171,7 +173,10 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                     SBEMU_Started = (SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_1 || SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_1_HS); //start transfer
                     SBEMU_HighSpeed = (SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_AUTO_HS);
                     if(SBEMU_Started)
+                    {
                         SBEMU_Bits = 8;
+                        SBEMU_Pos = 0;
+                    }
                 }
             }
             break;
@@ -206,6 +211,7 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                     SBEMU_Bits = (SBEMU_DSPCMD==SBEMU_CMD_MODE_PCM8_MONO || SBEMU_DSPCMD==SBEMU_CMD_MODE_PCM8_STEREO) ? 8 : 16;
                     SBEMU_MixerRegs[SBEMU_MIXERREG_MODEFILTER] |= (SBEMU_DSPCMD==SBEMU_CMD_MODE_PCM8_STEREO || SBEMU_DSPCMD==SBEMU_CMD_MODE_PCM16_STEREO) ? 2 : 0;
                     SBEMU_Started = TRUE; //start transfer here
+                    SBEMU_Pos = 0;
                 }
             }
             break;
@@ -220,17 +226,11 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
     }
     if(SBEMU_Started && !OldStarted)//handle driver detection
     {
-        if(SBEMU_StartCB)
+        /*if(SBEMU_StartCB)
         {
-            //CLIS();
-            //SBEMU_StartCB(); //if don't do this, need always output 0 PCM to keep interrupt alive for now
-            //STIL();
-        }
-        /*if(SBEMU_Samples < 16)
-        {
-            SBEMU_Started = 0;
-            SBEMU_MixerRegs[SBEMU_MIXERREG_INT_STS] = (SBEMU_Bits==8) ? 0x01 : 0x02;
-            VIRQ_Invoke(SBEMU_IRQ, NULL, FALSE);
+            CLIS();
+            SBEMU_StartCB(); //if don't do this, need always output 0 PCM to keep interrupt alive for now
+            STIL();
         }*/
     }
 }
@@ -336,6 +336,7 @@ void SBEMU_Stop()
 {
     SBEMU_Started = FALSE;
     SBEMU_HighSpeed = FALSE;
+    SBEMU_Pos = 0;
 }
 
 int SBEMU_GetDACSpeaker()
@@ -368,3 +369,12 @@ int SBEMU_GetAuto()
     return SBEMU_Auto;
 }
 
+int SBEMU_GetPos()
+{
+    return SBEMU_Pos;
+}
+
+int SBEMU_SetPos(int pos)
+{
+    return SBEMU_Pos = pos;
+}

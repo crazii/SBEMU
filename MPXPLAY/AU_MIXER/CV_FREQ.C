@@ -441,7 +441,7 @@ unsigned int mixer_speed_lq(PCM_CV_TYPE_S *pcm16,unsigned int samplenum, unsigne
  const unsigned int inend=(samplenum/channels) << 12;
  PCM_CV_TYPE_S *pcm,*intmp;
  unsigned long ipi;
- unsigned int inpos = 0;//((instep>>12)==0) ? instep/2 : 0;
+ unsigned int inpos = 0;//(samplerate<newrate) ? instep/2 : 0;
  if(!samplenum)
   return 0;
  assert(((samplenum/channels)&0xFFF00000) == 0); //too many samples, need other approches.

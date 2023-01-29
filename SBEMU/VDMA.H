@@ -41,7 +41,8 @@ uint32_t VDMA_GetAddress(int channel);
 uint32_t VDMA_GetCounter(int channel);
 int32_t VDMA_GetIndex(int channel);
 int32_t VDMA_SetIndex(int channel, int32_t index);
-int DMA_GetAuto();
+int VDMA_GetAuto();
+void VDMA_ToggleComplete(int channel);
 
 #ifdef __cplusplus
 }
