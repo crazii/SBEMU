@@ -38,6 +38,7 @@
 #define ICH_PO_SR_DCH     0x01  // DMA controller halted
 #define ICH_PO_SR_LVBCI   0x04  // last valid buffer completion interrupt
 #define ICH_PO_SR_BCIS    0x08  // buffer completion interrupt status (IOC)
+#define ICH_PO_SR_FIFO    0x10  // FIFO error (R/WC)
 
 #define ICH_GLOB_CNT_REG       0x2c  // Global control register
 #define ICH_GLOB_CNT_ACLINKOFF 0x00000008 // turn off ac97 link
@@ -509,7 +510,11 @@ static void INTELICH_writedata(struct mpxplay_audioout_info_s *aui,char *src,uns
  MDma_writedata(aui,src,left);
 
  index=aui->card_dmalastput/card->period_size_bytes;
+ #ifdef SBEMU
+ snd_intel_write_8(card,ICH_PO_LVI_REG,(snd_intel_read_8(card, ICH_PO_CIV_REG)-1)%ICH_DMABUF_PERIODS);
+ #else
  snd_intel_write_8(card,ICH_PO_LVI_REG,(index-1)%ICH_DMABUF_PERIODS); // set stop position (to keep playing in an endless loop)
+ #endif
  //mpxplay_debugf(ICH_DEBUG_OUTPUT,"put-index: %d",index);
 }
 
@@ -584,7 +589,7 @@ static int INTELICH_IRQRoutine(mpxplay_audioout_info_s* aui)
 {
   intel_card_s *card=aui->card_private_data;
   int status = snd_intel_read_8(card,ICH_PO_SR_REG);
-  status &=ICH_PO_SR_LVBCI|ICH_PO_SR_BCIS|ICH_PO_SR_DCH;
+  status &=ICH_PO_SR_LVBCI|ICH_PO_SR_BCIS|ICH_PO_SR_FIFO;
   if(status)
     snd_intel_write_8(card, ICH_PO_SR_REG, status); //ack
   return status != 0;
