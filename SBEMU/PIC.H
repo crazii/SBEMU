@@ -18,6 +18,9 @@ extern "C"
 {
 #endif
 
+//send end of interrupt. a little faster than PIC_SendEOI. MUST be called in interrupt handler
+void PIC_SendEOIWithIRQ(uint8_t irq);
+
 //send end of interrupt. MUST be called in interrupt handler
 void PIC_SendEOI(void);
 

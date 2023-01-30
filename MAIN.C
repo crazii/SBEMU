@@ -381,7 +381,7 @@ static void MAIN_InterruptPM()
     if(aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
     {
         MAIN_Interrupt();
-        PIC_SendEOI();
+        PIC_SendEOIWithIRQ(aui.card_irq);
     }
     else
     {
@@ -480,7 +480,7 @@ static void MAIN_Interrupt()
                 QEMM_Install_IOPortTrap(MAIN_VIRQ_IODT, countof(MAIN_VIRQ_IODT), &MAIN_VIRQ_IOPT);
                 #endif
 
-                VDMA_ToggleComplete(SBEMU_GetDMA());
+                VDMA_ToggleComplete(dma);
                 VIRQ_Invoke(SBEMU_GetIRQ());
 
                 #if MAIN_TRAP_PIC_ONDEMAND

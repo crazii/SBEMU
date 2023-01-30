@@ -14,6 +14,16 @@
 
 #define PIC_READISR 0x0B    //read interrupte service register (current interrupting IRQ)
 
+
+void PIC_SendEOIWithIRQ(uint8_t irq)
+{
+    CLIS();
+    if(irq >= 8)
+        outp(PIC_PORT2, 0x20);
+    outp(PIC_PORT1, 0x20);
+    STIL();
+}
+
 void PIC_SendEOI(void)
 {
     CLIS();
