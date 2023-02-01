@@ -4,6 +4,7 @@
 
 static uint16_t VDMA_Regs[16];
 static int32_t VDMA_Index[16];
+static int32_t VDMA_Counter[16];
 static uint8_t VDMA_PageAddr[16];
 static uint8_t VDMA_VMask[8];
 static uint8_t VDMA_Complete[8];
@@ -30,8 +31,10 @@ void VDMA_Write(uint16_t port, uint8_t byte)
             VDMA_Regs[port] = (VDMA_Regs[port]&~0xFF) | byte;
         else
             VDMA_Regs[port] = (VDMA_Regs[port]&~0xFF00) | (byte<<8);
-        //if((port&0x1) == 0)//addr
-            VDMA_Index[port>>1] = -1;
+        if((port&0x1) == 0)//addr
+            VDMA_Index[port>>1] = 0;
+        else //counter
+            VDMA_Counter[port>>1] = VDMA_Regs[port];
     }
     else
     {
@@ -39,7 +42,7 @@ void VDMA_Write(uint16_t port, uint8_t byte)
         if(channel != -1)
         {
             VDMA_PageAddr[channel] = byte;
-            VDMA_Index[channel] = -1;
+            VDMA_Index[channel] = 0;
         }
     }
 
@@ -54,7 +57,7 @@ uint8_t VDMA_Read(uint16_t port)
         int channel = port>>1;
         if(VDMA_VMask[channel] && (port&0x1) == 1)//counter
         {
-            int counter = VDMA_Index[channel] == -1 ? VDMA_GetCounter(channel)-1 : VDMA_GetCounter(channel)-1 - VDMA_Index[channel];
+            int counter = VDMA_Regs[channel*2+1];
             if(((VDMA_Regs[VDMA_REG_FLIPFLOP]++)&0x1) == 0)
                 return counter&0xFF;
             else
@@ -102,16 +105,19 @@ int32_t VDMA_GetIndex(int channel)
     return VDMA_Index[channel];
 }
 
-int32_t VDMA_SetIndex(int channel, int32_t index)
+int32_t VDMA_SetIndexCounter(int channel, int32_t index, int32_t counter)
 {
-    uint32_t counter = VDMA_GetCounter(channel);
-    if(index >= counter)
+    if(counter <= 0)
     {
+        counter = 0x10000;
+        VDMA_ToggleComplete(channel);
         if(VDMA_GetAuto())
+        {
             index = 0;
-        else
-            index = -1;
+            counter = VDMA_Counter[channel]+1;
+        }
     }
+    VDMA_Regs[(channel<<1)+1] = counter-1;
     return VDMA_Index[channel] = index;
 }
 

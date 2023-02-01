@@ -332,8 +332,8 @@ uint32_t DPMI_MapMemory(uint32_t physicaladdr, uint32_t size)
         AddAddressMap(&info, physicaladdr);
         return info.address;
     }
-    assert(FALSE);
-    exit(-1);
+    //assert(FALSE);
+    //exit(-1);
     return 0;
 }
 

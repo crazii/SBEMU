@@ -26,7 +26,7 @@ extern unsigned long TEST_SampleLen;
 mpxplay_audioout_info_s aui = {0};
 
 #define MAIN_PCM_SAMPLESIZE 8192
-#define MAIN_TRAP_PIC_ONDEMAND 1
+#define MAIN_TRAP_PIC_ONDEMAND 1 //workaround crashes
 
 static int16_t MAIN_OPLPCM[MAIN_PCM_SAMPLESIZE+256];
 
@@ -192,7 +192,7 @@ enum EOption
 
 int main(int argc, char* argv[])
 {
-    if(/*argc == 1 || */(argc == 2 && stricmp(argv[1],"/?") == 0))
+    if(argc == 1 || (argc == 2 && stricmp(argv[1],"/?") == 0))
     {
         printf("SBEMU: Sound Blaster emulation on AC97. Usage:\n");
         int i = 0;
@@ -281,7 +281,7 @@ int main(int argc, char* argv[])
         return 0;
     AU_ini_interrupts(&aui);
     AU_setmixer_init(&aui);
-    AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 90);
+    AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 95);
     //use fixed rate
     mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, SBEMU_SAMPLERATE, SBEMU_CHANNELS, SBEMU_CHANNELS, NULL, SBEMU_BITS, SBEMU_BITS/8, 0};
     AU_setrate(&aui, &adi);
@@ -420,7 +420,7 @@ static void MAIN_Interrupt()
     {
         int dma = SBEMU_GetDMA();
         uint32_t DMA_Addr = VDMA_GetAddress(dma);
-        uint32_t DMA_Count = VDMA_GetCounter(dma); //count in bytes (8bit dma)
+        int32_t DMA_Count = VDMA_GetCounter(dma); //count in bytes (8bit dma)
         int32_t DMA_Index = VDMA_GetIndex(dma);
         uint32_t SB_Bytes = SBEMU_GetSampleBytes();
         uint32_t SB_Pos = SBEMU_GetPos();
@@ -429,36 +429,38 @@ static void MAIN_Interrupt()
         int channels = SBEMU_GetChannels();
         //_LOG("sample rate: %d %d\n", SB_Rate, aui.freq_card);
         //_LOG("DMA index: %x\n", DMA_Index);
-        if(DMA_Index == -1)
-        {
-            DMA_Index = 0;
-            if(MAIN_DMA_MappedAddr != 0)
-            {
-                if(!(DMA_Addr == MAIN_DMA_Addr && DMA_Count <= MAIN_DMA_Size))
-                {
-                    if(MAIN_DMA_MappedAddr > 640*1024)
-                        DPMI_UnmappMemory(MAIN_DMA_MappedAddr);
-                    MAIN_DMA_MappedAddr = 0;
-                }
-            }
-            if(MAIN_DMA_MappedAddr == 0)
-                MAIN_DMA_MappedAddr = DMA_Addr <= 640*1024 ? DMA_Addr : DPMI_MapMemory(DMA_Addr, DMA_Count);
-            //_LOG("DMA_ADDR:%x, %x\n",DMA_Addr, MAIN_DMA_MappedAddr);
-        }
         //_LOG("digital start\n");
         int pos = 0;
         do {
+            if(MAIN_DMA_MappedAddr != 0
+             && !(DMA_Addr >= MAIN_DMA_Addr && DMA_Addr+DMA_Index+DMA_Count <= MAIN_DMA_Addr+MAIN_DMA_Size))
+            {
+                if(MAIN_DMA_MappedAddr > 1024*1024)
+                    DPMI_UnmappMemory(MAIN_DMA_MappedAddr);
+                MAIN_DMA_MappedAddr = 0;
+            }
+            if(MAIN_DMA_MappedAddr == 0)
+            {
+                MAIN_DMA_Addr = DMA_Addr&~0xFFF;
+                MAIN_DMA_Size = align(max(DMA_Addr-MAIN_DMA_Addr+DMA_Index+DMA_Count, 64*1024*2), 4096);
+                MAIN_DMA_MappedAddr = (DMA_Addr+DMA_Index+DMA_Count <= 1024*1024) ? (DMA_Addr&~0xFFF) : DPMI_MapMemory(MAIN_DMA_Addr, MAIN_DMA_Size);
+            }
+            //_LOG("DMA_ADDR:%x, %x\n",DMA_Addr, MAIN_DMA_MappedAddr);
+
             int count = samples-pos;
             if(SB_Rate < aui.freq_card)
-                count = max(2, count/((aui.freq_card+SB_Rate-1)/SB_Rate));
+                count = max(channels, count/((aui.freq_card+SB_Rate-1)/SB_Rate));
             else if(SB_Rate > aui.freq_card)
                 count *= (SB_Rate + aui.freq_card/2)/aui.freq_card;        
-            count = min(count, (DMA_Count-DMA_Index)/samplebytes/channels);
+            count = min(count, (DMA_Count)/samplebytes/channels);
             count = min(count, (SB_Bytes-SB_Pos)/samplebytes/channels);
             //_LOG("samples:%d %d, %d %d, %d %d\n", samples, count, DMA_Count, DMA_Index, SB_Bytes, MAIN_SBBytes);
             int bytes = count * samplebytes * channels;
 
-            DPMI_CopyLinear(DPMI_PTR2L(MAIN_PCM+pos*2), MAIN_DMA_MappedAddr+DMA_Index, bytes);
+            if(MAIN_DMA_MappedAddr == 0) //map failed?
+                memset(MAIN_PCM+pos*2, 0, bytes);
+            else
+                DPMI_CopyLinear(DPMI_PTR2L(MAIN_PCM+pos*2), MAIN_DMA_MappedAddr+(DMA_Addr-MAIN_DMA_Addr)+DMA_Index, bytes);
             if(samplebytes != 2)
                 cv_bits_n_to_m(MAIN_PCM+pos*2, count, samplebytes, 2);
             if(SB_Rate != aui.freq_card)
@@ -469,10 +471,9 @@ static void MAIN_Interrupt()
                 count /= 2;
             pos += count;
             //_LOG("samples:%d %d %d\n", count, pos, samples);
-            DMA_Index += bytes;
-            SB_Pos += bytes;
-            DMA_Index = VDMA_SetIndex(dma, DMA_Index);
-            SB_Pos = SBEMU_SetPos(SB_Pos);
+            DMA_Index = VDMA_SetIndexCounter(dma, DMA_Index+bytes, DMA_Count-bytes);
+            DMA_Count = VDMA_GetCounter(dma);
+            SB_Pos = SBEMU_SetPos(SB_Pos+bytes);
             //_LOG("SB bytes: %d %d\n", SB_Pos, SB_Bytes);
             if(SB_Pos >= SB_Bytes)
             {
@@ -485,7 +486,6 @@ static void MAIN_Interrupt()
                 QEMM_Install_IOPortTrap(MAIN_VIRQ_IODT, countof(MAIN_VIRQ_IODT), &MAIN_VIRQ_IOPT);
                 #endif
 
-                VDMA_ToggleComplete(dma);
                 VIRQ_Invoke(SBEMU_GetIRQ());
 
                 #if MAIN_TRAP_PIC_ONDEMAND
@@ -494,13 +494,18 @@ static void MAIN_Interrupt()
                 
                 SB_Bytes = SBEMU_GetSampleBytes();
                 SB_Pos = SBEMU_GetPos();
-                if(DMA_Count <= 4) //detection routine?
-                    break;
+                SB_Rate = SBEMU_GetSampleRate();
+                //if(DMA_Count <= 16) //detection routine? fix crash in virtualbox.
+                //    break;
+                //incase IRQ handler re-programs DMA
+                DMA_Index = VDMA_GetIndex(dma);
+                DMA_Count = VDMA_GetCounter(dma);
+                DMA_Addr = VDMA_GetAddress(dma);
             }
         } while(VDMA_GetAuto() && (pos < samples) && SBEMU_HasStarted());
         //_LOG("digital end %d %d\n", samples, pos);
         //for(int i = pos; i < samples; ++i)
-        //    MAIN_PCM[MAIN_PCMEnd+i*2+1] = MAIN_PCM[MAIN_PCMEnd+i*2] = 0;
+        //    MAIN_PCM[i*2+1] = MAIN_PCM[i*2] = 0;
         samples = min(samples, pos);
     }
     else if(!MAIN_Options[OPT_OPL].value)

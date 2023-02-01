@@ -62,8 +62,8 @@ void VIRQ_Invoke(uint8_t irq)
 {
     _LOG("CALLINT %d\n", irq);
     CLIS();
-    int mask = PIC_GetIRQMask();
-    PIC_SetIRQMask(0xFFFF);
+    //int mask = PIC_GetIRQMask();
+    //PIC_SetIRQMask(0xFFFF);
     VIRQ_ISR[0] = VIRQ_ISR[1] = 0;
     if(irq < 8) //master
         VIRQ_ISR[0] = 1 << irq;
@@ -72,30 +72,19 @@ void VIRQ_Invoke(uint8_t irq)
         VIRQ_ISR[0] = 0x04; //cascade
         VIRQ_ISR[1] = 1 << (irq-8);
     }
+    
     VIRQ_Irq = irq;
     DPMI_REG r = {0};
     r.w.flags = 0;
     r.w.ss = r.w.sp = 0;
     //DPMI_CallRealModeINT(PIC_IRQ2VEC(irq), &r); //real mode vector are local in HDPMI, IVT changes not recorded after TSR, use raw IVT
-    if(1)
-    {
-        int n = PIC_IRQ2VEC(irq);
-        r.w.ip = DPMI_LoadW(n*4);
-        r.w.cs = DPMI_LoadW(n*4+2);
-        DPMI_CallRealModeIRET(&r);
-    }
-    else if(0)
-    {
-        __dpmi_paddr pa;
-        __dpmi_get_protected_mode_interrupt_vector(PIC_IRQ2VEC(irq), &pa);
-        asm(
-        "pushfl \n\t lcall *%0 \n\t"
-        //"int $0x0D \n\t"
-        ::"m"(pa));
-    }
-    //asm("int $0x0D");
+    int n = PIC_IRQ2VEC(irq);
+    r.w.ip = DPMI_LoadW(n*4);
+    r.w.cs = DPMI_LoadW(n*4+2);
+    DPMI_CallRealModeIRET(&r);
+
     VIRQ_Irq = -1;
-    PIC_SetIRQMask(mask);
+    //PIC_SetIRQMask(mask);
     STIL();
     _LOG("CALLINTEND\n", irq);
 }

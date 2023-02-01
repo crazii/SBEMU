@@ -82,6 +82,7 @@ void SBEMU_DSP_Reset(uint16_t port, uint8_t value)
         SBEMU_Auto = 0;
         SBEMU_Bits = 8;
         SBEMU_Pos = 0;
+        SBEMU_HighSpeed = 0;
     }
     if(value == 0 && SBEMU_ResetState == SBEMU_RESET_START)
         SBEMU_ResetState = SBEMU_RESET_POLL;

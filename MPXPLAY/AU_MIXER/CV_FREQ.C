@@ -445,7 +445,7 @@ unsigned int mixer_speed_lq(PCM_CV_TYPE_S *pcm16,unsigned int samplenum, unsigne
  if(!samplenum)
   return 0;
  assert(((samplenum/channels)&0xFFF00000) == 0); //too many samples, need other approches.
- unsigned int buffcount = max(((unsigned long long)samplenum*newrate+samplerate-1)/samplerate,samplenum)*2+2;
+ unsigned int buffcount = max(((unsigned long long)max(samplenum,512)*newrate+samplerate-1)/samplerate,max(samplenum,512))*2+32;
  PCM_CV_TYPE_S* buff = (PCM_CV_TYPE_S*)malloc(buffcount*sizeof(PCM_CV_TYPE_S));
 
  mpxplay_debugf(MPXPLAY_DEBUG_OUTPUT, "step: %08x, end: %08x\n", instep, inend);

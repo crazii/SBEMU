@@ -24,8 +24,10 @@ static uint16_t QEMM_OldCallbackCS;
 static void __NAKED QEMM_RM_Wrapper()
 {//al=data,cl=out,dx=port
     _ASM_BEGIN16
+        _ASM(pushf)
         _ASM(cli)
         _ASM(call dword ptr cs:[0])
+        _ASM(popf)
         _ASM(retf)
     _ASM_END16
 }

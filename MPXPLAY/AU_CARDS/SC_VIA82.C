@@ -15,6 +15,9 @@
 //function: VIA VT82C686, VT8233 (VT8235?) low level routines (onboard chips on AMD Athlon mainboards)
 //some routines are based on the ALSA (http://www.alsa-project.org)
 
+//#define MPXPLAY_USE_DEBUGF 1
+#define VIA_DEBUG_OUTPUT stdout
+
 #include "mpxplay.h"
 
 #ifdef AU_CARDS_LINK_VIA82XX
@@ -97,7 +100,7 @@
 #define VIRTUALPAGETABLESIZE   4096
 #define PCMBUFFERPAGESIZE      4096
 
-#define VIA_INT_INTERVAL 8
+#define VIA_INT_INTERVAL 1
 
 struct via82xx_card
 {
@@ -327,6 +330,8 @@ static void VIA82XX_setrate(struct mpxplay_audioout_info_s *aui)
  // page tables
  card->pcmout_pages=dmabufsize/PCMBUFFERPAGESIZE;
  pcmbufp=(unsigned long)card->pcmout_buffer;
+ mpxplay_debugf(VIA_DEBUG_OUTPUT,"VIA PCM pages: %d", card->pcmout_pages);
+ 
  for(pagecount=0;pagecount<card->pcmout_pages;pagecount++){
   card->virtualpagetable[pagecount*2]=(unsigned long)pds_cardmem_physicalptr(card->dm,pcmbufp);
   if(pagecount<(card->pcmout_pages-1))
