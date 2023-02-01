@@ -281,7 +281,7 @@ int main(int argc, char* argv[])
         return 0;
     AU_ini_interrupts(&aui);
     AU_setmixer_init(&aui);
-    AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 100);
+    AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 90);
     //use fixed rate
     mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, SBEMU_SAMPLERATE, SBEMU_CHANNELS, SBEMU_CHANNELS, NULL, SBEMU_BITS, SBEMU_BITS/8, 0};
     AU_setrate(&aui, &adi);
@@ -303,9 +303,9 @@ int main(int argc, char* argv[])
         }
 
         OPL3EMU_Init(aui.freq_card);
-        printf("OPL3 enabled at port 388h.\n");
-        //TestSound(FALSE);
+        printf("OPL3 emulation enabled at port 388h.\n");
     }
+    //TestSound(FALSE);
 
     SBEMU_Init(MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value, &MAIN_Interrupt);
     VDMA_Virtualize(MAIN_Options[OPT_DMA].value, TRUE);
@@ -333,9 +333,9 @@ int main(int argc, char* argv[])
 
     BOOL PM_ISR = DPMI_InstallISR(PIC_IRQ2VEC(aui.card_irq), MAIN_InterruptPM, &MAIN_TimerIntHandlePM) == 0;
     PIC_UnmaskIRQ(aui.card_irq);
-    
+
     AU_prestart(&aui);
-    AU_start(&aui);    
+    AU_start(&aui);
 
     BOOL TSR = TRUE;
     if(!PM_ISR
@@ -395,13 +395,18 @@ static void MAIN_InterruptPM()
 static void MAIN_Interrupt()
 {
     #if 0
-    const int samples = MAIN_SAMPLES*2;
-    int16_t* buffer = TEST_Sample;
+    aui.card_outbytes = aui.card_dmasize;
+    int space = AU_cardbuf_space(&aui)+2048;
+    //_LOG("int space: %d\n", space);
+    int samples = space / sizeof(int16_t) / 2 * 2;
+    //int samples = 22050/18*2;
+    _LOG("samples: %d %d\n", 22050/18*2, space/4*2);
     static int cur = 0;
     aui.samplenum = min(samples, TEST_SampleLen-cur);
     aui.pcm_sample = TEST_Sample + cur;
+    //_LOG("cur: %d %d\n",cur,aui.samplenum);
     cur += aui.samplenum;
-    AU_writedata(&aui);
+    cur -= AU_writedata(&aui);
     #else
 
     aui.card_outbytes = aui.card_dmasize;
@@ -468,7 +473,7 @@ static void MAIN_Interrupt()
             SB_Pos += bytes;
             DMA_Index = VDMA_SetIndex(dma, DMA_Index);
             SB_Pos = SBEMU_SetPos(SB_Pos);
-            _LOG("SB bytes: %d %d\n", SB_Pos, SB_Bytes);
+            //_LOG("SB bytes: %d %d\n", SB_Pos, SB_Bytes);
             if(SB_Pos >= SB_Bytes)
             {
                 //_LOG("INT:%d,%d,%d,%d\n",MAIN_SBBytes,SBEMU_GetSampleBytes(),MAIN_DMAIndex,DMA_Count);

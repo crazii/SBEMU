@@ -97,6 +97,8 @@
 #define VIRTUALPAGETABLESIZE   4096
 #define PCMBUFFERPAGESIZE      4096
 
+#define VIA_INT_INTERVAL 8
+
 struct via82xx_card
 {
  unsigned long   iobase;
@@ -329,7 +331,7 @@ static void VIA82XX_setrate(struct mpxplay_audioout_info_s *aui)
   card->virtualpagetable[pagecount*2]=(unsigned long)pds_cardmem_physicalptr(card->dm,pcmbufp);
   if(pagecount<(card->pcmout_pages-1))
    #ifdef SBEMU
-   card->virtualpagetable[pagecount*2+1]=VIA_TBL_BIT_FLAG|PCMBUFFERPAGESIZE;
+   card->virtualpagetable[pagecount*2+1]=((pagecount%VIA_INT_INTERVAL)==VIA_INT_INTERVAL-1) ? VIA_TBL_BIT_FLAG|PCMBUFFERPAGESIZE : PCMBUFFERPAGESIZE;
    #else
    card->virtualpagetable[pagecount*2+1]=PCMBUFFERPAGESIZE; // 0x00001000; // period continues to the next
    #endif
