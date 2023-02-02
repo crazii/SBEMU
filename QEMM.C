@@ -12,6 +12,8 @@
 #include <DPMI/DBGUTIL.H>
 #include <UNTRAPIO.H>
 
+#define HANDLE_IN_388H_DIRECTLY 1
+
 static QEMM_IODT_LINK QEMM_IODT_header;
 static QEMM_IODT_LINK* QEMM_IODT_Link = &QEMM_IODT_header;
 static uint16_t QEMM_EntryIP;
@@ -24,10 +26,45 @@ static uint16_t QEMM_OldCallbackCS;
 static void __NAKED QEMM_RM_Wrapper()
 {//al=data,cl=out,dx=port
     _ASM_BEGIN16
-        _ASM(pushf)
-        _ASM(cli)
+        //_ASM(pushf)
+        //_ASM(cli)
+#if HANDLE_IN_388H_DIRECTLY
+        _ASM(cmp dx, 0x388)
+        _ASM(je next)
+        _ASM(cmp dx, 0x389)
+        _ASM(jne normal)
+        _ASM(test cl, cl)
+        _ASM(jnz OUT389H)
+        _ASM(jmp normal) //in 389h
+    _ASM(next:)
+        _ASM(test cl, cl)
+        _ASM(jnz OUT388H)
+        _ASM(mov al, cs:[5]) //in 388h
+        _ASM(and al, 0x03)
+        _ASM(test al, 0x01)
+        _ASM(jz nexttimer)
+        _ASM(mov al, 0xC0)
+        _ASM(jmp ret)
+    _ASMLBL(nexttimer:)
+        _ASM(test al, 0x02)
+        _ASM(jz ret0)
+        _ASM(mov al, 0xA0)
+        _ASM(jmp ret)
+    _ASMLBL(ret0:)
+        _ASM(xor al,al)
+        _ASM(jmp ret)
+    _ASMLBL(OUT389H:)
+        _ASM(cmp byte ptr cs:[4], 4) //timer reg?
+        _ASM(jne normal)
+        _ASM(mov cs:[5], al)
+        _ASM(jmp normal)        
+    _ASMLBL(OUT388H:)
+        _ASM(mov cs:[4], al)
+    _ASMLBL(normal:)
+#endif
         _ASM(call dword ptr cs:[0])
-        _ASM(popf)
+    _ASMLBL(ret:)
+        //_ASM(popf)
         _ASM(retf)
     _ASM_END16
 }
@@ -113,7 +150,7 @@ BOOL QEMM_Install_IOPortTrap(QEMM_IODT* inputp iodt, uint16_t count, QEMM_IOPT* 
         //printf("QEMM old callback: %04x:%04x\n",r.w.es, r.w.di);
 
         uint32_t codesize = (uintptr_t)&QEMM_RM_WrapperEnd - (uintptr_t)&QEMM_RM_Wrapper;
-        uint32_t dosmem = DPMI_HighMalloc((codesize + 4 + 15)>>4, TRUE);
+        uint32_t dosmem = DPMI_HighMalloc((codesize + 4 + 2 + 15)>>4, TRUE);
         uint32_t rmcb = DPMI_AllocateRMCB_RETF(&QEMM_TrapHandler, &QEMM_TrapHandlerREG);
         if(rmcb == 0)
         {
@@ -123,14 +160,14 @@ BOOL QEMM_Install_IOPortTrap(QEMM_IODT* inputp iodt, uint16_t count, QEMM_IOPT* 
         DPMI_CopyLinear(DPMI_SEGOFF2L(dosmem, 0), DPMI_PTR2L(&rmcb), 4);
         void* buf = malloc(codesize);
         memcpy_c2d(buf, &QEMM_RM_Wrapper, codesize); //copy to ds seg in case cs&ds are not same
-        DPMI_CopyLinear(DPMI_SEGOFF2L(dosmem, 4), DPMI_PTR2L(buf), codesize);
+        DPMI_CopyLinear(DPMI_SEGOFF2L(dosmem, 4+2), DPMI_PTR2L(buf), codesize);
         free(buf);
 
         r.w.cs = QEMM_EntryCS;
         r.w.ip = QEMM_EntryIP;
         r.w.ax = 0x1A07;
         r.w.es = dosmem&0xFFFF;
-        r.w.di = 4;
+        r.w.di = 4+2;
         if( DPMI_CallRealModeRETF(&r) != 0 || (r.w.flags&CPU_CFLAG))
         {
             DPMI_HighFree(dosmem);
