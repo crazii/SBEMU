@@ -169,6 +169,13 @@ static BOOL HDPMI_Internal_UninstallTrap(const HDPMIPT_ENTRY* entry, uint32_t ha
     return result;
 }
 
+BOOL HDPMIPT_Detect()
+{
+    HDPMIPT_ENTRY entry;
+    BOOL result = HDPMIPT_GetVendorEntry(&entry);
+    return result && (entry.edi || entry.es);
+}
+
 BOOL HDPMIPT_Install_IOPortTrap(uint16_t start, uint16_t end, QEMM_IODT* inputp iodt, uint16_t count, QEMM_IOPT* outputp iopt)
 {
     assert(iopt);
