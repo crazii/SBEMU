@@ -51,14 +51,15 @@ static uint32_t __attribute__((noinline)) HDPMIPT_TrapHandler()
     );
 
     UntrappedIO_PM = TRUE;
-    //if(port >= 0x220 && port <= 0x22F)
-    //_LOG("Trapped PM: %s %x\n", out ? "out" : "in", port);
+    //if(port >= 0 && port <= 0xF)
+        //_LOG("Trapped PM: %s %x\n", out ? "out" : "in", port);
     QEMM_IODT_LINK* link = HDPMIPT_IODT_header.next;
     while(link)
     {
         for(int i = 0; i < link->count; ++i)
         {
-            //_LOG("port: %s %04x, %04x\n",out ? "out" : "in",link->iodt[i].port, value);
+            //if(port>=0&&port<=0xF)
+            //    _LOG("port: %s %04x, %04x, %04x\n",out ? "out" : "in",port, link->iodt[i].port, value);
             if(link->iodt[i].port == port)
                 return link->iodt[i].handler(port, value, out);
         }

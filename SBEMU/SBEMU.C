@@ -48,19 +48,19 @@ static int SBEMU_Indexof(uint8_t* array, int count, uint8_t  val)
 
 void SBEMU_Mixer_WriteAddr(int16_t port, uint8_t value)
 {
-    _LOG("SBEMU: mixer wirte addr: %d", value);
+    _LOG("SBEMU: mixer wirte addr: %x %x\n", port, value);
     SBEMU_MixerRegIndex = value;
 }
 
 void SBEMU_Mixer_Write(uint16_t port, uint8_t value)
 {
-    _LOG("SBEMU: mixer wirte: %x", value);
+    _LOG("SBEMU: mixer wirte: %x\n", value);
     SBEMU_MixerRegs[SBEMU_MixerRegIndex] = value;
 }
 
 uint8_t SBEMU_Mixer_Read(uint16_t port)
 {
-    _LOG("SBEMU: mixer read: %x", SBEMU_MixerRegs[SBEMU_MixerRegIndex]);
+    _LOG("SBEMU: mixer read: %x\n", SBEMU_MixerRegs[SBEMU_MixerRegIndex]);
     return SBEMU_MixerRegs[SBEMU_MixerRegIndex];
 }
 
