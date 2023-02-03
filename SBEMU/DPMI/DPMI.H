@@ -196,6 +196,10 @@ uint32_t DPMI_CallRealModeOldISR(DPMI_ISR_HANDLE* inputp handle);
 uint32_t DPMI_AllocateRMCB_RETF(void(*Fn)(void), DPMI_REG* reg);
 uint32_t DPMI_AllocateRMCB_IRET(void(*Fn)(void), DPMI_REG* reg);
 
+//virtual interrupt states
+uint8_t DPMI_DisableInterrupt();
+void DPMI_RestoreInterrupt(uint8_t state);
+
 //TSR/callback usage
 void DPMI_GetPhysicalSpace(DPMI_SPACE* outputp spc);
 BOOL DPMI_TSR(void);
@@ -278,5 +282,8 @@ void DPMI_HighFree(uint32_t segment);
 #ifdef __cplusplus
 }
 #endif
+
+#define CLIS() int DPMI_IFlag = DPMI_DisableInterrupt()
+#define STIL() do { DPMI_RestoreInterrupt(DPMI_IFlag); } while(0)
 
 #endif

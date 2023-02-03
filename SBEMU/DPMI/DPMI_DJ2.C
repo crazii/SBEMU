@@ -557,6 +557,16 @@ uint32_t DPMI_AllocateRMCB_IRET(void(*Fn)(void), DPMI_REG* reg)
         return 0;
 }
 
+uint8_t DPMI_DisableInterrupt()
+{
+    return __dpmi_get_and_disable_virtual_interrupt_state();
+}
+
+void DPMI_RestoreInterrupt(uint8_t state)
+{
+    __dpmi_get_and_set_virtual_interrupt_state(state);
+}
+
 void DPMI_GetPhysicalSpace(DPMI_SPACE* outputp spc)
 {
     #if NEW_IMPL//doesn't work with old method.
