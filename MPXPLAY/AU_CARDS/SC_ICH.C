@@ -516,6 +516,10 @@ static void snd_intel_measure_ac97_clock(struct mpxplay_audioout_info_s *aui)
  snd_intel_prepare_playback(card,aui);
  MDma_clearbuf(aui);
 
+#ifdef SBEMU
+int cr = snd_intel_read_8(card,ICH_PO_CR_REG);
+snd_intel_write_8(card,ICH_PO_CR_REG, 0); //disable LVBIE/IOCE
+#endif
  INTELICH_start(aui);
  starttime=pds_gettimeu();
  do{
@@ -529,6 +533,9 @@ static void snd_intel_measure_ac97_clock(struct mpxplay_audioout_info_s *aui)
  else
   timelen=0;
  INTELICH_stop(aui);
+ #ifdef SBEMU
+ snd_intel_write_8(card,ICH_PO_CR_REG, cr);
+ #endif
 
  if(timelen && (timelen<1000000)){
   dmabufsize=card->period_size_bytes*(ICH_DMABUF_PERIODS-1); // the test buflen

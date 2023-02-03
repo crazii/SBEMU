@@ -25,16 +25,15 @@ extern unsigned long TEST_SampleLen;
 
 mpxplay_audioout_info_s aui = {0};
 
-#define MAIN_PCM_SAMPLESIZE 8192
-#define MAIN_TRAP_PIC_ONDEMAND 1 //workaround crashes
+#define MAIN_PCM_SAMPLESIZE 16384
 
 static int16_t MAIN_OPLPCM[MAIN_PCM_SAMPLESIZE+256];
+static int16_t MAIN_PCM[MAIN_PCM_SAMPLESIZE+256];
 
 static DPMI_ISR_HANDLE MAIN_TimerIntHandlePM;
 static uint32_t MAIN_DMA_Addr = 0;
 static uint32_t MAIN_DMA_Size = 0;
 static uint32_t MAIN_DMA_MappedAddr = 0;
-static int16_t MAIN_PCM[MAIN_PCM_SAMPLESIZE+256];
 
 static void MAIN_Interrupt();
 static void MAIN_InterruptPM();
@@ -175,6 +174,7 @@ struct
     "/D", "Specify DMA channel, valid value: 0,1,3", 1,
     "/OPL", "Enable OPL3 emulation", FALSE,
     "/PM", "Support protected mode games, you can try disable it when you have compatibility issues", TRUE,
+    "/RM", "Support real mode games", TRUE,
     
     "/test", "Test sound and exit", FALSE,
     NULL, NULL, 0,
@@ -187,6 +187,7 @@ enum EOption
     OPT_DMA,
     OPT_OPL,
     OPT_PM,
+    OPT_RM,
 
     OPT_TEST,
     OPT_COUNT,
@@ -271,23 +272,42 @@ int main(int argc, char* argv[])
     }
 
     DPMI_Init();
-    int bcd = QEMM_GetVersion();
-    _LOG("QEMM version: %x.%02x\n", bcd>>8, bcd&0xFF);
-    if(bcd < 0x703)
+    if(MAIN_Options[OPT_RM].value)
     {
-        printf("Error: QEMM not installed, or version bellow 7.03: %x.%02x\n", bcd>>8, bcd&0xFF);
-        return 1;
+        int bcd = QEMM_GetVersion();
+        _LOG("QEMM version: %x.%02x\n", bcd>>8, bcd&0xFF);
+        if(bcd < 0x703)
+        {
+            printf("QEMM not installed, or version bellow 7.03: %x.%02x, disable real mode support.\n", bcd>>8, bcd&0xFF);
+            MAIN_Options[OPT_RM].value = FALSE;
+        }
     }
-
     if(MAIN_Options[OPT_PM].value)
     {
         BOOL hasHDPMI = HDPMIPT_Detect(); //another DPMI host used other than HDPMI
         if(!hasHDPMI)
-            printf("HDPMI not installed.\n");
+            printf("HDPMI not installed, disable protected mode support.\n");
         MAIN_Options[OPT_PM].value = hasHDPMI;
     }
     BOOL enablePM = MAIN_Options[OPT_PM].value;
-    printf("Support for protected mode games %s.\n", enablePM ? "enabled" : "diabled");
+    BOOL enableRM = MAIN_Options[OPT_RM].value;
+    if(!enablePM && !enableRM)
+    {
+        printf("Both real mode & protected mode supprted are disabled, exiting.\n");
+        return 1;
+    }
+    printf("Support for real mode games %s.\n", enableRM ? "enabled" : "disabled");
+    printf("Support for protected mode games %s.\n", enablePM ? "enabled" : "disabled");
+    if(enableRM)
+    {
+        UntrappedIO_OUT_Handler = &QEMM_UntrappedIO_Write;
+        UntrappedIO_IN_Handler = &QEMM_UntrappedIO_Read;
+    }
+    else
+    {
+        UntrappedIO_OUT_Handler = &HDPMIPT_UntrappedIO_Write;
+        UntrappedIO_IN_Handler = &HDPMIPT_UntrappedIO_Read;
+    }
     
     AU_init(&aui);
     if(!aui.card_handler)
@@ -298,12 +318,12 @@ int main(int argc, char* argv[])
     //use fixed rate
     mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, SBEMU_SAMPLERATE, SBEMU_CHANNELS, SBEMU_CHANNELS, NULL, SBEMU_BITS, SBEMU_BITS/8, 0};
     AU_setrate(&aui, &adi);
-
+    
     QEMM_IOPT OPL3IOPT;
     QEMM_IOPT OPL3IOPT_PM;
     if(MAIN_Options[OPT_OPL].value)
     {
-        if(!QEMM_Install_IOPortTrap(MAIN_OPL3IODT, 4, &OPL3IOPT))
+        if(enableRM && !QEMM_Install_IOPortTrap(MAIN_OPL3IODT, 4, &OPL3IOPT))
         {
             printf("Error: Failed installing IO port trap for QEMM.\n");
             return 1;
@@ -311,7 +331,7 @@ int main(int argc, char* argv[])
         if(enablePM && !HDPMIPT_Install_IOPortTrap(0x388, 0x38B, MAIN_OPL3IODT, 4, &OPL3IOPT_PM))
         {
             printf("Error: Failed installing IO port trap for HDPMI.\n");
-            QEMM_Uninstall_IOPortTrap(&OPL3IOPT);
+            if(enableRM) QEMM_Uninstall_IOPortTrap(&OPL3IOPT);
             return 1;          
         }
 
@@ -329,13 +349,13 @@ int main(int argc, char* argv[])
     
     printf("Sound Blaster emulation enabled at Adress: %x, IRQ: %x, DMA: %x", MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value);
 
-    BOOL QEMMInstalledVDMA = QEMM_Install_IOPortTrap(MAIN_VDMA_IODT, countof(MAIN_VDMA_IODT), &MAIN_VDMA_IOPT);
-    #if MAIN_TRAP_PIC_ONDEMAND//will crash with VIRQ installed, do it temporarily. TODO: figure out why
+    BOOL QEMMInstalledVDMA = !enableRM || QEMM_Install_IOPortTrap(MAIN_VDMA_IODT, countof(MAIN_VDMA_IODT), &MAIN_VDMA_IOPT);
+    #if 1//will crash with VIRQ installed, do it temporarily. TODO: figure out why
     BOOL QEMMInstalledVIRQ = TRUE;
     #else
-    BOOL QEMMInstalledVIRQ = QEMM_Install_IOPortTrap(MAIN_VIRQ_IODT, countof(MAIN_VIRQ_IODT), &MAIN_VIRQ_IOPT);
+    BOOL QEMMInstalledVIRQ = !enableRM || QEMM_Install_IOPortTrap(MAIN_VIRQ_IODT, countof(MAIN_VIRQ_IODT), &MAIN_VIRQ_IOPT);
     #endif
-    BOOL QEMMInstalledSB = QEMM_Install_IOPortTrap(SB_Iodt, SB_IodtCount, &MAIN_SB_IOPT);
+    BOOL QEMMInstalledSB = !enableRM || QEMM_Install_IOPortTrap(SB_Iodt, SB_IodtCount, &MAIN_SB_IOPT);
 
     BOOL HDPMIInstalledVDMA1 = !enablePM || HDPMIPT_Install_IOPortTrap(0x0, 0xF, MAIN_VDMA_IODT, 16, &MAIN_VDMA_IOPT_PM1);
     BOOL HDPMIInstalledVDMA2 = !enablePM || HDPMIPT_Install_IOPortTrap(0x81, 0x83, MAIN_VDMA_IODT+16, 3, &MAIN_VDMA_IOPT_PM2);
@@ -358,17 +378,17 @@ int main(int argc, char* argv[])
     {
         if(MAIN_Options[OPT_OPL].value)
         {
-            QEMM_Uninstall_IOPortTrap(&OPL3IOPT);
-            HDPMIPT_Uninstall_IOPortTrap(&OPL3IOPT_PM);
+            if(enableRM) QEMM_Uninstall_IOPortTrap(&OPL3IOPT);
+            if(enablePM) HDPMIPT_Uninstall_IOPortTrap(&OPL3IOPT_PM);
         }
 
         if(!QEMMInstalledVDMA || !QEMMInstalledVIRQ || !QEMMInstalledSB)
             printf("Error: Failed installing IO port trap for QEMM.\n");
-        if(QEMMInstalledVDMA) QEMM_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT);
-        #if !(MAIN_TRAP_PIC_ONDEMAND)
-        if(QEMMInstalledVIRQ) QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
+        if(enableRM && QEMMInstalledVDMA) QEMM_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT);
+        #if 0
+        if(enableRM && QEMMInstalledVIRQ) QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
         #endif
-        if(QEMMInstalledSB) QEMM_Uninstall_IOPortTrap(&MAIN_SB_IOPT);
+        if(enableRM && QEMMInstalledSB) QEMM_Uninstall_IOPortTrap(&MAIN_SB_IOPT);
 
         if(!HDPMIInstalledVDMA1 || !HDPMIInstalledVDMA2 || !HDPMIInstalledVDMA3 || !HDPMIInstalledVIRQ1 || !HDPMIInstalledVIRQ2 || !HDPMIInstalledSB)
             printf("Error: Failed installing IO port trap for HDPMI.\n");
@@ -395,10 +415,11 @@ static void MAIN_InterruptPM()
     {
         MAIN_Interrupt();
         PIC_SendEOIWithIRQ(aui.card_irq);
+        //PIC_SendEOI();
     }
     else
     {
-        _LOG("OLDISR\n");
+        //_LOG("OLDISR\n");
         DPMI_CallOldISR(&MAIN_TimerIntHandlePM);
         //DPMI_CallRealModeOldISR(&MAIN_TimerIntHandlePM);
         PIC_UnmaskIRQ(aui.card_irq);
@@ -467,7 +488,7 @@ static void MAIN_Interrupt()
                 count *= (SB_Rate + aui.freq_card/2)/aui.freq_card;        
             count = min(count, (DMA_Count)/samplebytes/channels);
             count = min(count, (SB_Bytes-SB_Pos)/samplebytes/channels);
-            //_LOG("samples:%d %d, %d %d, %d %d\n", samples, count, DMA_Count, DMA_Index, SB_Bytes, MAIN_SBBytes);
+            //_LOG("samples:%d %d, %d %d, %d %d\n", samples, pos+count, DMA_Count, DMA_Index, SB_Bytes, SB_Pos);
             int bytes = count * samplebytes * channels;
 
             if(MAIN_DMA_MappedAddr == 0) //map failed?
@@ -495,15 +516,9 @@ static void MAIN_Interrupt()
                     SBEMU_Stop();
                 SB_Pos = SBEMU_SetPos(0);
                 
-                #if MAIN_TRAP_PIC_ONDEMAND
-                QEMM_Install_IOPortTrap(MAIN_VIRQ_IODT, countof(MAIN_VIRQ_IODT), &MAIN_VIRQ_IOPT);
-                #endif
-
+                if(MAIN_Options[OPT_RM].value) QEMM_Install_IOPortTrap(MAIN_VIRQ_IODT, countof(MAIN_VIRQ_IODT), &MAIN_VIRQ_IOPT);
                 VIRQ_Invoke(SBEMU_GetIRQ());
-
-                #if MAIN_TRAP_PIC_ONDEMAND
-                QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
-                #endif
+                if(MAIN_Options[OPT_RM].value) QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
                 
                 SB_Bytes = SBEMU_GetSampleBytes();
                 SB_Pos = SBEMU_GetPos();

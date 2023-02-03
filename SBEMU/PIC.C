@@ -14,6 +14,10 @@
 
 #define PIC_READISR 0x0B    //read interrupte service register (current interrupting IRQ)
 
+#undef CLIS
+#undef STIL
+#define CLIS()
+#define STIL()
 
 void PIC_SendEOIWithIRQ(uint8_t irq)
 {

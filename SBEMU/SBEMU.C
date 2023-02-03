@@ -83,6 +83,7 @@ void SBEMU_DSP_Reset(uint16_t port, uint8_t value)
         SBEMU_Bits = 8;
         SBEMU_Pos = 0;
         SBEMU_HighSpeed = 0;
+        SBEMU_TriggerIRQ = 0;
     }
     if(value == 0 && SBEMU_ResetState == SBEMU_RESET_START)
         SBEMU_ResetState = SBEMU_RESET_POLL;
@@ -104,6 +105,7 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
             {
                 SBEMU_TriggerIRQ = 1;
                 SBEMU_DSPCMD = 0;
+                //VIRQ_Invoke(SBEMU_GetIRQ());
             }
             break;
             case SBEMU_CMD_DAC_SPEAKER_ON:
@@ -294,6 +296,7 @@ uint8_t SBEMU_DSP_ReadStatus(uint16_t port)
     || SBEMU_DSPCMD == SBEMU_CMD_DSP_COPYRIGHT)
         return 0xFF; //ready for read (bit7 set)
     SBEMU_MixerRegs[SBEMU_MIXERREG_INT_STS] &= ~0x1;
+    SBEMU_TriggerIRQ = 0;
     return 0x00;
 }
 
@@ -379,3 +382,4 @@ int SBEMU_SetPos(int pos)
 {
     return SBEMU_Pos = pos;
 }
+

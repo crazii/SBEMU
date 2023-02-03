@@ -173,9 +173,6 @@ BOOL QEMM_Install_IOPortTrap(QEMM_IODT* inputp iodt, uint16_t count, QEMM_IOPT* 
             DPMI_HighFree(dosmem);
             return FALSE;
         }
-
-        UntrappedIO_OUT_Handler = &QEMM_UntrappedIO_Write;
-        UntrappedIO_IN_Handler = &QEMM_UntrappedIO_Read;
     }
     assert(QEMM_IODT_Link->next == NULL);
     QEMM_IODT* mem = (QEMM_IODT*)malloc(sizeof(QEMM_IODT)*count);

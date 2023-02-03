@@ -244,27 +244,44 @@ BOOL HDPMIPT_Uninstall_IOPortTrap(QEMM_IOPT* inputp iopt)
     return TRUE;
 }
 
-
-BOOL HDPMIPT_GetInterruptContext(HDPMIPT_INTCONTEXT* context)
+void HDPMIPT_UntrappedIO_Write(uint16_t port, uint8_t value)
 {
     if(HDPMIPT_Entry.es == 0 || HDPMIPT_Entry.edi == 0)
     {
         if(!HDPMIPT_GetVendorEntry(&HDPMIPT_Entry))
-            return FALSE;
+            return;
     }
 
-    BOOL result = FALSE;
     asm(
-    "mov %2, %%ebx \n\t"     //EBX=context ptr
-    "mov $11, %%eax \n\t"   //ax=11, unistall port trap
+    "mov $0x08, %%eax \n\t" //function no.
+    "mov %1, %%dx \n\t"     //dx=port
+    "mov %2, %%cl \n\t"     //cl=value
+    "mov $1, %%ch \n\t"     //ch=int/out
+    "lcall *%0\n\t"
+    :
+    :"m"(HDPMIPT_Entry),"m"(port),"m"(value)
+    :"eax","ecx","edx"
+    );
+}
+
+uint8_t HDPMIPT_UntrappedIO_Read(uint16_t port)
+{
+    if(HDPMIPT_Entry.es == 0 || HDPMIPT_Entry.edi == 0)
+    {
+        if(!HDPMIPT_GetVendorEntry(&HDPMIPT_Entry))
+            return 0;
+    }
+
+    uint8_t result = 0;
+    asm(
+    "mov $0x08, %%eax \n\t" //function no.
+    "mov %2, %%dx \n\t"     //dx=port
+    "xor %%ch, %%ch \n\t"   //ch=in/out
     "lcall *%1\n\t"
-    "jc 1f \n\t"
-    "mov $1, %%eax \n\t"
-    "mov %%eax, %0 \n\t"
-    "1: nop \n\t"
+    "mov %%al, %0 \n\t"
     :"=m"(result)
-    :"m"(HDPMIPT_Entry),"m"(context)
-    :"eax","ebx","memory"
+    :"m"(HDPMIPT_Entry),"m"(port)
+    :"eax","ecx","edx"
     );
     return result;
 }
