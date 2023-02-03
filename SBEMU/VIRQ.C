@@ -61,9 +61,9 @@ uint8_t VIRQ_Read(uint16_t port)
 void VIRQ_Invoke(uint8_t irq)
 {
     _LOG("CALLINT %d\n", irq);
-    CLIS();
+    //CLIS();
     //int mask = PIC_GetIRQMask();
-    //PIC_SetIRQMask(0xFFFF);
+    PIC_SetIRQMask(0xFFFF);
     VIRQ_ISR[0] = VIRQ_ISR[1] = 0;
     if(irq < 8) //master
         VIRQ_ISR[0] = 1 << irq;
@@ -84,7 +84,7 @@ void VIRQ_Invoke(uint8_t irq)
     DPMI_CallRealModeIRET(&r);
 
     VIRQ_Irq = -1;
-    //PIC_SetIRQMask(mask);
-    STIL();
+    PIC_SetIRQMask(mask);
+    //STIL();
     _LOG("CALLINTEND\n", irq);
 }
