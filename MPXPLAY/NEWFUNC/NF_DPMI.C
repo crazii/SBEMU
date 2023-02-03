@@ -183,6 +183,7 @@ void pds_dpmi_unmap_physycal_memory(unsigned long linear_addr)
 #else//DJGPP
 
 #include <dpmi.h>
+#include <sys/exceptn.h>
 #include "newfunc.h"
 
 long pds_dpmi_segment_to_selector(unsigned int segment)
@@ -406,7 +407,7 @@ unsigned short pds_xms_alloc(unsigned short sizeKB, unsigned long* addr)
         r = pds_xms_regs;
         r.h.ah = 0x0A; //free XMS
         __dpmi_simulate_real_mode_procedure_retf(&r);
-        return handle;
+        return 0;
     }
     *addr = ((unsigned long)r.x.dx << 16L) | (unsigned long)r.x.bx;
     return handle;
@@ -434,7 +435,7 @@ int pds_xms_free(unsigned short handle)
 int pds_dpmi_xms_allocmem(xmsmem_t * mem,unsigned int size)
 {
     unsigned long addr;
-    size = (size+4095)/4096*4096; //__dpmi_set_segment_limit must be page aligned
+    size = (size+4095)/1024*1024;
     if( (mem->xms=pds_xms_alloc(size/1024, &addr)) )
     {
         unsigned long base = 0;
@@ -466,7 +467,10 @@ int pds_dpmi_xms_allocmem(xmsmem_t * mem,unsigned int size)
                 mem->physicalptr = (char*)addr;
                 mem->linearptr = (char*)(info.address - base);
                 unsigned long newlimit = info.address + size - base - 1;
+                newlimit = ((newlimit+1+0xFFF)&~0xFFF) - 1;//__dpmi_set_segment_limit must be page aligned
+                //printf("addr: %08x, limit: %08x\n",mem->linearptr, newlimit);
                 __dpmi_set_segment_limit(_my_ds(), max(limit, newlimit));
+                __dpmi_set_segment_limit(__djgpp_ds_alias, max(limit, newlimit));
                 return 1;
             }
         }while(0);

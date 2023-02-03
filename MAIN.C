@@ -195,7 +195,7 @@ enum EOption
 
 int main(int argc, char* argv[])
 {
-    if(argc == 1 || (argc == 2 && stricmp(argv[1],"/?") == 0))
+    if((argc == 2 && stricmp(argv[1],"/?") == 0))
     {
         printf("SBEMU: Sound Blaster emulation on AC97. Usage:\n");
         int i = 0;

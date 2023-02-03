@@ -62,7 +62,7 @@ void VIRQ_Invoke(uint8_t irq)
 {
     _LOG("CALLINT %d\n", irq);
     //CLIS();
-    //int mask = PIC_GetIRQMask();
+    int mask = PIC_GetIRQMask();
     PIC_SetIRQMask(0xFFFF);
     VIRQ_ISR[0] = VIRQ_ISR[1] = 0;
     if(irq < 8) //master
