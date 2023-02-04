@@ -488,7 +488,7 @@ static void MAIN_Interrupt()
                 count *= (SB_Rate + aui.freq_card/2)/aui.freq_card;        
             count = min(count, (DMA_Count)/samplebytes/channels);
             count = min(count, (SB_Bytes-SB_Pos)/samplebytes/channels);
-            _LOG("samples:%d %d, %d %d, %d %d\n", samples, pos+count, DMA_Count, DMA_Index, SB_Bytes, SB_Pos);
+            _LOG("samples:%d %d %d, %d %d, %d %d\n", samples, pos+count, count, DMA_Count, DMA_Index, SB_Bytes, SB_Pos);
             int bytes = count * samplebytes * channels;
 
             if(MAIN_DMA_MappedAddr == 0) //map failed?
@@ -496,16 +496,15 @@ static void MAIN_Interrupt()
             else
                 DPMI_CopyLinear(DPMI_PTR2L(MAIN_PCM+pos*2), MAIN_DMA_MappedAddr+(DMA_Addr-MAIN_DMA_Addr)+DMA_Index, bytes);
             if(samplebytes != 2)
-                cv_bits_n_to_m(MAIN_PCM+pos*2, count, samplebytes, 2);
+                cv_bits_n_to_m(MAIN_PCM+pos*2, count*channels, samplebytes, 2);
             if(SB_Rate != aui.freq_card)
-                count = mixer_speed_lq(MAIN_PCM+pos*2, count, channels, SB_Rate, aui.freq_card);
-            if(channels == 1)
+                count = mixer_speed_lq(MAIN_PCM+pos*2, count*channels, channels, SB_Rate, aui.freq_card)/channels;
+            if(channels == 1) //should be the last step
                 cv_channels_1_to_n(MAIN_PCM+pos*2, count, 2, 2);
-            else
-                count /= 2;
             pos += count;
             //_LOG("samples:%d %d %d\n", count, pos, samples);
             DMA_Index = VDMA_SetIndexCounter(dma, DMA_Index+bytes, DMA_Count-bytes);
+            //int LastDMACount = DMA_Count;
             DMA_Count = VDMA_GetCounter(dma);
             SB_Pos = SBEMU_SetPos(SB_Pos+bytes);
             //_LOG("SB bytes: %d %d\n", SB_Pos, SB_Bytes);
@@ -523,8 +522,8 @@ static void MAIN_Interrupt()
                 SB_Bytes = SBEMU_GetSampleBytes();
                 SB_Pos = SBEMU_GetPos();
                 SB_Rate = SBEMU_GetSampleRate();
-                //if(DMA_Count <= 16) //detection routine? fix crash in virtualbox.
-                //    break;
+                //if(LastDMACount <= 32) //detection routine?
+                    //break; fix crash in virtualbox.
                 //incase IRQ handler re-programs DMA
                 DMA_Index = VDMA_GetIndex(dma);
                 DMA_Count = VDMA_GetCounter(dma);
@@ -566,6 +565,6 @@ static void MAIN_Interrupt()
     aui.pcm_sample = MAIN_PCM;
     AU_writedata(&aui);
 
-    //_LOG("TIMEREND\n");
+    //_LOG("MAIN INT END\n");
     #endif
 }

@@ -9,9 +9,9 @@ static uint8_t VDMA_Modes[8];
 
 //internal datas
 static uint8_t VDMA_VMask[8];
-static int32_t VDMA_Index[16];
-static int32_t VDMA_Counter[16];
-static uint32_t VDMA_Addr[16];
+static int32_t VDMA_Index[8];
+static int32_t VDMA_Counter[8];
+static uint32_t VDMA_Addr[8];
 
 static uint8_t VDMA_Complete[8];
 static const uint8_t VDMA_PortChannelMap[16] =
@@ -72,14 +72,8 @@ uint8_t VDMA_Read(uint16_t port)
     {
         if(port >= VDMA_REG_CH0_ADDR && port <= VDMA_REG_CH3_COUNTER)
         {
-            if(0)
-            {
-                int addr = VDMA_Regs[channel*2];
-                int counter = VDMA_Regs[channel*2+1];
-                int value = ((port&0x1) == 1) ? counter : addr;
-                _LOG("VDMA %s: %d\n", ((port&0x1) == 1) ? "counter" : "addr", value);
-            }
             int value = VDMA_Regs[port];
+            _LOG("VDMA %s: %d\n", ((port&0x1) == 1) ? "counter" : "addr", value);
             if(((VDMA_Regs[VDMA_REG_FLIPFLOP]++)&0x1) == 0)
                 return value&0xFF;
             else

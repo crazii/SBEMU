@@ -92,7 +92,7 @@ void SBEMU_DSP_Reset(uint16_t port, uint8_t value)
 void SBEMU_DSP_Write(uint16_t port, uint8_t value)
 {
     _LOG("SBEMU: DSP write %02x, original: %02x\n", value, SBEMU_DSPCMD);
-    if(SBEMU_HighSpeed)
+    if(SBEMU_HighSpeed) //highspeed won't accept further commands, need reset
         return;
     int OldStarted = SBEMU_Started;
     if(SBEMU_DSPCMD == 0)

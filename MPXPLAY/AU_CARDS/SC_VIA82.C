@@ -98,7 +98,7 @@
 #define PCI_DEVICE_ID_VT8233     0x3059
 
 #define VIRTUALPAGETABLESIZE   4096
-#define PCMBUFFERPAGESIZE      4096
+#define PCMBUFFERPAGESIZE      512//4096 //page size determines the interrupt interval
 
 #define VIA_INT_INTERVAL 1
 

@@ -69,7 +69,7 @@
 #define ICH_MAX_BYTES        4
 #define ICH_DMABUF_ALIGN (ICH_DMABUF_PERIODS*ICH_MAX_CHANNELS*ICH_MAX_BYTES) // 256
 #ifdef SBEMU
-#define ICH_INT_INTERVAL     8
+#define ICH_INT_INTERVAL     1 //interrupt interval in periods //long interval won't work for doom/doom2
 #endif
 
 #define ICH_DEFAULT_RETRY 1000
