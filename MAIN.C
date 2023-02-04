@@ -296,6 +296,17 @@ int main(int argc, char* argv[])
         printf("Both real mode & protected mode supprted are disabled, exiting.\n");
         return 1;
     }
+    
+    AU_init(&aui);
+    if(!aui.card_handler)
+        return 0;
+    AU_ini_interrupts(&aui);
+    AU_setmixer_init(&aui);
+    AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 95);
+    //use fixed rate
+    mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, SBEMU_SAMPLERATE, SBEMU_CHANNELS, SBEMU_CHANNELS, NULL, SBEMU_BITS, SBEMU_BITS/8, 0};
+    AU_setrate(&aui, &adi);
+    
     printf("Support for real mode games %s.\n", enableRM ? "enabled" : "disabled");
     printf("Support for protected mode games %s.\n", enablePM ? "enabled" : "disabled");
     if(enableRM)
@@ -309,15 +320,6 @@ int main(int argc, char* argv[])
         UntrappedIO_IN_Handler = &HDPMIPT_UntrappedIO_Read;
     }
     
-    AU_init(&aui);
-    if(!aui.card_handler)
-        return 0;
-    AU_ini_interrupts(&aui);
-    AU_setmixer_init(&aui);
-    AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 95);
-    //use fixed rate
-    mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, SBEMU_SAMPLERATE, SBEMU_CHANNELS, SBEMU_CHANNELS, NULL, SBEMU_BITS, SBEMU_BITS/8, 0};
-    AU_setrate(&aui, &adi);
 
     QEMM_IOPT OPL3IOPT;
     QEMM_IOPT OPL3IOPT_PM;
@@ -524,6 +526,7 @@ static void MAIN_Interrupt()
                 SB_Rate = SBEMU_GetSampleRate();
                 //if(LastDMACount <= 32) //detection routine?
                     //break; fix crash in virtualbox.
+                //    pos = 0;
                 //incase IRQ handler re-programs DMA
                 DMA_Index = VDMA_GetIndex(dma);
                 DMA_Count = VDMA_GetCounter(dma);
@@ -565,6 +568,6 @@ static void MAIN_Interrupt()
     aui.pcm_sample = MAIN_PCM;
     AU_writedata(&aui);
 
-    //_LOG("MAIN INT END\n");
+    _LOG("MAIN INT END\n");
     #endif
 }

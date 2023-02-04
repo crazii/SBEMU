@@ -339,7 +339,7 @@ auinit_retry:
    goto err_out_auinit;
   }
   if(!aui->card_handler){
-   pds_textdisplay_printf("No soundcard found! (use -t option if you want to see something)");
+   pds_textdisplay_printf("No soundcard found!");
    goto err_out_auinit;
   }
  }
