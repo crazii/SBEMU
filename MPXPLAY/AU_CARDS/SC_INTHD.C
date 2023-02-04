@@ -34,7 +34,7 @@
 
 #define INTHD_MAX_CHANNELS 8
 #ifdef SBEMU
-#define AZX_PERIOD_SIZE 1024
+#define AZX_PERIOD_SIZE 512
 #else
 #define AZX_PERIOD_SIZE 4096
 #endif

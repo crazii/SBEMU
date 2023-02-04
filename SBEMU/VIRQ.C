@@ -92,7 +92,7 @@ void VIRQ_Invoke(uint8_t irq)
     #endif
 
     VIRQ_Irq = -1;
-    CLIS();
+    //CLIS();
     PIC_SetIRQMask(mask);
     //STIL();
     _LOG("CALLINTEND\n", irq);
