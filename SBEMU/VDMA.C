@@ -5,6 +5,7 @@
 //registers
 static uint16_t VDMA_Regs[16];
 static uint8_t VDMA_PageRegs[16];
+static uint8_t VDMA_Modes[8];
 
 //internal datas
 static uint8_t VDMA_VMask[8];
@@ -26,6 +27,11 @@ void VDMA_Write(uint16_t port, uint8_t byte)
     {
         if(port == VDMA_REG_FLIPFLOP)
             VDMA_Regs[port] = 0;
+        else if(port == VDMA_REG_MODE)
+        {
+            int channel = byte&0x3; //0~3
+            VDMA_Modes[channel] = byte&~0x3;
+        }
         else
             VDMA_Regs[port] = byte;
     }
@@ -43,7 +49,7 @@ void VDMA_Write(uint16_t port, uint8_t byte)
         else //counter
             VDMA_Counter[port>>1] = VDMA_Regs[port];
     }
-    else
+    else //page registers 0x87~0x8A
     {
         int channel = VDMA_PortChannelMap[port-0x80];
         if(channel != -1)
@@ -66,9 +72,13 @@ uint8_t VDMA_Read(uint16_t port)
     {
         if(port >= VDMA_REG_CH0_ADDR && port <= VDMA_REG_CH3_COUNTER)
         {
-            //int addr = VDMA_Regs[channel*2];
-            //int counter = VDMA_Regs[channel*2+1];
-            //int vaule = ((port&0x1) == 1) ? counter : addr;
+            if(0)
+            {
+                int addr = VDMA_Regs[channel*2];
+                int counter = VDMA_Regs[channel*2+1];
+                int value = ((port&0x1) == 1) ? counter : addr;
+                _LOG("VDMA %s: %d\n", ((port&0x1) == 1) ? "counter" : "addr", value);
+            }
             int value = VDMA_Regs[port];
             if(((VDMA_Regs[VDMA_REG_FLIPFLOP]++)&0x1) == 0)
                 return value&0xFF;
@@ -126,7 +136,7 @@ int32_t VDMA_SetIndexCounter(int channel, int32_t index, int32_t counter)
     {
         counter = 0x10000;
         VDMA_ToggleComplete(channel);
-        if(VDMA_GetAuto())
+        if(VDMA_GetAuto(channel))
         {
             index = 0;
             counter = VDMA_Counter[channel]+1;
@@ -138,9 +148,9 @@ int32_t VDMA_SetIndexCounter(int channel, int32_t index, int32_t counter)
     return VDMA_Index[channel] = index;
 }
 
-int VDMA_GetAuto()
+int VDMA_GetAuto(int channel)
 {
-    return VDMA_Regs[0x0B]&(1<<4);
+    return VDMA_Modes[channel]&(1<<4);
 }
 
 void VDMA_ToggleComplete(int channel)

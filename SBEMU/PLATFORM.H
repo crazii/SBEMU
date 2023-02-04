@@ -256,7 +256,7 @@ static __INLINE uint32_t EndianSwap32(uint32_t x) {return (x<<24) | ((x<<8)&0xFF
 #define BSF PLTFM_BSF
 #define CPU_FLAGS() PLTFM_CPU_FLAGS()
 
-#if 0
+#if 1
 //CLI is not enough. this works for normal code. but driver code during intrrupt (which keeps IF always 0) don't do CLI
 //CLIS will store IF and do cli.
 #define CLIS() int FLTFM_IFlag = (CPU_FLAGS()&CPU_IFLAG); CLI()

@@ -283,7 +283,8 @@ void DPMI_HighFree(uint32_t segment);
 }
 #endif
 
+/*
 #define CLIS() int DPMI_IFlag = DPMI_DisableInterrupt()
 #define STIL() do { DPMI_RestoreInterrupt(DPMI_IFlag); } while(0)
-
+*/
 #endif

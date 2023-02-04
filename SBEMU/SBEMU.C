@@ -105,7 +105,7 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
             {
                 SBEMU_TriggerIRQ = 1;
                 SBEMU_DSPCMD = 0;
-                //VIRQ_Invoke(SBEMU_GetIRQ());
+                //VIRQ_Invoke(SBEMU_GetIRQ()); //not working
             }
             break;
             case SBEMU_CMD_DAC_SPEAKER_ON:

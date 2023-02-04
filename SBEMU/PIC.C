@@ -21,6 +21,8 @@
 
 void PIC_SendEOIWithIRQ(uint8_t irq)
 {
+    if(irq == 7 || irq == 15) //check spurious irq
+        return PIC_SendEOI();
     CLIS();
     if(irq >= 8)
         outp(PIC_PORT2, 0x20);
@@ -100,7 +102,9 @@ void PIC_UnmaskIRQ(uint8_t irq)
     CLIS();    
     if(irq >= 8)
     {
-        outp(port, (uint8_t)(inp(port)&~0x4));
+        uint8_t master = inp(port);
+        if(master&0x4)
+            outp(port, (uint8_t)(master&~0x4)); //unmask slave
         port = PIC_DATA2;
         irq = (uint8_t)(irq - 8);
     }

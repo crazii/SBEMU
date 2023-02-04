@@ -172,7 +172,7 @@ struct
     "/A", "Specify IO address, valid value: 220,240", 0x220,
     "/I", "Specify IRQ number, valud value: 5,7", 7,
     "/D", "Specify DMA channel, valid value: 0,1,3", 1,
-    "/OPL", "Enable OPL3 emulation", FALSE,
+    "/OPL", "Enable OPL3 emulation", TRUE,
     "/PM", "Support protected mode games, you can try disable it when you have compatibility issues", TRUE,
     "/RM", "Support real mode games", TRUE,
     
@@ -318,7 +318,7 @@ int main(int argc, char* argv[])
     //use fixed rate
     mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, SBEMU_SAMPLERATE, SBEMU_CHANNELS, SBEMU_CHANNELS, NULL, SBEMU_BITS, SBEMU_BITS/8, 0};
     AU_setrate(&aui, &adi);
-    
+
     QEMM_IOPT OPL3IOPT;
     QEMM_IOPT OPL3IOPT_PM;
     if(MAIN_Options[OPT_OPL].value)
@@ -450,11 +450,11 @@ static void MAIN_Interrupt()
         return;
         
     BOOL digital = SBEMU_HasStarted();
-    if(digital)
+    int dma = SBEMU_GetDMA();
+    int32_t DMA_Count = VDMA_GetCounter(dma); //count in bytes (8bit dma)
+    if(digital) //&& DMA_Count != 0x10000) //-1(0xFFFF)+1=0
     {
-        int dma = SBEMU_GetDMA();
         uint32_t DMA_Addr = VDMA_GetAddress(dma);
-        int32_t DMA_Count = VDMA_GetCounter(dma); //count in bytes (8bit dma)
         int32_t DMA_Index = VDMA_GetIndex(dma);
         uint32_t SB_Bytes = SBEMU_GetSampleBytes();
         uint32_t SB_Pos = SBEMU_GetPos();
@@ -479,7 +479,7 @@ static void MAIN_Interrupt()
                 MAIN_DMA_Size = align(max(DMA_Addr-MAIN_DMA_Addr+DMA_Index+DMA_Count, 64*1024*2), 4096);
                 MAIN_DMA_MappedAddr = (DMA_Addr+DMA_Index+DMA_Count <= 1024*1024) ? (DMA_Addr&~0xFFF) : DPMI_MapMemory(MAIN_DMA_Addr, MAIN_DMA_Size);
             }
-            //_LOG("DMA_ADDR:%x, %x\n",DMA_Addr, MAIN_DMA_MappedAddr);
+            //_LOG("DMA_ADDR:%x, %x, %x\n",DMA_Addr, MAIN_DMA_Addr, MAIN_DMA_MappedAddr);
 
             int count = samples-pos;
             if(SB_Rate < aui.freq_card)
@@ -488,7 +488,7 @@ static void MAIN_Interrupt()
                 count *= (SB_Rate + aui.freq_card/2)/aui.freq_card;        
             count = min(count, (DMA_Count)/samplebytes/channels);
             count = min(count, (SB_Bytes-SB_Pos)/samplebytes/channels);
-            //_LOG("samples:%d %d, %d %d, %d %d\n", samples, pos+count, DMA_Count, DMA_Index, SB_Bytes, SB_Pos);
+            _LOG("samples:%d %d, %d %d, %d %d\n", samples, pos+count, DMA_Count, DMA_Index, SB_Bytes, SB_Pos);
             int bytes = count * samplebytes * channels;
 
             if(MAIN_DMA_MappedAddr == 0) //map failed?
@@ -530,7 +530,7 @@ static void MAIN_Interrupt()
                 DMA_Count = VDMA_GetCounter(dma);
                 DMA_Addr = VDMA_GetAddress(dma);
             }
-        } while(VDMA_GetAuto() && (pos < samples) && SBEMU_HasStarted());
+        } while(VDMA_GetAuto(dma) && (pos < samples) && SBEMU_HasStarted());
         //_LOG("digital end %d %d\n", samples, pos);
         //for(int i = pos; i < samples; ++i)
         //    MAIN_PCM[i*2+1] = MAIN_PCM[i*2] = 0;

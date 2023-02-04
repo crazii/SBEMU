@@ -77,13 +77,22 @@ void VIRQ_Invoke(uint8_t irq)
     DPMI_REG r = {0};
     r.w.flags = 0;
     r.w.ss = r.w.sp = 0;
-    //DPMI_CallRealModeINT(PIC_IRQ2VEC(irq), &r); //real mode vector are local in HDPMI, IVT changes not recorded after TSR, use raw IVT
+    #if 0
+    DPMI_CallRealModeINT(PIC_IRQ2VEC(irq), &r); //real mode vector are local in HDPMI, IVT changes not recorded after TSR, use raw IVT.
+    #elif 1
     int n = PIC_IRQ2VEC(irq);
     r.w.ip = DPMI_LoadW(n*4);
     r.w.cs = DPMI_LoadW(n*4+2);
     DPMI_CallRealModeIRET(&r);
+    #else
+    if(irq == 7)
+        asm("int $0x0F");
+    else
+        asm("int $0x0D");
+    #endif
 
     VIRQ_Irq = -1;
+    CLIS();
     PIC_SetIRQMask(mask);
     //STIL();
     _LOG("CALLINTEND\n", irq);
