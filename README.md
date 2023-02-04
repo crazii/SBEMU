@@ -5,7 +5,8 @@ Supported Sound cards:
  * Intel ICH / nForce
  * Intel High Definition Audio
  * VIA VT82C686, VT8233
-The VT82C868 & ICH4 are tested working on real machine. 
+
+The VT82C868 & ICH4 are tested working on real machine.\
 ICH & HDA tested working in virtualbo, not verified on real machine yet.
 
 
