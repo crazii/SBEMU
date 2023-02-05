@@ -175,8 +175,10 @@ struct
     "/OPL", "Enable OPL3 emulation", TRUE,
     "/PM", "Support protected mode games, you can try disable it when you have compatibility issues", TRUE,
     "/RM", "Support real mode games", TRUE,
-    
+
+#if DEBUG
     "/test", "Test sound and exit", FALSE,
+#endif
     NULL, NULL, 0,
 };
 enum EOption
@@ -189,7 +191,9 @@ enum EOption
     OPT_PM,
     OPT_RM,
 
+#if DEBUG
     OPT_TEST,
+#endif
     OPT_COUNT,
 };
 
@@ -257,7 +261,7 @@ int main(int argc, char* argv[])
         return 1;
     }
     //TODO: alter BLASTER env?
-
+#if DEBUG
     if(MAIN_Options[OPT_TEST].value) //test
     {
         AU_init(&aui);
@@ -270,6 +274,7 @@ int main(int argc, char* argv[])
         AU_del_interrupts(&aui);
         return 0;
     }
+#endif
 
     DPMI_Init();
     if(MAIN_Options[OPT_RM].value)
@@ -307,8 +312,8 @@ int main(int argc, char* argv[])
     mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, SBEMU_SAMPLERATE, SBEMU_CHANNELS, SBEMU_CHANNELS, NULL, SBEMU_BITS, SBEMU_BITS/8, 0};
     AU_setrate(&aui, &adi);
     
-    printf("Support for real mode games %s.\n", enableRM ? "enabled" : "disabled");
-    printf("Support for protected mode games %s.\n", enablePM ? "enabled" : "disabled");
+    printf("Real mode support: %s.\n", enableRM ? "enabled" : "disabled");
+    printf("Protected mode support: %s.\n", enablePM ? "enabled" : "disabled");
     if(enableRM)
     {
         UntrappedIO_OUT_Handler = &QEMM_UntrappedIO_Write;
