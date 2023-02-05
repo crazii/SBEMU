@@ -9,9 +9,13 @@ static uint8_t VDMA_Modes[8];
 
 //internal datas
 static uint8_t VDMA_VMask[8];
-static int32_t VDMA_Index[8];
-static int32_t VDMA_Counter[8];
-static uint32_t VDMA_Addr[8];
+static uint32_t VDMA_Addr[8];   //initial addr
+static int32_t VDMA_Index[8]; //current addr offset
+static int32_t VDMA_Counter[8]; //initial counter
+static int32_t VDMA_CurCounter[8]; //current counter
+
+static uint32_t VDMA_InIO[8]; //in the middle of reading counter/addr
+static uint8_t VDMA_DelayUpdate[8];
 
 static uint8_t VDMA_Complete[8];
 static const uint8_t VDMA_PortChannelMap[16] =
@@ -38,16 +42,23 @@ void VDMA_Write(uint16_t port, uint8_t byte)
     else if(port >= VDMA_REG_CH0_ADDR && port <= VDMA_REG_CH3_COUNTER)
     {
         if(((VDMA_Regs[VDMA_REG_FLIPFLOP]++)&0x1) == 0)
+        {
+            VDMA_InIO[port>>1] = TRUE;        
             VDMA_Regs[port] = (VDMA_Regs[port]&~0xFF) | byte;
+        }
         else
+        {
             VDMA_Regs[port] = (VDMA_Regs[port]&~0xFF00) | (byte<<8);
+            VDMA_InIO[port>>1] = FALSE;
+            VDMA_DelayUpdate[port>>1] = FALSE;
+        }
         if((port&0x1) == 0)//addr
         {
             VDMA_Index[port>>1] = 0;
             VDMA_Addr[port>>1] = (VDMA_Addr[port>>1]&~0xFFFF) | VDMA_Regs[port];
         }
         else //counter
-            VDMA_Counter[port>>1] = VDMA_Regs[port];
+            VDMA_CurCounter[port>>1] = VDMA_Counter[port>>1] = VDMA_Regs[port] + 1;
     }
     else //page registers 0x87~0x8A
     {
@@ -75,9 +86,22 @@ uint8_t VDMA_Read(uint16_t port)
             int value = VDMA_Regs[port];
             _LOG("VDMA %s: %d\n", ((port&0x1) == 1) ? "counter" : "addr", value);
             if(((VDMA_Regs[VDMA_REG_FLIPFLOP]++)&0x1) == 0)
+            {
+                VDMA_InIO[channel] = TRUE;
                 return value&0xFF;
+            }
             else
-                return ((value>>8)&0xFF);
+            {
+                uint8_t ret = ((value>>8)&0xFF);
+                if(VDMA_DelayUpdate[channel])
+                {
+                    VDMA_Regs[(channel<<1)+1] = VDMA_CurCounter[channel]-1; //update counter reg
+                    VDMA_Regs[(channel<<1)] = VDMA_Addr[channel] + VDMA_Index[channel]; //update addr reg
+                }
+                VDMA_InIO[channel] = FALSE;
+                VDMA_DelayUpdate[channel] = FALSE;
+                return ret;
+            }
         }
         else if(port >= VDMA_REG_CH0_PAGEADDR && port <= VDMA_REG_CH3_PAGEADDR)
                 return VDMA_PageRegs[channel];
@@ -110,13 +134,12 @@ void VDMA_Virtualize(int channel, int enable)
 
 uint32_t VDMA_GetAddress(int channel)
 {
-    //return VDMA_Regs[channel*2] | (VDMA_PageAddr[channel]<<16L);
     return VDMA_Addr[channel];
 }
 
 uint32_t VDMA_GetCounter(int channel)
 {
-    return VDMA_Regs[channel*2+1] + 1;
+    return VDMA_CurCounter[channel];
 }
 
 int32_t VDMA_GetIndex(int channel)
@@ -133,12 +156,19 @@ int32_t VDMA_SetIndexCounter(int channel, int32_t index, int32_t counter)
         if(VDMA_GetAuto(channel))
         {
             index = 0;
-            counter = VDMA_Counter[channel]+1;
+            counter = VDMA_Counter[channel];
         }
     }
-    VDMA_Regs[(channel<<1)+1] = counter-1; //update counter reg
-    VDMA_Regs[(channel<<1)] = VDMA_Addr[channel] + index; //update addr reg
+    if(!VDMA_InIO[channel])
+    {
+        VDMA_Regs[(channel<<1)+1] = counter-1; //update counter reg
+        VDMA_Regs[(channel<<1)] = VDMA_Addr[channel] + index; //update addr reg
+    }
+    else
+        VDMA_DelayUpdate[channel] = TRUE;
     VDMA_PageRegs[channel] = (VDMA_Addr[channel] + index) >> 16;
+    //_LOG("cur counter: %d\n", counter);
+    VDMA_CurCounter[channel] = counter;
     return VDMA_Index[channel] = index;
 }
 
