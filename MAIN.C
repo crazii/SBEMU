@@ -518,6 +518,7 @@ static void MAIN_Interrupt()
             if(SB_Pos >= SB_Bytes)
             {
                 //_LOG("INT:%d,%d,%d,%d\n",MAIN_SBBytes,SBEMU_GetSampleBytes(),MAIN_DMAIndex,DMA_Count);
+                //_LOG("SBEMU: Auto: %d\n",SBEMU_GetAuto());
                 if(!SBEMU_GetAuto())
                     SBEMU_Stop();
                 SB_Pos = SBEMU_SetPos(0);

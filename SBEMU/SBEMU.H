@@ -53,8 +53,9 @@
 #define SBEMU_CMD_8OR16_OUT_1       0x41
 //fllowing commands
 #define SBEMU_CMD_8OR16_8_OUT_1     0xC0
-#define SBEMU_CMD_8OR16_16_OUT_1    0xB0
 #define SBEMU_CMD_8OR16_8_OUT_AUTO  0xC6
+#define SBEMU_CMD_8OR16_8_OUT_AUTO_NOFIFO 0xC4 //undocumented, FIFO bit(bit 1) off. from DOSBox source comments
+#define SBEMU_CMD_8OR16_16_OUT_1    0xB0
 #define SBEMU_CMD_8OR16_16_OUT_AUTO 0xB6
 //fllowiing modes
 #define SBEMU_CMD_MODE_PCM8_MONO    0x00

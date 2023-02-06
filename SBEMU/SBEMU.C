@@ -186,17 +186,21 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
             case SBEMU_CMD_8OR16_OUT_1: //command start: sample rate, next command: mode
             {
                 if(SBEMU_DSPCMD_Subindex++ == 0)
-                    SBEMU_SampleRate = value;
+                    SBEMU_SampleRate = value<<8;
                 else
-                    SBEMU_SampleRate |= value<<8;
+                {
+                    SBEMU_SampleRate &= ~0xFF;
+                    SBEMU_SampleRate |= value;
+                }
             }
             break;
             case SBEMU_CMD_8OR16_8_OUT_1:
             case SBEMU_CMD_8OR16_8_OUT_AUTO:
+            case SBEMU_CMD_8OR16_8_OUT_AUTO_NOFIFO:
             case SBEMU_CMD_8OR16_16_OUT_1:
             case SBEMU_CMD_8OR16_16_OUT_AUTO:
             {
-                SBEMU_Auto == (SBEMU_DSPCMD==SBEMU_CMD_8OR16_8_OUT_AUTO || SBEMU_DSPCMD==SBEMU_CMD_8OR16_16_OUT_AUTO);
+                SBEMU_Auto = (SBEMU_DSPCMD==SBEMU_CMD_8OR16_8_OUT_AUTO || SBEMU_DSPCMD==SBEMU_CMD_8OR16_16_OUT_AUTO || SBEMU_DSPCMD==SBEMU_CMD_8OR16_8_OUT_AUTO_NOFIFO);
                 SBEMU_DSPCMD = value; //set next command: mode
                 SBEMU_DSPCMD_Subindex = 0;
             }
