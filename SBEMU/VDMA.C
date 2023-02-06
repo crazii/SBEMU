@@ -24,6 +24,8 @@ static const uint8_t VDMA_PortChannelMap[16] =
     -1, 6, 7, 5, -1, -1, -1, 4,
 };
 
+#define VMDA_IS_CHANNEL_VIRTUALIZED(channel) (VDMA_VMask[channel])
+
 void VDMA_Write(uint16_t port, uint8_t byte)
 {
     _LOG("VDMA write: %x, %x %d\n", port, byte, UntrappedIO_PM);
@@ -79,7 +81,7 @@ uint8_t VDMA_Read(uint16_t port)
 {
     _LOG("VDMA read: %x\n", port);
     int channel = port>>1;
-    if(VDMA_VMask[channel])
+    if(VMDA_IS_CHANNEL_VIRTUALIZED(channel))
     {
         if(port >= VDMA_REG_CH0_ADDR && port <= VDMA_REG_CH3_COUNTER)
         {
@@ -113,7 +115,7 @@ uint8_t VDMA_Read(uint16_t port)
     {
         for(int i = 0; i < 4; ++i)
         {
-            if(VDMA_VMask[i])
+            if(VMDA_IS_CHANNEL_VIRTUALIZED(i))
             {
                 result &= ~((1<<i) | (1<<(i+4)));
                 result |= VDMA_Complete[i] ? (1<<i) : 0;
