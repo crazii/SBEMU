@@ -493,7 +493,7 @@ static void MAIN_Interrupt()
                 count = max(channels, count/((aui.freq_card+SB_Rate-1)/SB_Rate));
             else if(SB_Rate > aui.freq_card)
                 count *= (SB_Rate + aui.freq_card/2)/aui.freq_card;
-            count = min(count, (DMA_Count)/samplebytes/channels);
+            count = min(count, max(1,(DMA_Count)/samplebytes/channels)); //stereo initial 1 byte
             count = min(count, max(1,(SB_Bytes-SB_Pos)/samplebytes/channels)); //stereo initial 1 byte. 1 /2channel = 0, make it 1
             _LOG("samples:%d %d %d, %d %d, %d %d\n", samples, pos+count, count, DMA_Count, DMA_Index, SB_Bytes, SB_Pos);
             int bytes = count * samplebytes * channels;
