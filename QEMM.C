@@ -115,17 +115,43 @@ uint16_t QEMM_GetVersion(void)
     //http://mirror.cs.msu.ru/oldlinux.org/Linux.old/docs/interrupts/int-html/rb-2830.htm
     int fd = 0;
     unsigned int result = _dos_open("QEMM386$", O_RDONLY, &fd);
-    if(result != 0)
-        return 0;
     uint32_t entryfar = 0;
     //ioctl - read from character device control channel
-    int count = ioctl(fd, DOS_RCVDATA, 4, &entryfar);
-    _dos_close(fd);
-    if(count != 4)
-        return 0;
     DPMI_REG r = {0};
-    r.w.cs = entryfar>>16;
-    r.w.ip = entryfar&0xFFFF;
+	if (result == 0) //QEMM detected
+    {
+		int count = ioctl(fd, DOS_RCVDATA, 4, &entryfar);
+		_dos_close(fd);
+		if(count != 4)
+			return 0;
+		r.w.cs = entryfar>>16;
+		r.w.ip = entryfar&0xFFFF;
+	}
+    else //check QPIEMU for JEMM
+    {
+		/* getting the entry point of QPIEMU is non-trivial in protected-mode, since
+		 * the int 2Fh must be executed as interrupt ( not just "simulated" ). Here
+		 * a small ( 3 bytes ) helper proc is constructed on the fly, at 0040:00D0,
+         * which is the INT 2Fh, followed by an RETF.
+		 */
+		asm(
+			"push ds \n\t"
+			"push $0x40 \n\t"
+			"pop ds \n\t"
+			"mov $0xd0, bx \n\t"
+			"mov $0xcb2fcd, (bx) \n\t"
+			"pop ds \n\t"
+		   );
+		r.w.ax = 0x1684;
+		r.w.bx = 0x4354;
+		r.w.sp = 0; r.w.ss = 0;
+		r.w.cs = 0x40;
+		r.w.ip = 0xd0;
+		if( DPMI_CallRealModeRETF(&r) != 0 || (r.w.ax & 0xff))
+			return 0;
+		r.w.ip = r.w.di;
+		r.w.cs = r.w.es;
+	}
     r.h.ah = 0x03;
     QEMM_EntryIP = r.w.ip;
     QEMM_EntryCS = r.w.cs;
