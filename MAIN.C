@@ -324,7 +324,6 @@ int main(int argc, char* argv[])
         UntrappedIO_OUT_Handler = &HDPMIPT_UntrappedIO_Write;
         UntrappedIO_IN_Handler = &HDPMIPT_UntrappedIO_Read;
     }
-    
 
     QEMM_IOPT OPL3IOPT;
     QEMM_IOPT OPL3IOPT_PM;
@@ -354,7 +353,7 @@ int main(int argc, char* argv[])
     QEMM_IODT* SB_Iodt = MAIN_Options[OPT_OPL].value ? MAIN_SB_IODT : MAIN_SB_IODT+4;
     int SB_IodtCount = MAIN_Options[OPT_OPL].value ? countof(MAIN_SB_IODT) : countof(MAIN_SB_IODT)-4;
     
-    printf("Sound Blaster emulation enabled at Adress: %x, IRQ: %x, DMA: %x", MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value);
+    printf("Sound Blaster emulation enabled at Adress: %x, IRQ: %x, DMA: %x\n", MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value);
 
     BOOL QEMMInstalledVDMA = !enableRM || QEMM_Install_IOPortTrap(MAIN_VDMA_IODT, countof(MAIN_VDMA_IODT), &MAIN_VDMA_IOPT);
     #if 1//will crash with VIRQ installed, do it temporarily. TODO: figure out why
@@ -459,7 +458,7 @@ static void MAIN_Interrupt()
     BOOL digital = SBEMU_HasStarted();
     int dma = SBEMU_GetDMA();
     int32_t DMA_Count = VDMA_GetCounter(dma); //count in bytes (8bit dma)
-    if(digital) //&& DMA_Count != 0x10000) //-1(0xFFFF)+1=0
+    if(digital)//&& DMA_Count != 0x10000) //-1(0xFFFF)+1=0
     {
         uint32_t DMA_Addr = VDMA_GetAddress(dma);
         int32_t DMA_Index = VDMA_GetIndex(dma);

@@ -93,7 +93,8 @@ void VIRQ_Invoke(uint8_t irq)
 
     VIRQ_Irq = -1;
     //CLIS();
+    _LOG("CPU FLAGS: %x\n", CPU_FLAGS());
     PIC_SetIRQMask(mask);
     //STIL();
-    _LOG("CALLINTEND\n", irq);
+    _LOG("CALLINTEND\n");
 }

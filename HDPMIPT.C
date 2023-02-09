@@ -50,7 +50,6 @@ static uint32_t __attribute__((noinline)) HDPMIPT_TrapHandler()
     :"memory"
     );
 
-    UntrappedIO_PM = TRUE;
     //if(port >= 0 && port <= 0xF)
         //_LOG("Trapped PM: %s %x\n", out ? "out" : "in", port);
     QEMM_IODT_LINK* link = HDPMIPT_IODT_header.next;
@@ -65,7 +64,6 @@ static uint32_t __attribute__((noinline)) HDPMIPT_TrapHandler()
         }
         link = link->next;
     }
-    UntrappedIO_PM = FALSE;
     return value;
 }
 
@@ -271,7 +269,6 @@ uint8_t HDPMIPT_UntrappedIO_Read(uint16_t port)
         if(!HDPMIPT_GetVendorEntry(&HDPMIPT_Entry))
             return 0;
     }
-
     uint8_t result = 0;
     asm(
     "mov $0x08, %%eax \n\t" //function no.

@@ -28,7 +28,7 @@ static const uint8_t VDMA_PortChannelMap[16] =
 
 void VDMA_Write(uint16_t port, uint8_t byte)
 {
-    _LOG("VDMA write: %x, %x %d\n", port, byte, UntrappedIO_PM);
+    _LOG("VDMA write: %x, %x\n", port, byte);
     if(port >= VDMA_REG_STATUS_CMD && port <= VDMA_REG_MULTIMASK)
     {
         if(port == VDMA_REG_FLIPFLOP)
