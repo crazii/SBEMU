@@ -452,6 +452,7 @@ unsigned int mixer_speed_lq(PCM_CV_TYPE_S *pcm16,unsigned int samplenum, unsigne
 
  pcm = buff;
  intmp = pcm16;
+ int total = samplenum/channels;
 
  do{
   int m1,m2;
@@ -463,7 +464,7 @@ unsigned int mixer_speed_lq(PCM_CV_TYPE_S *pcm16,unsigned int samplenum, unsigne
   ch=channels;
   ipi*=ch;
   intmp1=intmp+ipi;
-  intmp2=intmp1+ch;
+  intmp2=ipi < total-ch ? intmp1+ch : intmp1;
   do{
    *pcm++= ((*intmp1++)*m1+(*intmp2++)*m2)/4096;// >> 12; //don't use shift, signed right shift impl defined, maybe logical shift
   }while(--ch);
