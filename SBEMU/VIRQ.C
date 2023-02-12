@@ -4,7 +4,6 @@
 #include "UNTRAPIO.H"
 #include "DPMI/DBGUTIL.H"
 #include <dos.h>
-#include <dpmi.h>
 
 static int VIRQ_Irq = -1;
 static uint8_t VIRQ_ISR[2];
@@ -41,18 +40,18 @@ uint8_t VIRQ_Read(uint16_t port)
 {
     if(VIRQ_IS_VIRTUALIZING())
     {
-        _LOG("VIRQR:%x\n",port);
+        //_LOG("VIRQR:%x\n",port);
         if((port&0x0F) == 0x00)
         {
             int index = ((port==0x20) ? 0 : 1);
             if(VIRQ_OCW[index] == 0x0B)//ISR
             {
-                //_LOG("VIRQRV: %x\n",VIRQ_ISR[index]);
+                _LOG("VIRQR: %x %x\n",port, VIRQ_ISR[index]);
                 return VIRQ_ISR[index];
             }
             //return VIRQ_OCW[index] == 0x0B ? VIRQ_ISR[index] : UntrappedIO_IN(port);
         }
-        //_LOG("VIRQRV: 0\n");
+        _LOG("VIRQR: %x 0\n", port);
         return 0;
     }
     return UntrappedIO_IN(port);

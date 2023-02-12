@@ -103,6 +103,8 @@ int SBEMU_GetSampleBytes();
 int SBEMU_GetAuto();
 int SBEMU_GetPos(); //get pos in bytes
 int SBEMU_SetPos(int pos); //set pos in bytes
+int SBEMU_IRQTriggered();
+void SBEMU_SetIRQTriggered(int triggered);
 
 #ifdef __cplusplus
 }

@@ -25,6 +25,7 @@ static uint8_t SBEMU_IRQMap[4] = {2,5,7,10};
 static uint8_t SBEMU_MixerRegIndex = 0;
 static uint8_t SBEMU_idbyte;
 static uint8_t SBEMU_WS;
+static uint8_t SBEMU_RS = 0x2A;
 static int SBEMU_TimeConstantMapMono[][2] =
 {
     0xA5, 11025,
@@ -294,14 +295,17 @@ uint8_t SBEMU_DSP_WriteStatus(uint16_t port)
 uint8_t SBEMU_DSP_ReadStatus(uint16_t port)
 {
     _LOG("SBEMU: DSP RS\n");
+    /*
     if(SBEMU_ResetState == SBEMU_RESET_POLL || SBEMU_ResetState == SBEMU_RESET_START
     || SBEMU_DSPCMD == SBEMU_CMD_DSP_GETVER
     || SBEMU_DSPCMD == SBEMU_CMD_DSP_ID
     || SBEMU_DSPCMD == SBEMU_CMD_DSP_COPYRIGHT)
         return 0xFF; //ready for read (bit7 set)
+    */
+    SBEMU_RS += 0x80;
     SBEMU_MixerRegs[SBEMU_MIXERREG_INT_STS] &= ~0x1;
-    SBEMU_TriggerIRQ = 0;
-    return 0x00;
+    //SBEMU_TriggerIRQ = 0;
+    return SBEMU_RS;
 }
 
 uint8_t SBEMU_DSP_INT16ACK(uint16_t port)
@@ -387,3 +391,11 @@ int SBEMU_SetPos(int pos)
     return SBEMU_Pos = pos;
 }
 
+int SBEMU_IRQTriggered()
+{
+    return SBEMU_TriggerIRQ;
+}
+void SBEMU_SetIRQTriggered(int triggered)
+{
+    SBEMU_TriggerIRQ = triggered;
+}
