@@ -38,7 +38,8 @@ void PIC_SendEOI(void)
     uint16_t mask = inp(PIC_PORT1);
     if(mask&0x4)
         outp(PIC_PORT2, 0x20);
-    outp(PIC_PORT1, 0x20);
+    if(mask&~0x4)
+        outp(PIC_PORT1, 0x20);
     STIL();
 }
 
