@@ -72,10 +72,9 @@ static void __attribute__((naked)) HDPMIPT_TrapHandlerWrapper()
     //switch to local stack from trapped client's stack
     #if HDPMIPT_SWITCH_STACK
     asm(
-    "cli \n\t"
     "mov %%esp, %0 \n\t"
-    "push %%ss \n\t"
-    "pop %1 \n\t"
+    "mov %%ss, %%sp \n\t"
+    "mov %%sp, %1 \n\t"
     "lss %2, %%esp \n\t"
     :"=m"(HDPMIPT_OldESP[0]),"=m"(HDPMIPT_OldESP[1])
     :"m"(HDPMIPT_NewStack[0])

@@ -260,7 +260,14 @@ int main(int argc, char* argv[])
         printf("Error: invalid DMA channel.\n");
         return 1;
     }
-    //TODO: alter BLASTER env?
+    //alter BLASTER env. not working, seems local. TODO: http://www.techhelpmanual.com/346-dos_environment.html
+	#if 0
+    {
+        char buf[256];
+        sprintf(buf, "A%x I%x D%x", MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value);
+        setenv("BLASTER", buf, TRUE);
+    }
+	#endif
 #if DEBUG
     if(MAIN_Options[OPT_TEST].value) //test
     {
@@ -372,6 +379,7 @@ int main(int argc, char* argv[])
 
     BOOL PM_ISR = DPMI_InstallISR(PIC_IRQ2VEC(aui.card_irq), MAIN_InterruptPM, &MAIN_TimerIntHandlePM) == 0;
     PIC_UnmaskIRQ(aui.card_irq);
+    _LOG("sound card IRQ: %d\n", aui.card_irq);
 
     AU_prestart(&aui);
     AU_start(&aui);
@@ -448,6 +456,14 @@ static void MAIN_Interrupt()
     cur += aui.samplenum;
     cur -= AU_writedata(&aui);
     #else
+
+    if(SBEMU_IRQTriggered())
+    {
+        if(MAIN_Options[OPT_RM].value) QEMM_Install_IOPortTrap(MAIN_VIRQ_IODT, countof(MAIN_VIRQ_IODT), &MAIN_VIRQ_IOPT);
+        VIRQ_Invoke(SBEMU_GetIRQ());
+        if(MAIN_Options[OPT_RM].value) QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
+        SBEMU_SetIRQTriggered(FALSE);
+    }
 
     aui.card_outbytes = aui.card_dmasize;
     int samples = AU_cardbuf_space(&aui) / sizeof(int16_t) / 2; //16 bit, 2 channels
