@@ -243,8 +243,8 @@ switch_back:
 
 BOOL DPMI_TSR()
 {
-#if DPMI_USE_XMS_HEAP
     __djgpp_exception_toggle();
+#if DPMI_USE_XMS_HEAP
     //free all old app memory
     for(int i = 1; __djgpp_memory_handle_list[i].address; ++i)
     {
