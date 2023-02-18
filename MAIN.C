@@ -34,7 +34,8 @@ static DPMI_ISR_HANDLE MAIN_TimerIntHandlePM;
 static uint32_t MAIN_DMA_Addr = 0;
 static uint32_t MAIN_DMA_Size = 0;
 static uint32_t MAIN_DMA_MappedAddr = 0;
-static uint8_t MAIN_SB_VOL = 0;
+static uint16_t MAIN_SB_VOL = 0;
+static uint16_t MAIN_GLB_VOL = 0; //TODO: add hotkey
 
 static void MAIN_Interrupt();
 static void MAIN_InterruptPM();
@@ -475,8 +476,9 @@ static void MAIN_Interrupt()
     int32_t vol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MASTERSTEREO)>>5)*256/7; //3:1:3:1 stereo usually the same for both channel for games?
     if(MAIN_SB_VOL != vol)
     {
+        _LOG("set sb volume:%d %d\n", MAIN_SB_VOL, vol);
         MAIN_SB_VOL = vol;
-        AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, vol*100/255);
+        AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, vol*100/256);
     }
     //int32_t voicevol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_VOICEVOL) >> 1)*256/3;
     int32_t voicevol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_VOICESTEREO)>>5)*256/7; //3:1:3:1

@@ -59,13 +59,13 @@ void SBEMU_Mixer_Write(uint16_t port, uint8_t value)
     SBEMU_MixerRegs[SBEMU_MixerRegIndex] = value;
     if(SBEMU_MixerRegIndex == SBEMU_MIXERREG_RESET)
     {
-        SBEMU_MixerRegs[SBEMU_MIXERREG_MASTERVOL] = 0x8; //3:(1). default 4
-        SBEMU_MixerRegs[SBEMU_MIXERREG_MIDIVOL] = 0x8;
-        SBEMU_MixerRegs[SBEMU_MIXERREG_VOICEVOL] = 0x0; //(1):2:(1) deault 0
+        SBEMU_MixerRegs[SBEMU_MIXERREG_MASTERVOL] = 0xE; //3:(1). default 4
+        SBEMU_MixerRegs[SBEMU_MIXERREG_MIDIVOL] = 0xE;
+        SBEMU_MixerRegs[SBEMU_MIXERREG_VOICEVOL] = 0x6; //(1):2:(1) deault 0
 
-        SBEMU_MixerRegs[SBEMU_MIXERREG_VOICESTEREO] = 0x88;
-        SBEMU_MixerRegs[SBEMU_MIXERREG_MASTERSTEREO] = 0x88;
-        SBEMU_MixerRegs[SBEMU_MIXERREG_MIDISTEREO] = 0x88;
+        SBEMU_MixerRegs[SBEMU_MIXERREG_VOICESTEREO] = 0xEE;
+        SBEMU_MixerRegs[SBEMU_MIXERREG_MASTERSTEREO] = 0xEE;
+        SBEMU_MixerRegs[SBEMU_MIXERREG_MIDISTEREO] = 0xEE;
     }
 }
 
@@ -95,6 +95,9 @@ void SBEMU_DSP_Reset(uint16_t port, uint8_t value)
         SBEMU_Pos = 0;
         SBEMU_HighSpeed = 0;
         SBEMU_TriggerIRQ = 0;
+
+        SBEMU_Mixer_WriteAddr(0, SBEMU_MIXERREG_RESET);
+        SBEMU_Mixer_Write(0, 1);
     }
     if(value == 0 && SBEMU_ResetState == SBEMU_RESET_START)
         SBEMU_ResetState = SBEMU_RESET_POLL;
