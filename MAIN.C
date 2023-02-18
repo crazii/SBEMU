@@ -34,6 +34,7 @@ static DPMI_ISR_HANDLE MAIN_TimerIntHandlePM;
 static uint32_t MAIN_DMA_Addr = 0;
 static uint32_t MAIN_DMA_Size = 0;
 static uint32_t MAIN_DMA_MappedAddr = 0;
+static uint8_t MAIN_SB_VOL = 0;
 
 static void MAIN_Interrupt();
 static void MAIN_InterruptPM();
@@ -311,7 +312,12 @@ int main(int argc, char* argv[])
     
     AU_init(&aui);
     if(!aui.card_handler)
-        return 0;
+        return 1;
+    if(aui.card_irq == MAIN_Options[OPT_IRQ].value)
+    {
+        printf("Sound card IRQ conflict, abort.\n");
+        return 1;
+    }
     AU_ini_interrupts(&aui);
     AU_setmixer_init(&aui);
     AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 95);
@@ -464,6 +470,18 @@ static void MAIN_Interrupt()
         if(MAIN_Options[OPT_RM].value) QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
         SBEMU_SetIRQTriggered(FALSE);
     }
+    //TODO: add switch between 2.0 and Pro?
+    //int32_t vol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MASTERVOL) >> 1)*256/7;
+    int32_t vol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MASTERSTEREO)>>5)*256/7; //3:1:3:1 stereo usually the same for both channel for games?
+    if(MAIN_SB_VOL != vol)
+    {
+        MAIN_SB_VOL = vol;
+        AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, vol*100/255);
+    }
+    //int32_t voicevol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_VOICEVOL) >> 1)*256/3;
+    int32_t voicevol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_VOICESTEREO)>>5)*256/7; //3:1:3:1
+    //int32_t midivol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MIDIVOL) >> 1)*256/7;
+    int32_t midivol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MIDISTEREO)>>5)*256/7;
 
     aui.card_outbytes = aui.card_dmasize;
     int samples = AU_cardbuf_space(&aui) / sizeof(int16_t) / 2; //16 bit, 2 channels
@@ -575,14 +593,19 @@ static void MAIN_Interrupt()
         {
             for(int i = 0; i < samples*2; ++i)
             {
-                int a = (int)MAIN_PCM[i] + 32768;
-                int b = (int)MAIN_OPLPCM[i] + 32768;
+                int a = (int)(MAIN_PCM[i]*voicevol/256) + 32768;
+                int b = (int)(MAIN_OPLPCM[i]*midivol/256) + 32768;
                 int mixed = (a < 32768 || b < 32768) ? (a*b/32768) : ((a+b)*2 - a*b/32768 - 65536);
                 if(mixed == 65536) mixed = 65535;
                 MAIN_PCM[i] = mixed - 32768;
             }
         }
+        else for(int i = 0; i < samples*2; ++i)
+            MAIN_PCM[i] = MAIN_PCM[i]*midivol/256;
     }
+    else if(digital)
+        for(int i = 0; i < samples*2; ++i)
+            MAIN_PCM[i] = MAIN_PCM[i]*voicevol/256;
     samples *= 2; //to stereo
 
     aui.samplenum = samples;

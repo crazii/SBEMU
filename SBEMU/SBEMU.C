@@ -57,6 +57,16 @@ void SBEMU_Mixer_Write(uint16_t port, uint8_t value)
 {
     _LOG("SBEMU: mixer wirte: %x\n", value);
     SBEMU_MixerRegs[SBEMU_MixerRegIndex] = value;
+    if(SBEMU_MixerRegIndex == SBEMU_MIXERREG_RESET)
+    {
+        SBEMU_MixerRegs[SBEMU_MIXERREG_MASTERVOL] = 0x8; //3:(1). default 4
+        SBEMU_MixerRegs[SBEMU_MIXERREG_MIDIVOL] = 0x8;
+        SBEMU_MixerRegs[SBEMU_MIXERREG_VOICEVOL] = 0x0; //(1):2:(1) deault 0
+
+        SBEMU_MixerRegs[SBEMU_MIXERREG_VOICESTEREO] = 0x88;
+        SBEMU_MixerRegs[SBEMU_MIXERREG_MASTERSTEREO] = 0x88;
+        SBEMU_MixerRegs[SBEMU_MIXERREG_MIDISTEREO] = 0x88;
+    }
 }
 
 uint8_t SBEMU_Mixer_Read(uint16_t port)
@@ -398,4 +408,9 @@ int SBEMU_IRQTriggered()
 void SBEMU_SetIRQTriggered(int triggered)
 {
     SBEMU_TriggerIRQ = triggered;
+}
+
+uint8_t SBEMU_GetMixerReg(uint8_t index)
+{
+    return SBEMU_MixerRegs[index];
 }
