@@ -281,3 +281,26 @@ uint8_t HDPMIPT_UntrappedIO_Read(uint16_t port)
     );
     return result;
 }
+
+BOOL HDPMIPT_InstallIRQACKHandler(uint8_t irq, uint16_t cs, uint32_t offset)
+{
+    if(HDPMIPT_Entry.es == 0 || HDPMIPT_Entry.edi == 0)
+    {
+        if(!HDPMIPT_GetVendorEntry(&HDPMIPT_Entry))
+            return 0;
+    }
+
+    asm(
+    "push %%esi \n\t"
+    "mov $0x0A, %%eax \n\t" //function no.
+    "movzx %1, %%esi \n\t" //esi=irq
+    "movzx %2, %%ecx \n\t"   //ecx=selector
+    "mov %3, %%edx \n\t"    //edx=offset
+    "lcall *%0\n\t"
+    "pop %%esi"
+    :
+    :"m"(HDPMIPT_Entry),"m"(irq),"m"(cs),"m"(offset)
+    :"eax","ecx","edx"
+    );
+    return TRUE;
+}

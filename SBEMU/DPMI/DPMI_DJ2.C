@@ -435,10 +435,12 @@ uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), DPMI_ISR_HANDLE* outputp h
     __dpmi_paddr pa;
     __dpmi_get_protected_mode_interrupt_vector(i, &pa);
 
-    handle->offset = pa.offset32;
-    handle->cs = pa.selector;
-    handle->rm_cs = ra.segment;
-    handle->rm_offset = ra.offset16;
+    handle->old_offset = pa.offset32;
+    handle->old_cs = pa.selector;
+    handle->old_rm_cs = ra.segment;
+    handle->old_rm_offset = ra.offset16;
+    handle->wrapper_offset = go32pa.pm_offset;
+    handle->wrapper_cs = go32pa.pm_selector;
     handle->n = i;
 
     memcpy(handle->internal1, &go32pa, sizeof(go32pa));
@@ -448,6 +450,7 @@ uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), DPMI_ISR_HANDLE* outputp h
     return (uint16_t)result;
 }
 
+#define RAW_HOOK 1
 //http://www.delorie.com/djgpp/v2faq/faq18_9.html
 uint16_t DPMI_InstallRealModeISR(uint8_t i, void(*ISR_RM)(void), DPMI_REG* RMReg, DPMI_ISR_HANDLE* outputp handle)
 {
@@ -459,8 +462,6 @@ uint16_t DPMI_InstallRealModeISR(uint8_t i, void(*ISR_RM)(void), DPMI_REG* RMReg
     go32pa_rm.pm_offset = (uintptr_t)ISR_RM;
     if( _go32_dpmi_allocate_real_mode_callback_iret(&go32pa_rm, (_go32_dpmi_registers*)&RMReg) != 0)
         return -1;
-
-    #define RAW_HOOK 0
     
     __dpmi_raddr ra;
     #if RAW_HOOK
@@ -472,10 +473,12 @@ uint16_t DPMI_InstallRealModeISR(uint8_t i, void(*ISR_RM)(void), DPMI_REG* RMReg
     __dpmi_paddr pa;
     __dpmi_get_protected_mode_interrupt_vector(i, &pa);
 
-    handle->offset = pa.offset32;
-    handle->cs = pa.selector;
-    handle->rm_cs = ra.segment;
-    handle->rm_offset = ra.offset16;
+    handle->old_offset = pa.offset32;
+    handle->old_cs = pa.selector;
+    handle->old_rm_cs = ra.segment;
+    handle->old_rm_offset = ra.offset16;
+    handle->wrapper_offset = 0;
+    handle->wrapper_cs = 0;
     handle->n = i;
     memset(handle->internal1, 0, sizeof(handle->internal1));
     memcpy(handle->internal2, &go32pa_rm, sizeof(go32pa_rm));
@@ -495,13 +498,13 @@ uint16_t DPMI_InstallRealModeISR(uint8_t i, void(*ISR_RM)(void), DPMI_REG* RMReg
 uint16_t DPMI_UninstallISR(DPMI_ISR_HANDLE* inputp handle)
 {
      _go32_dpmi_seginfo go32pa;
-     go32pa.pm_selector = handle->cs;
-     go32pa.pm_offset = handle->offset;
+     go32pa.pm_selector = handle->old_cs;
+     go32pa.pm_offset = handle->old_offset;
      int result = _go32_dpmi_set_protected_mode_interrupt_vector(handle->n, &go32pa);
 
     __dpmi_raddr ra;
-    ra.segment = handle->rm_cs;
-    ra.offset16 = handle->rm_offset;
+    ra.segment = handle->old_rm_cs;
+    ra.offset16 = handle->old_rm_offset;
     result = __dpmi_set_real_mode_interrupt_vector(handle->n, &ra) | result;
 
     memcpy(&go32pa, handle->internal2, sizeof(go32pa));
@@ -525,9 +528,11 @@ uint32_t DPMI_CallOldISR(DPMI_ISR_HANDLE* inputp handle)
 uint32_t DPMI_CallRealModeOldISR(DPMI_ISR_HANDLE* inputp handle)
 {
     DPMI_REG r = {0};
-    r.w.cs = handle->rm_cs;
-    r.w.ip = handle->rm_offset;
-    //return DPMI_CallRealModeIRET(&r);
+    r.w.cs = handle->old_rm_cs;
+    r.w.ip = handle->old_rm_offset;
+    #if RAW_HOOK
+    return DPMI_CallRealModeIRET(&r);
+    #endif
     return DPMI_CallRealModeINT(handle->n,&r);
 }
 

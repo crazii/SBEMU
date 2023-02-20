@@ -74,10 +74,12 @@ typedef struct//TSR/callback usage. state for linear DPMI_Load*/DPMI_Store*/DPMI
 
 typedef struct //old interrupt handler info returned by install isr. 
 {
-    uint32_t offset;
-    uint16_t cs;
-    uint16_t rm_offset;
-    uint16_t rm_cs;
+    uint32_t old_offset;
+    uint16_t old_cs;
+    uint16_t old_rm_offset;
+    uint16_t old_rm_cs;
+    uint32_t wrapper_offset;
+    uint16_t wrapper_cs;
     uint8_t n; //INTn
 
     //internal informations

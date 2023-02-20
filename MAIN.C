@@ -30,7 +30,7 @@ mpxplay_audioout_info_s aui = {0};
 static int16_t MAIN_OPLPCM[MAIN_PCM_SAMPLESIZE+256];
 static int16_t MAIN_PCM[MAIN_PCM_SAMPLESIZE+256];
 
-static DPMI_ISR_HANDLE MAIN_TimerIntHandlePM;
+static DPMI_ISR_HANDLE MAIN_IntHandlePM;
 static uint32_t MAIN_DMA_Addr = 0;
 static uint32_t MAIN_DMA_Size = 0;
 static uint32_t MAIN_DMA_MappedAddr = 0;
@@ -263,13 +263,13 @@ int main(int argc, char* argv[])
         return 1;
     }
     //alter BLASTER env. not working, seems local. TODO: http://www.techhelpmanual.com/346-dos_environment.html
-	#if 0
+    #if 0
     {
         char buf[256];
         sprintf(buf, "A%x I%x D%x", MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value);
         setenv("BLASTER", buf, TRUE);
     }
-	#endif
+    #endif
 #if DEBUG
     if(MAIN_Options[OPT_TEST].value) //test
     {
@@ -384,9 +384,10 @@ int main(int argc, char* argv[])
     BOOL HDPMIInstalledVIRQ2 = !enablePM || HDPMIPT_Install_IOPortTrap(0xA0, 0xA1, MAIN_VIRQ_IODT+2, 2, &MAIN_VIRQ_IOPT_PM2);
     BOOL HDPMIInstalledSB = !enablePM || HDPMIPT_Install_IOPortTrap(MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_ADDR].value+0x0F, SB_Iodt, SB_IodtCount, &MAIN_SB_IOPT_PM);
 
-    BOOL PM_ISR = DPMI_InstallISR(PIC_IRQ2VEC(aui.card_irq), MAIN_InterruptPM, &MAIN_TimerIntHandlePM) == 0;
-    PIC_UnmaskIRQ(aui.card_irq);
     _LOG("sound card IRQ: %d\n", aui.card_irq);
+    BOOL PM_ISR = DPMI_InstallISR(PIC_IRQ2VEC(aui.card_irq), MAIN_InterruptPM, &MAIN_IntHandlePM) == 0;
+    HDPMIPT_InstallIRQACKHandler(aui.card_irq, MAIN_IntHandlePM.wrapper_cs, MAIN_IntHandlePM.wrapper_offset);
+    PIC_UnmaskIRQ(aui.card_irq);
 
     AU_prestart(&aui);
     AU_start(&aui);
@@ -421,8 +422,8 @@ int main(int argc, char* argv[])
         if(enablePM && HDPMIInstalledSB) HDPMIPT_Uninstall_IOPortTrap(&MAIN_SB_IOPT_PM);
 
         if(!PM_ISR)
-            printf("Error: Failed installing timer.\n");
-        if(PM_ISR) DPMI_UninstallISR(&MAIN_TimerIntHandlePM);
+            printf("Error: Failed installing sound card ISR.\n");
+        if(PM_ISR) DPMI_UninstallISR(&MAIN_IntHandlePM);
 
         if(!TSR)
             printf("Error: Failed installing TSR.\n");
@@ -436,13 +437,12 @@ static void MAIN_InterruptPM()
     {
         MAIN_Interrupt();
         PIC_SendEOIWithIRQ(aui.card_irq);
-        //PIC_SendEOI();
     }
     else
     {
         //_LOG("OLDISR\n");
-        DPMI_CallOldISR(&MAIN_TimerIntHandlePM);
-        //DPMI_CallRealModeOldISR(&MAIN_TimerIntHandlePM);
+        DPMI_CallOldISR(&MAIN_IntHandlePM);
+        //DPMI_CallRealModeOldISR(&MAIN_IntHandlePM);
         PIC_UnmaskIRQ(aui.card_irq);
     }
 }

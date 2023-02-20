@@ -13,4 +13,7 @@ BOOL HDPMIPT_Uninstall_IOPortTrap(QEMM_IOPT* inputp iopt);
 void HDPMIPT_UntrappedIO_Write(uint16_t port, uint8_t value);
 uint8_t HDPMIPT_UntrappedIO_Read(uint16_t port);
 
+//doom hack
+BOOL HDPMIPT_InstallIRQACKHandler(uint8_t irq, uint16_t cs, uint32_t offset);
+
 #endif //_HDPMIPT_H_
