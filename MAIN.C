@@ -174,6 +174,8 @@ struct
     "/A", "Specify IO address, valid value: 220,240", 0x220,
     "/I", "Specify IRQ number, valud value: 5,7", 7,
     "/D", "Specify DMA channel, valid value: 0,1,3", 1,
+    "/T", "Specify SB Type, valid value: 0-6", 5,
+    "/H", "Specify High DMA channel, valid value: 5,6,7", 5,
     "/OPL", "Enable OPL3 emulation", TRUE,
     "/PM", "Support protected mode games, you can try disable it when you have compatibility issues", TRUE,
     "/RM", "Support real mode games", TRUE,
@@ -189,6 +191,8 @@ enum EOption
     OPT_ADDR,
     OPT_IRQ,
     OPT_DMA,
+    OPT_TYPE,
+    OPT_HDMA,
     OPT_OPL,
     OPT_PM,
     OPT_RM,
@@ -211,7 +215,7 @@ int main(int argc, char* argv[])
             ++i;
         }
         printf("\nNote: SBEMU will read BLASTER environment variable and use it, "
-        "\n if /A /I /D set, they will override the BLASTER values.\n");
+        "\n if /A /I /D /T /H set, they will override the BLASTER values.\n");
         printf("\nSource code used from:\n    MPXPlay (https://mpxplay.sourceforge.net/)\n    DOSBox (https://www.dosbox.com/)\n");
         return 0;
     }
@@ -229,6 +233,10 @@ int main(int argc, char* argv[])
                     MAIN_Options[OPT_DMA].value = *(blaster++) - '0';
                 else if(c == 'A')
                     MAIN_Options[OPT_ADDR].value = strtol(blaster, &blaster, 16);
+                else if(c =='T')
+                    MAIN_Options[OPT_TYPE].value = *(blaster++) - '0';
+                else if(c =='H')
+                    MAIN_Options[OPT_HDMA].value = *(blaster++) - '0';
             }
         }
     }
@@ -262,13 +270,20 @@ int main(int argc, char* argv[])
         printf("Error: invalid DMA channel.\n");
         return 1;
     }
+    if(MAIN_Options[OPT_TYPE].value < 0 && MAIN_Options[OPT_TYPE].value > 6)
+    {
+        printf("Error: invalid SB Type.\n");
+        return 1;
+    }
+    if(MAIN_Options[OPT_TYPE].value != 6)
+        MAIN_Options[OPT_HDMA].value = MAIN_Options[OPT_DMA].value; //16 bit transfer through 8 bit dma
 
     DPMI_Init();
     
-    //alter BLASTER env. not working, seems local. TODO: http://www.techhelpmanual.com/346-dos_environment.html
+    //alter BLASTER env.
     {
         char buf[256];
-        sprintf(buf, "A%x I%x D%x", MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value);
+        sprintf(buf, "A%x I%x D%x T%x H%x", MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value, MAIN_Options[OPT_TYPE].value, MAIN_Options[OPT_HDMA].value);
         #ifdef DJGPP //makes vscode happy
         setenv("BLASTER", buf, TRUE);
         #endif
@@ -361,9 +376,11 @@ int main(int argc, char* argv[])
         printf("OPL3 emulation enabled at port 388h.\n");
     }
     //TestSound(FALSE);
-
-    SBEMU_Init(MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value, &MAIN_Interrupt);
+    int DSPVer = MAIN_Options[OPT_TYPE].value < 4 ? 0x0200 : ((MAIN_Options[OPT_TYPE].value < 6) ? 0x0302 : 0x0400);
+    SBEMU_Init(MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value, MAIN_Options[OPT_HDMA].value, DSPVer, &MAIN_Interrupt);
     VDMA_Virtualize(MAIN_Options[OPT_DMA].value, TRUE);
+    if(MAIN_Options[OPT_TYPE].value == 6)
+        VDMA_Virtualize(MAIN_Options[OPT_HDMA].value, TRUE);
     for(int i = 0; i < countof(MAIN_SB_IODT); ++i)
         MAIN_SB_IODT[i].port += MAIN_Options[OPT_ADDR].value;
     QEMM_IODT* SB_Iodt = MAIN_Options[OPT_OPL].value ? MAIN_SB_IODT : MAIN_SB_IODT+4;
@@ -482,29 +499,43 @@ static void MAIN_Interrupt()
         if(MAIN_Options[OPT_RM].value) QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
         SBEMU_SetIRQTriggered(FALSE);
     }
-    //TODO: add switch between 2.0 and Pro?
-    //int32_t vol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MASTERVOL) >> 1)*256/7;
-    int32_t vol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MASTERSTEREO)>>5)*256/7; //3:1:3:1 stereo usually the same for both channel for games?
+    int32_t vol;
+    int32_t voicevol;
+    int32_t midivol;
+    if(MAIN_Options[OPT_TYPE].value < 4) //SB2.0 and before
+    {
+        vol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MASTERVOL) >> 1)*256/7;
+        voicevol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_VOICEVOL) >> 1)*256/3;
+        midivol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MIDIVOL) >> 1)*256/7;
+    }
+    else if(MAIN_Options[OPT_TYPE].value == 6) //SB16
+    {
+        vol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MASTERSTEREO)>>4)*256/15; //4:4
+        voicevol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_VOICESTEREO)>>4)*256/15; //4:4
+        midivol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MIDISTEREO)>>4)*256/15; //4:4
+    }
+    else //SBPro
+    {
+        vol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MASTERSTEREO)>>5)*256/7; //3:1:3:1 stereo usually the same for both channel for games?;
+        voicevol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_VOICESTEREO)>>5)*256/7; //3:1:3:1
+        midivol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MIDISTEREO)>>5)*256/7;
+    }
     if(MAIN_SB_VOL != vol)
     {
         _LOG("set sb volume:%d %d\n", MAIN_SB_VOL, vol);
         MAIN_SB_VOL = vol;
         AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, vol*100/256);
     }
-    //int32_t voicevol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_VOICEVOL) >> 1)*256/3;
-    int32_t voicevol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_VOICESTEREO)>>5)*256/7; //3:1:3:1
-    //int32_t midivol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MIDIVOL) >> 1)*256/7;
-    int32_t midivol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MIDISTEREO)>>5)*256/7;
 
     aui.card_outbytes = aui.card_dmasize;
     int samples = AU_cardbuf_space(&aui) / sizeof(int16_t) / 2; //16 bit, 2 channels
     //_LOG("samples:%d\n",samples);
     if(samples == 0)
         return;
-        
+    
     BOOL digital = SBEMU_HasStarted();
-    int dma = SBEMU_GetDMA();
-    int32_t DMA_Count = VDMA_GetCounter(dma); //count in bytes (8bit dma)
+    int dma = (SBEMU_GetBits() == 8 || MAIN_Options[OPT_TYPE].value < 6) ? SBEMU_GetDMA() : SBEMU_GetHDMA();
+    int32_t DMA_Count = VDMA_GetCounter(dma); //count in bytes
     if(digital)//&& DMA_Count != 0x10000) //-1(0xFFFF)+1=0
     {
         uint32_t DMA_Addr = VDMA_GetAddress(dma);
@@ -540,7 +571,7 @@ static void MAIN_Interrupt()
             else if(SB_Rate > aui.freq_card)
                 count *= (SB_Rate + aui.freq_card/2)/aui.freq_card;
             count = min(count, max(1,(DMA_Count)/samplebytes/channels)); //stereo initial 1 byte
-            count = min(count, max(1,(SB_Bytes-SB_Pos)/samplebytes/channels)); //stereo initial 1 byte. 1 /2channel = 0, make it 1
+            count = min(count, max(1,(SB_Bytes-SB_Pos)/samplebytes/channels)); //stereo initial 1 byte. 1/2channel = 0, make it 1
             _LOG("samples:%d %d %d, %d %d, %d %d\n", samples, pos+count, count, DMA_Count, DMA_Index, SB_Bytes, SB_Pos);
             int bytes = count * samplebytes * channels;
 

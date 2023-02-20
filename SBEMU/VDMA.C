@@ -97,8 +97,9 @@ uint8_t VDMA_Read(uint16_t port)
                 uint8_t ret = ((value>>8)&0xFF);
                 if(VDMA_DelayUpdate[channel])
                 {
+                    int size = channel <= 3 ? 1 : 2;
                     VDMA_Regs[(channel<<1)+1] = VDMA_CurCounter[channel]-1; //update counter reg
-                    VDMA_Regs[(channel<<1)] = VDMA_Addr[channel] + VDMA_Index[channel]; //update addr reg
+                    VDMA_Regs[(channel<<1)] = VDMA_Addr[channel] + VDMA_Index[channel]*size; //update addr reg
                 }
                 VDMA_InIO[channel] = FALSE;
                 VDMA_DelayUpdate[channel] = FALSE;
@@ -141,37 +142,41 @@ uint32_t VDMA_GetAddress(int channel)
 
 uint32_t VDMA_GetCounter(int channel)
 {
-    return VDMA_CurCounter[channel];
+    int size = channel <= 3 ? 1 : 2;
+    return VDMA_CurCounter[channel] * size;
 }
 
 int32_t VDMA_GetIndex(int channel)
 {
-    return VDMA_Index[channel];
+    int size = channel <= 3 ? 1 : 2;
+    return VDMA_Index[channel] * size;
 }
 
 int32_t VDMA_SetIndexCounter(int channel, int32_t index, int32_t counter)
 {
+    int size = channel <= 3 ? 1 : 2;
+
     if(counter <= 0)
     {
-        counter = 0x10000;
+        counter = 0x10000*size;
         VDMA_ToggleComplete(channel);
         if(VDMA_GetAuto(channel))
         {
             index = 0;
-            counter = VDMA_Counter[channel];
+            counter = VDMA_Counter[channel]*size;
         }
     }
     if(!VDMA_InIO[channel])
     {
-        VDMA_Regs[(channel<<1)+1] = counter-1; //update counter reg
+        VDMA_Regs[(channel<<1)+1] = counter/size-1; //update counter reg
         VDMA_Regs[(channel<<1)] = VDMA_Addr[channel] + index; //update addr reg
     }
     else
         VDMA_DelayUpdate[channel] = TRUE;
     VDMA_PageRegs[channel] = (VDMA_Addr[channel] + index) >> 16;
     //_LOG("cur counter: %d\n", counter);
-    VDMA_CurCounter[channel] = counter;
-    return VDMA_Index[channel] = index;
+    VDMA_CurCounter[channel] = counter / size;
+    return (VDMA_Index[channel] = (index / size)) * size;
 }
 
 int VDMA_GetAuto(int channel)

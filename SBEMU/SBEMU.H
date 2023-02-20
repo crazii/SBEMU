@@ -27,6 +27,14 @@
 #define SBEMU_MIXERREG_VOICEVOL     0x0A    //SB2.0
 #define SBEMU_MIXERREG_MASTERSTEREO 0x22    //SBPro
 #define SBEMU_MIXERREG_MIDISTEREO   0x26    //SBPro 
+//SB16
+#define SBEMU_MIXRREG_MASTERL       0x30
+#define SBEMU_MIXRREG_MASTERR       0x31
+#define SBEMU_MIXRREG_VOICEL        0x32
+#define SBEMU_MIXRREG_VOICER        0x33
+#define SBEMU_MIXRREG_MIDIL         0x34
+#define SBEMU_MIXRREG_MIDIR         0x35
+//-SB16
 #define SBEMU_MIXERREG_MODEFILTER   0x0E
 #define SBEMU_MIXERREG_INT_SETUP    0x80
 #define SBEMU_MIXERREG_DMA_SETUP    0x81
@@ -93,9 +101,10 @@ uint8_t SBEMU_DSP_ReadStatus(uint16_t port); //read buffer status.
 uint8_t SBEMU_DSP_INT16ACK(uint16_t port);
 
 //used by emulations
-void SBEMU_Init(int irq, int dma, void(*startCB)(void));
+void SBEMU_Init(int irq, int dma, int hdma, int DSPVer, void(*startCB)(void));
 uint8_t SBEMU_GetIRQ();
 uint8_t SBEMU_GetDMA();
+uint8_t SBEMU_GetHDMA();
 int SBEMU_HasStarted();
 void SBEMU_Stop();
 
