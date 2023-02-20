@@ -536,6 +536,22 @@ uint32_t DPMI_CallRealModeOldISR(DPMI_ISR_HANDLE* inputp handle)
     return DPMI_CallRealModeINT(handle->n,&r);
 }
 
+uint32_t DPMI_GetISR(uint8_t i, DPMI_ISR_HANDLE* outputp handle)
+{
+    memset(handle, 0, sizeof(*handle));
+    
+    __dpmi_raddr ra;
+    __dpmi_get_real_mode_interrupt_vector(i, &ra);
+    __dpmi_paddr pa;
+    __dpmi_get_protected_mode_interrupt_vector(i, &pa);
+
+    handle->old_offset = pa.offset32;
+    handle->old_cs = pa.selector;
+    handle->old_rm_cs = ra.segment;
+    handle->old_rm_offset = ra.offset16;
+    return 0;
+}
+
 uint32_t DPMI_AllocateRMCB_RETF(void(*Fn)(void), DPMI_REG* reg)
 {
     _go32_dpmi_seginfo info;

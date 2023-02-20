@@ -193,6 +193,8 @@ uint16_t DPMI_UninstallISR(DPMI_ISR_HANDLE* inputp handle);
 uint32_t DPMI_CallOldISR(DPMI_ISR_HANDLE* inputp handle);
 uint32_t DPMI_CallRealModeOldISR(DPMI_ISR_HANDLE* inputp handle);
 
+uint32_t DPMI_GetISR(uint8_t i, DPMI_ISR_HANDLE* outputp handle);
+
 //allocate realmode callback. return: hiword: segment, lowword: offset. return 0 if fail
 //input: Fn is a common function with normal return. the RMCB will use RETF finally
 uint32_t DPMI_AllocateRMCB_RETF(void(*Fn)(void), DPMI_REG* reg);

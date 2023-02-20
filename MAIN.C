@@ -262,14 +262,17 @@ int main(int argc, char* argv[])
         printf("Error: invalid DMA channel.\n");
         return 1;
     }
+
+    DPMI_Init();
+    
     //alter BLASTER env. not working, seems local. TODO: http://www.techhelpmanual.com/346-dos_environment.html
-    #if 0
     {
         char buf[256];
         sprintf(buf, "A%x I%x D%x", MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value);
+        #ifdef DJGPP //makes vscode happy
         setenv("BLASTER", buf, TRUE);
+        #endif
     }
-    #endif
 #if DEBUG
     if(MAIN_Options[OPT_TEST].value) //test
     {
@@ -285,7 +288,6 @@ int main(int argc, char* argv[])
     }
 #endif
 
-    DPMI_Init();
     if(MAIN_Options[OPT_RM].value)
     {
         int bcd = QEMM_GetVersion();
@@ -386,6 +388,15 @@ int main(int argc, char* argv[])
 
     _LOG("sound card IRQ: %d\n", aui.card_irq);
     BOOL PM_ISR = DPMI_InstallISR(PIC_IRQ2VEC(aui.card_irq), MAIN_InterruptPM, &MAIN_IntHandlePM) == 0;
+    //set default ACK, to skip recursion of DOS/4GW
+    {
+        DPMI_ISR_HANDLE h;
+        for(int i = 0; i < 15; ++i)
+        {
+            DPMI_GetISR(PIC_IRQ2VEC(i), &h);
+            HDPMIPT_InstallIRQACKHandler(i, h.old_cs, h.old_offset);
+        }
+    }
     HDPMIPT_InstallIRQACKHandler(aui.card_irq, MAIN_IntHandlePM.wrapper_cs, MAIN_IntHandlePM.wrapper_offset);
     PIC_UnmaskIRQ(aui.card_irq);
 
