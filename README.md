@@ -12,7 +12,7 @@ HDA tested working by community.
 
 Emulated modes/cards:\
 8 bit DMA (mono, stereo, high-speed)\
-Sound blaster 1.0, 2.0, Pro, 16.\
+Sound blaster 1.0, 2.0, Pro, 16.
 
 Requirements:
  * HDPMI32i (HDPMI with IOPL0)
