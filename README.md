@@ -13,7 +13,6 @@ HDA tested working by community.
 Emulated modes/cards:\
 8 bit DMA (mono, stereo, high-speed)\
 Sound blaster 1.0, 2.0, Pro, 16.\
-SB16 only have 8 bit DMA support.
 
 Requirements:
  * HDPMI32i (HDPMI with IOPL0)
