@@ -49,6 +49,8 @@
 #define SBEMU_CMD_DAC_SPEAKER_ON    0xD1
 #define SBEMU_CMD_DAC_SPEAKER_OFF   0xD3
 #define SBEMU_CMD_CONTINUE_DMA      0xD4
+#define SBEMU_CMD_HALT_DMA16        0xD5
+#define SBEMU_CMD_CONTINUE_DMA16    0xD6
 #define SBEMU_CMD_DSP_ID            0xE0
 #define SBEMU_CMD_DSP_GETVER        0xE1 //1st byte major, 2nd byte minor
 #define SBEMU_CMD_DSP_COPYRIGHT     0xE3

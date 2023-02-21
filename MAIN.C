@@ -34,7 +34,7 @@ static DPMI_ISR_HANDLE MAIN_IntHandlePM;
 static uint32_t MAIN_DMA_Addr = 0;
 static uint32_t MAIN_DMA_Size = 0;
 static uint32_t MAIN_DMA_MappedAddr = 0;
-static uint16_t MAIN_SB_VOL = 0;
+static uint16_t MAIN_SB_VOL = 256; //intial set volume will cause interrupt missing?
 static uint16_t MAIN_GLB_VOL = 0; //TODO: add hotkey
 
 static void MAIN_Interrupt();
@@ -577,7 +577,8 @@ static void MAIN_Interrupt()
         uint32_t SB_Rate = SBEMU_GetSampleRate();
         int samplesize = SBEMU_GetBits()/8; //sample size in bytes 1 for 8bit. 2 for 16bit
         int channels = SBEMU_GetChannels();
-        //_LOG("sample rate: %d %d\n", SB_Rate, aui.freq_card);
+        _LOG("sample rate: %d %d\n", SB_Rate, aui.freq_card);
+        _LOG("channels: %d, size:%d\n", channels, samplesize);
         //_LOG("DMA index: %x\n", DMA_Index);
         //_LOG("digital start\n");
         int pos = 0;
@@ -598,12 +599,15 @@ static void MAIN_Interrupt()
             //_LOG("DMA_ADDR:%x, %x, %x\n",DMA_Addr, MAIN_DMA_Addr, MAIN_DMA_MappedAddr);
 
             int count = samples-pos;
-            if(SB_Rate < aui.freq_card)
-                count = max(channels, count/((aui.freq_card+SB_Rate/2)/SB_Rate));
-            else if(SB_Rate > aui.freq_card)
-                count *= (SB_Rate + aui.freq_card/2)/aui.freq_card;
-            count = min(count, max(1,(DMA_Count)/samplesize/channels)); //stereo initial 1 byte
-            count = min(count, max(1,(SB_Bytes-SB_Pos)/samplesize/channels)); //stereo initial 1 byte. 1/2channel = 0, make it 1
+            BOOL resample = TRUE; //don't resample if sample rates are close
+            if(SB_Rate < aui.freq_card-50)
+                count = max(1, count/((aui.freq_card+SB_Rate/2)/SB_Rate));
+            else if(SB_Rate > aui.freq_card+50)
+                count = count*SB_Rate/aui.freq_card;
+            else
+                resample = FALSE;
+            count = min(count, max(1,(DMA_Count)/samplesize/channels)); //max for stereo initial 1 byte
+            count = min(count, max(1,(SB_Bytes-SB_Pos)/samplesize/channels)); //max for stereo initial 1 byte. 1/2channel = 0, make it 1
             _LOG("samples:%d %d %d, %d %d, %d %d\n", samples, pos+count, count, DMA_Count, DMA_Index, SB_Bytes, SB_Pos);
             int bytes = count * samplesize * channels;
 
@@ -613,7 +617,7 @@ static void MAIN_Interrupt()
                 DPMI_CopyLinear(DPMI_PTR2L(MAIN_PCM+pos*2), MAIN_DMA_MappedAddr+(DMA_Addr-MAIN_DMA_Addr)+DMA_Index, bytes);
             if(samplesize != 2)
                 cv_bits_n_to_m(MAIN_PCM+pos*2, count*channels, samplesize, 2);
-            if(SB_Rate != aui.freq_card)
+            if(resample/*SB_Rate != aui.freq_card*/)
                 count = mixer_speed_lq(MAIN_PCM+pos*2, count*channels, channels, SB_Rate, aui.freq_card)/channels;
             if(channels == 1) //should be the last step
                 cv_channels_1_to_n(MAIN_PCM+pos*2, count, 2, 2);
@@ -646,6 +650,7 @@ static void MAIN_Interrupt()
                 DMA_Index = VDMA_GetIndex(dma);
                 DMA_Count = VDMA_GetCounter(dma);
                 DMA_Addr = VDMA_GetAddress(dma);
+                //_LOG("DMACount: %d, DMAIndex:%d, DMA_Addr:%x\n",DMA_Count, DMA_Index, DMA_Addr);
             }
         } while(VDMA_GetAuto(dma) && (pos < samples) && SBEMU_HasStarted());
         //_LOG("digital end %d %d\n", samples, pos);

@@ -17,7 +17,7 @@ static int SBEMU_SampleRate = 22050;
 static int SBEMU_Samples = 0;
 static int SBEMU_Auto = 0;
 static int SBEMU_HighSpeed = 0;
-static int SBEMU_DSPCMD = 0;
+static int SBEMU_DSPCMD = -1;
 static int SBEMU_DSPCMD_Subindex = 0;
 static int SBEMU_DSPDATA_Subindex = 0;
 static int SBEMU_TriggerIRQ = 0;
@@ -113,7 +113,7 @@ void SBEMU_DSP_Reset(uint16_t port, uint8_t value)
         SBEMU_MixerRegs[SBEMU_MIXERREG_DMA_SETUP] = ((1<<SBEMU_DMA)|(SBEMU_HDMA?(1<<SBEMU_HDMA):0))&0xEB;
         SBEMU_MixerRegs[SBEMU_MIXERREG_MODEFILTER] = 0xFD; //mask out stereo
         SBEMU_MixerRegIndex = 0;
-        SBEMU_DSPCMD = 0;
+        SBEMU_DSPCMD = -1;
         SBEMU_DSPCMD_Subindex = 0;
         SBEMU_DSPDATA_Subindex = 0;
         SBEMU_Started = 0;
@@ -137,7 +137,7 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
     if(SBEMU_HighSpeed) //highspeed won't accept further commands, need reset
         return;
     int OldStarted = SBEMU_Started;
-    if(SBEMU_DSPCMD == 0)
+    if(SBEMU_DSPCMD == -1)
     {
         SBEMU_DSPCMD = value;
         SBEMU_DSPCMD_Subindex = 0;
@@ -148,19 +148,26 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
             {
                 SBEMU_MixerRegs[SBEMU_MIXERREG_INT_STS] |= SBEMU_DSPCMD == SBEMU_CMD_TRIGGER_IRQ ? 0x1 : 0x2;
                 SBEMU_TriggerIRQ = 1;
-                SBEMU_DSPCMD = 0;
+                SBEMU_DSPCMD = -1;
                 //VIRQ_Invoke(SBEMU_GetIRQ()); //not working
             }
             break;
             case SBEMU_CMD_DAC_SPEAKER_ON:
             case SBEMU_CMD_DAC_SPEAKER_OFF:
-                SBEMU_DSPCMD = 0;
+                SBEMU_DSPCMD = -1;
                 break;
             case SBEMU_CMD_HALT_DMA:
             case SBEMU_CMD_CONTINUE_DMA:
             {
                 SBEMU_Started = SBEMU_DSPCMD == SBEMU_CMD_CONTINUE_DMA;
-                SBEMU_DSPCMD = 0;
+                SBEMU_DSPCMD = -1;
+            }
+            break;
+            case SBEMU_CMD_CONTINUE_DMA16:
+            case SBEMU_CMD_HALT_DMA16:
+            {
+                SBEMU_Started = SBEMU_DSPCMD == SBEMU_CMD_CONTINUE_DMA16;
+                SBEMU_DSPCMD = -1; 
             }
             break;
             case SBEMU_CMD_8BIT_OUT_AUTO_HS:
@@ -170,7 +177,7 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                 SBEMU_Bits = 8;
                 SBEMU_HighSpeed = (SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_AUTO_HS);
                 SBEMU_Started = TRUE; //start transfer
-                SBEMU_DSPCMD = 0;
+                SBEMU_DSPCMD = -1;
                 SBEMU_Pos = 0;
             }
             break;
@@ -182,12 +189,12 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                     SBEMU_Auto = FALSE;
                     SBEMU_Started = FALSE;
                 }
-                SBEMU_DSPCMD = 0;
+                SBEMU_DSPCMD = -1;
             }
             break;
             case 0x2A: //unknown commands
             {
-                SBEMU_DSPCMD = 0;
+                SBEMU_DSPCMD = -1;
             }
             break;
         }
@@ -281,7 +288,7 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
             break;
         }
         if(SBEMU_DSPCMD_Subindex >= 2)
-            SBEMU_DSPCMD = 0;
+            SBEMU_DSPCMD = -1;
     }
     if(SBEMU_Started && !OldStarted)//handle driver detection
     {
@@ -307,18 +314,18 @@ uint8_t SBEMU_DSP_Read(uint16_t port)
     {
         //https://github.com/joncampbell123/dosbox-x/wiki/Hardware:Sound-Blaster:DSP-commands:0xE1
         if(SBEMU_DSPDATA_Subindex++ == 0)
-            return SBEMU_DSPVER>>8;    //3.2. TODO: 4.0 (SB16) support
+            return SBEMU_DSPVER>>8;
         else
         {
             SBEMU_DSPDATA_Subindex = 0;
-            SBEMU_DSPCMD = 0;
+            SBEMU_DSPCMD = -1;
             //_LOG("SBEMU: DSP get version.\n");
             return SBEMU_DSPVER&0xFF;
         }
     }
     else if(SBEMU_DSPCMD == SBEMU_CMD_DSP_ID)
     {
-        SBEMU_DSPCMD = 0;
+        SBEMU_DSPCMD = -1;
         SBEMU_DSPDATA_Subindex = 0;
         return SBEMU_idbyte^0xFF;
     }
@@ -326,7 +333,7 @@ uint8_t SBEMU_DSP_Read(uint16_t port)
     {
         if(SBEMU_DSPDATA_Subindex == sizeof(SBEMU_Copyright)-1)
         {
-            SBEMU_DSPCMD = 0;
+            SBEMU_DSPCMD = -1;
             SBEMU_DSPDATA_Subindex = 0;
             return 0xFF;
         }
