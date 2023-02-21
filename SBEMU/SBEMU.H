@@ -44,6 +44,7 @@
 #define SBEMU_CMD_SET_TIMECONST     0x40
 #define SBEMU_CMD_SET_SIZE          0x48 //size-1
 #define SBEMU_CMD_SET_SAMPLERATE    0x41 //set sample rate
+#define SBEMU_CMD_SET_SAMPLERATE_I  0x42 //intput sample rate
 #define SBEMU_CMD_HALT_DMA          0xD0
 #define SBEMU_CMD_DAC_SPEAKER_ON    0xD1
 #define SBEMU_CMD_DAC_SPEAKER_OFF   0xD3
@@ -62,7 +63,6 @@
 #define SBEMU_CMD_8BIT_OUT_AUTO_HS  0x90
 
 //sample rate used
-#define SBEMU_CMD_8OR16_OUT_1       0x41
 //fllowing commands
 #define SBEMU_CMD_8OR16_8_OUT_1     0xC0
 #define SBEMU_CMD_8OR16_8_OUT_AUTO  0xC6

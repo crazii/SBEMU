@@ -33,6 +33,16 @@ extern "C"
 #define VDMA_REG_CH2_PAGEADDR   0x81
 #define VDMA_REG_CH3_PAGEADDR   0x82
 
+//16bit
+#define VDMA_REG_CH4_ADDR       0xC0
+#define VDMA_REG_CH4_COUNTER    0xC2
+#define VDMA_REG_CH7_ADDR       0xCC
+#define VDMA_REG_CH7_COUNTER    0xCE
+#define VDMA_REG_STATUS_CMD16   0xD0
+#define VDMA_REG_MULTIMASK16    0xDE
+#define VDMA_REG_CH4_PAGEADDR   0x8F
+#define VDMA_REG_CH7_PAGEADDR   0x8A
+
 void VDMA_Write(uint16_t port, uint8_t byte);
 uint8_t VDMA_Read(uint16_t port);
 

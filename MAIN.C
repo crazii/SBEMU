@@ -104,7 +104,7 @@ static QEMM_IODT MAIN_OPL3IODT[4] =
     0x38B, &MAIN_OPL3_38B
 };
 
-static QEMM_IODT MAIN_VDMA_IODT[20] =
+static QEMM_IODT MAIN_VDMA_IODT[40] =
 {
     0x00, &MAIN_DMA,
     0x01, &MAIN_DMA,
@@ -126,6 +126,27 @@ static QEMM_IODT MAIN_VDMA_IODT[20] =
     0x82, &MAIN_DMA,
     0x83, &MAIN_DMA,
     0x87, &MAIN_DMA,
+
+    0xC0, &MAIN_DMA,
+    0xC2, &MAIN_DMA,
+    0xC4, &MAIN_DMA,
+    0xC6, &MAIN_DMA,
+    0xC8, &MAIN_DMA,
+    0xCA, &MAIN_DMA,
+    0xCC, &MAIN_DMA,
+    0xCE, &MAIN_DMA,
+    0xD0, &MAIN_DMA,
+    0xD2, &MAIN_DMA,
+    0xD4, &MAIN_DMA,
+    0xD6, &MAIN_DMA,
+    0xD8, &MAIN_DMA,
+    0xDA, &MAIN_DMA,
+    0xDC, &MAIN_DMA,
+    0xDE, &MAIN_DMA,
+    0x89, &MAIN_DMA,
+    0x8A, &MAIN_DMA,
+    0x8B, &MAIN_DMA,
+    0x8F, &MAIN_DMA,
 };
 
 static QEMM_IODT MAIN_VIRQ_IODT[4] =
@@ -159,6 +180,9 @@ QEMM_IOPT MAIN_SB_IOPT;
 QEMM_IOPT MAIN_VDMA_IOPT_PM1;
 QEMM_IOPT MAIN_VDMA_IOPT_PM2;
 QEMM_IOPT MAIN_VDMA_IOPT_PM3;
+QEMM_IOPT MAIN_VHDMA_IOPT_PM1;
+QEMM_IOPT MAIN_VHDMA_IOPT_PM2;
+QEMM_IOPT MAIN_VHDMA_IOPT_PM3;
 QEMM_IOPT MAIN_VIRQ_IOPT_PM1;
 QEMM_IOPT MAIN_VIRQ_IOPT_PM2;
 QEMM_IOPT MAIN_SB_IOPT_PM;
@@ -270,7 +294,7 @@ int main(int argc, char* argv[])
         printf("Error: invalid DMA channel.\n");
         return 1;
     }
-    if(MAIN_Options[OPT_TYPE].value < 0 && MAIN_Options[OPT_TYPE].value > 6)
+    if(MAIN_Options[OPT_TYPE].value < 0 || MAIN_Options[OPT_TYPE].value > 6)
     {
         printf("Error: invalid SB Type.\n");
         return 1;
@@ -399,6 +423,9 @@ int main(int argc, char* argv[])
     BOOL HDPMIInstalledVDMA1 = !enablePM || HDPMIPT_Install_IOPortTrap(0x0, 0xF, MAIN_VDMA_IODT, 16, &MAIN_VDMA_IOPT_PM1);
     BOOL HDPMIInstalledVDMA2 = !enablePM || HDPMIPT_Install_IOPortTrap(0x81, 0x83, MAIN_VDMA_IODT+16, 3, &MAIN_VDMA_IOPT_PM2);
     BOOL HDPMIInstalledVDMA3 = !enablePM || HDPMIPT_Install_IOPortTrap(0x87, 0x87, MAIN_VDMA_IODT+19, 1, &MAIN_VDMA_IOPT_PM3);
+    BOOL HDPMIInstalledVHDMA1 = !enablePM || HDPMIPT_Install_IOPortTrap(0xC0, 0xDE, MAIN_VDMA_IODT+20, 16, &MAIN_VHDMA_IOPT_PM1);
+    BOOL HDPMIInstalledVHDMA2 = !enablePM || HDPMIPT_Install_IOPortTrap(0x89, 0x8B, MAIN_VDMA_IODT+36, 3, &MAIN_VHDMA_IOPT_PM2);
+    BOOL HDPMIInstalledVHDMA3 = !enablePM || HDPMIPT_Install_IOPortTrap(0x8F, 0x8F, MAIN_VDMA_IODT+39, 1, &MAIN_VHDMA_IOPT_PM3);
     BOOL HDPMIInstalledVIRQ1 = !enablePM || HDPMIPT_Install_IOPortTrap(0x20, 0x21, MAIN_VIRQ_IODT, 2, &MAIN_VIRQ_IOPT_PM1);
     BOOL HDPMIInstalledVIRQ2 = !enablePM || HDPMIPT_Install_IOPortTrap(0xA0, 0xA1, MAIN_VIRQ_IODT+2, 2, &MAIN_VIRQ_IOPT_PM2);
     BOOL HDPMIInstalledSB = !enablePM || HDPMIPT_Install_IOPortTrap(MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_ADDR].value+0x0F, SB_Iodt, SB_IodtCount, &MAIN_SB_IOPT_PM);
@@ -423,7 +450,8 @@ int main(int argc, char* argv[])
     BOOL TSR = TRUE;
     if(!PM_ISR
     || !QEMMInstalledVDMA || !QEMMInstalledVIRQ || !QEMMInstalledSB
-    || !HDPMIInstalledVDMA1 || !HDPMIInstalledVDMA2 || !HDPMIInstalledVDMA3 || !HDPMIInstalledVIRQ1 || !HDPMIInstalledVIRQ2 || !HDPMIInstalledSB
+    || !HDPMIInstalledVDMA1 || !HDPMIInstalledVDMA2 || !HDPMIInstalledVDMA3 || !HDPMIInstalledVHDMA1 || !HDPMIInstalledVHDMA2 || !HDPMIInstalledVHDMA3 
+    || !HDPMIInstalledVIRQ1 || !HDPMIInstalledVIRQ2 || !HDPMIInstalledSB
     || !(TSR=DPMI_TSR()))
     {
         if(MAIN_Options[OPT_OPL].value)
@@ -440,11 +468,14 @@ int main(int argc, char* argv[])
         #endif
         if(enableRM && QEMMInstalledSB) QEMM_Uninstall_IOPortTrap(&MAIN_SB_IOPT);
 
-        if(!HDPMIInstalledVDMA1 || !HDPMIInstalledVDMA2 || !HDPMIInstalledVDMA3 || !HDPMIInstalledVIRQ1 || !HDPMIInstalledVIRQ2 || !HDPMIInstalledSB)
+        if(!HDPMIInstalledVDMA1 || !HDPMIInstalledVDMA2 || !HDPMIInstalledVDMA3 || !HDPMIInstalledVHDMA1 || !HDPMIInstalledVHDMA2 || !HDPMIInstalledVHDMA3 || !HDPMIInstalledVIRQ1 || !HDPMIInstalledVIRQ2 || !HDPMIInstalledSB)
             printf("Error: Failed installing IO port trap for HDPMI.\n");
         if(enablePM && HDPMIInstalledVDMA1) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT_PM1);
         if(enablePM && HDPMIInstalledVDMA2) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT_PM2);
         if(enablePM && HDPMIInstalledVDMA3) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT_PM3);
+        if(enablePM && HDPMIInstalledVHDMA1) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VHDMA_IOPT_PM1);
+        if(enablePM && HDPMIInstalledVHDMA2) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VHDMA_IOPT_PM2);
+        if(enablePM && HDPMIInstalledVHDMA3) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VHDMA_IOPT_PM3);
         if(enablePM && HDPMIInstalledVIRQ1) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM1);
         if(enablePM && HDPMIInstalledVIRQ2) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM2);
         if(enablePM && HDPMIInstalledSB) HDPMIPT_Uninstall_IOPortTrap(&MAIN_SB_IOPT_PM);
@@ -513,6 +544,7 @@ static void MAIN_Interrupt()
         vol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MASTERSTEREO)>>4)*256/15; //4:4
         voicevol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_VOICESTEREO)>>4)*256/15; //4:4
         midivol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MIDISTEREO)>>4)*256/15; //4:4
+        //_LOG("vol: %d, voicevol: %d, midivol: %d\n", vol, voicevol, midivol);        
     }
     else //SBPro
     {
@@ -543,7 +575,7 @@ static void MAIN_Interrupt()
         uint32_t SB_Bytes = SBEMU_GetSampleBytes();
         uint32_t SB_Pos = SBEMU_GetPos();
         uint32_t SB_Rate = SBEMU_GetSampleRate();
-        int samplebytes = SBEMU_GetBits()/8;
+        int samplesize = SBEMU_GetBits()/8; //sample size in bytes 1 for 8bit. 2 for 16bit
         int channels = SBEMU_GetChannels();
         //_LOG("sample rate: %d %d\n", SB_Rate, aui.freq_card);
         //_LOG("DMA index: %x\n", DMA_Index);
@@ -567,20 +599,20 @@ static void MAIN_Interrupt()
 
             int count = samples-pos;
             if(SB_Rate < aui.freq_card)
-                count = max(channels, count/((aui.freq_card+SB_Rate-1)/SB_Rate));
+                count = max(channels, count/((aui.freq_card+SB_Rate/2)/SB_Rate));
             else if(SB_Rate > aui.freq_card)
                 count *= (SB_Rate + aui.freq_card/2)/aui.freq_card;
-            count = min(count, max(1,(DMA_Count)/samplebytes/channels)); //stereo initial 1 byte
-            count = min(count, max(1,(SB_Bytes-SB_Pos)/samplebytes/channels)); //stereo initial 1 byte. 1/2channel = 0, make it 1
+            count = min(count, max(1,(DMA_Count)/samplesize/channels)); //stereo initial 1 byte
+            count = min(count, max(1,(SB_Bytes-SB_Pos)/samplesize/channels)); //stereo initial 1 byte. 1/2channel = 0, make it 1
             _LOG("samples:%d %d %d, %d %d, %d %d\n", samples, pos+count, count, DMA_Count, DMA_Index, SB_Bytes, SB_Pos);
-            int bytes = count * samplebytes * channels;
+            int bytes = count * samplesize * channels;
 
             if(MAIN_DMA_MappedAddr == 0) //map failed?
                 memset(MAIN_PCM+pos*2, 0, bytes);
             else
                 DPMI_CopyLinear(DPMI_PTR2L(MAIN_PCM+pos*2), MAIN_DMA_MappedAddr+(DMA_Addr-MAIN_DMA_Addr)+DMA_Index, bytes);
-            if(samplebytes != 2)
-                cv_bits_n_to_m(MAIN_PCM+pos*2, count*channels, samplebytes, 2);
+            if(samplesize != 2)
+                cv_bits_n_to_m(MAIN_PCM+pos*2, count*channels, samplesize, 2);
             if(SB_Rate != aui.freq_card)
                 count = mixer_speed_lq(MAIN_PCM+pos*2, count*channels, channels, SB_Rate, aui.freq_card)/channels;
             if(channels == 1) //should be the last step
@@ -656,6 +688,6 @@ static void MAIN_Interrupt()
     aui.pcm_sample = MAIN_PCM;
     AU_writedata(&aui);
 
-    _LOG("MAIN INT END\n");
+    //_LOG("MAIN INT END\n");
     #endif
 }

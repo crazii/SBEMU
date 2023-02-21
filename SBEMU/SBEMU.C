@@ -65,7 +65,7 @@ void SBEMU_Mixer_Write(uint16_t port, uint8_t value)
         SBEMU_MixerRegs[SBEMU_MIXERREG_MIDIVOL] = 0xE;
         SBEMU_MixerRegs[SBEMU_MIXERREG_VOICEVOL] = 0x6; //(1):2:(1) deault 0
 
-        if(SBEMU_DSPVER < 0x0400) //SB16 before
+        if(SBEMU_DSPVER < 0x0400) //before SB16
         {
             SBEMU_MixerRegs[SBEMU_MIXERREG_VOICESTEREO] = 0xEE;
             SBEMU_MixerRegs[SBEMU_MIXERREG_MASTERSTEREO] = 0xEE;
@@ -144,7 +144,9 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
         switch(SBEMU_DSPCMD)
         {
             case SBEMU_CMD_TRIGGER_IRQ:
+            case SBEMU_CMD_TRIGGER_IRQ16:
             {
+                SBEMU_MixerRegs[SBEMU_MIXERREG_INT_STS] |= SBEMU_DSPCMD == SBEMU_CMD_TRIGGER_IRQ ? 0x1 : 0x2;
                 SBEMU_TriggerIRQ = 1;
                 SBEMU_DSPCMD = 0;
                 //VIRQ_Invoke(SBEMU_GetIRQ()); //not working
@@ -180,6 +182,11 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                     SBEMU_Auto = FALSE;
                     SBEMU_Started = FALSE;
                 }
+                SBEMU_DSPCMD = 0;
+            }
+            break;
+            case 0x2A: //unknown commands
+            {
                 SBEMU_DSPCMD = 0;
             }
             break;
@@ -225,7 +232,10 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                 }
             }
             break;
-            case SBEMU_CMD_8OR16_OUT_1: //command start: sample rate, next command: mode
+            case SBEMU_CMD_SET_SAMPLERATE_I:
+                SBEMU_DSPCMD_Subindex++;
+            break;
+            case SBEMU_CMD_SET_SAMPLERATE: //command start: sample rate, next command: mode
             {
                 if(SBEMU_DSPCMD_Subindex++ == 0)
                     SBEMU_SampleRate = value<<8;
@@ -362,6 +372,9 @@ void SBEMU_Init(int irq, int dma, int hdma, int DSPVer,void(*startCB)(void))
     SBEMU_HDMA = hdma;
     SBEMU_DSPVER = DSPVer;
     SBEMU_StartCB = startCB;
+
+    SBEMU_Mixer_WriteAddr(0, SBEMU_MIXERREG_RESET);
+    SBEMU_Mixer_Write(0, 1);
 }
 
 uint8_t SBEMU_GetIRQ()
@@ -439,6 +452,8 @@ int SBEMU_GetPos()
 
 int SBEMU_SetPos(int pos)
 {
+    if(pos >= SBEMU_GetSampleBytes())
+        SBEMU_MixerRegs[SBEMU_MIXERREG_INT_STS] |= SBEMU_GetBits() == 8 ? 0x01 : 0x02;
     return SBEMU_Pos = pos;
 }
 
