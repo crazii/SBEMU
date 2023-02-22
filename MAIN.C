@@ -34,7 +34,7 @@ static DPMI_ISR_HANDLE MAIN_IntHandlePM;
 static uint32_t MAIN_DMA_Addr = 0;
 static uint32_t MAIN_DMA_Size = 0;
 static uint32_t MAIN_DMA_MappedAddr = 0;
-static uint16_t MAIN_SB_VOL = 256; //intial set volume will cause interrupt missing?
+static uint16_t MAIN_SB_VOL = 0; //intial set volume will cause interrupt missing?
 static uint16_t MAIN_GLB_VOL = 0; //TODO: add hotkey
 
 static void MAIN_Interrupt();
@@ -201,8 +201,10 @@ struct
     "/T", "Specify SB Type, valid value: 0-6", 5,
     "/H", "Specify High DMA channel, valid value: 5,6,7", 5,
     "/OPL", "Enable OPL3 emulation", TRUE,
-    "/PM", "Support protected mode games, you can try disable it when you have compatibility issues", TRUE,
+    "/PM", "Support protected mode games", TRUE,
     "/RM", "Support real mode games", TRUE,
+    "/O", "Select output. 0: headphone, 1: speaker. Intel HDA only", 1,
+    "/VOL", "Set master volume (0-9)", 5,
 
 #if DEBUG
     "/test", "Test sound and exit", FALSE,
@@ -220,6 +222,8 @@ enum EOption
     OPT_OPL,
     OPT_PM,
     OPT_RM,
+    OPT_OUTPUT,
+    OPT_VOL,
 
 #if DEBUG
     OPT_TEST,
@@ -299,6 +303,16 @@ int main(int argc, char* argv[])
         printf("Error: invalid SB Type.\n");
         return 1;
     }
+    if(MAIN_Options[OPT_OUTPUT].value != 0 && MAIN_Options[OPT_OUTPUT].value != 1)
+    {
+        printf("Error: Invalid Output.\n");
+        return 1;
+    }
+     if(MAIN_Options[OPT_VOL].value < 0 || MAIN_Options[OPT_VOL].value > 9)
+    {
+        printf("Error: Invalid Volume.\n");
+        return 1;
+    }
     if(MAIN_Options[OPT_TYPE].value != 6)
         MAIN_Options[OPT_HDMA].value = MAIN_Options[OPT_DMA].value; //16 bit transfer through 8 bit dma
 
@@ -352,6 +366,7 @@ int main(int argc, char* argv[])
         return 1;
     }
     
+    aui.card_select_config = MAIN_Options[OPT_OUTPUT].value;
     AU_init(&aui);
     if(!aui.card_handler)
         return 1;
@@ -362,7 +377,10 @@ int main(int argc, char* argv[])
     }
     AU_ini_interrupts(&aui);
     AU_setmixer_init(&aui);
-    AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 95);
+    AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 100);
+    MAIN_GLB_VOL = MAIN_Options[OPT_VOL].value;
+    MAIN_SB_VOL = 256*MAIN_GLB_VOL/9;
+    AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, MAIN_GLB_VOL*100/9);
     //use fixed rate
     mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, SBEMU_SAMPLERATE, SBEMU_CHANNELS, SBEMU_CHANNELS, NULL, SBEMU_BITS, SBEMU_BITS/8, 0};
     AU_setrate(&aui, &adi);
@@ -552,10 +570,10 @@ static void MAIN_Interrupt()
         voicevol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_VOICESTEREO)>>5)*256/7; //3:1:3:1
         midivol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MIDISTEREO)>>5)*256/7;
     }
-    if(MAIN_SB_VOL != vol)
+    if(MAIN_SB_VOL != vol*MAIN_GLB_VOL/9)
     {
-        _LOG("set sb volume:%d %d\n", MAIN_SB_VOL, vol);
-        MAIN_SB_VOL = vol;
+        _LOG("set sb volume:%d %d\n", MAIN_SB_VOL, vol*MAIN_GLB_VOL/9);
+        MAIN_SB_VOL = vol*MAIN_GLB_VOL/9;
         AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, vol*100/256);
     }
 
