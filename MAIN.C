@@ -204,7 +204,7 @@ struct
     "/PM", "Support protected mode games", TRUE,
     "/RM", "Support real mode games", TRUE,
     "/O", "Select output. 0: headphone, 1: speaker. Intel HDA only", 1,
-    "/VOL", "Set master volume (0-9)", 5,
+    "/VOL", "Set master volume (0-9)", 7,
 
 #if DEBUG
     "/test", "Test sound and exit", FALSE,
@@ -229,6 +229,28 @@ enum EOption
     OPT_TEST,
 #endif
     OPT_COUNT,
+};
+
+static const char* MAIN_SBTypeString[] =
+{
+    "0",
+    "1.0",
+    "1.5",
+    "2.0",
+    "Pro",
+    "Pro",
+    "16",
+};
+
+static int MAIN_SB_DSPVersion[] =
+{
+    0,
+    0x0100,
+    0x0105,
+    0x0202,
+    0x0302,
+    0x0302,
+    0x0400,
 };
 
 int main(int argc, char* argv[])
@@ -298,7 +320,7 @@ int main(int argc, char* argv[])
         printf("Error: invalid DMA channel.\n");
         return 1;
     }
-    if(MAIN_Options[OPT_TYPE].value < 0 || MAIN_Options[OPT_TYPE].value > 6)
+    if(MAIN_Options[OPT_TYPE].value <= 0 || MAIN_Options[OPT_TYPE].value > 6)
     {
         printf("Error: invalid SB Type.\n");
         return 1;
@@ -321,7 +343,10 @@ int main(int argc, char* argv[])
     //alter BLASTER env.
     {
         char buf[256];
-        sprintf(buf, "A%x I%x D%x T%x H%x", MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value, MAIN_Options[OPT_TYPE].value, MAIN_Options[OPT_HDMA].value);
+        if(MAIN_Options[OPT_TYPE].value != 6)
+            sprintf(buf, "A%x I%x D%x", MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value);
+        else
+            sprintf(buf, "A%x I%x D%x T%x H%x", MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value, MAIN_Options[OPT_TYPE].value, MAIN_Options[OPT_HDMA].value);
         #ifdef DJGPP //makes vscode happy
         setenv("BLASTER", buf, TRUE);
         #endif
@@ -418,8 +443,7 @@ int main(int argc, char* argv[])
         printf("OPL3 emulation enabled at port 388h.\n");
     }
     //TestSound(FALSE);
-    int DSPVer = MAIN_Options[OPT_TYPE].value < 4 ? 0x0200 : ((MAIN_Options[OPT_TYPE].value < 6) ? 0x0302 : 0x0400);
-    SBEMU_Init(MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value, MAIN_Options[OPT_HDMA].value, DSPVer, &MAIN_Interrupt);
+    SBEMU_Init(MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value, MAIN_Options[OPT_HDMA].value, MAIN_SB_DSPVersion[MAIN_Options[OPT_TYPE].value], &MAIN_Interrupt);
     VDMA_Virtualize(MAIN_Options[OPT_DMA].value, TRUE);
     if(MAIN_Options[OPT_TYPE].value == 6)
         VDMA_Virtualize(MAIN_Options[OPT_HDMA].value, TRUE);
@@ -427,8 +451,8 @@ int main(int argc, char* argv[])
         MAIN_SB_IODT[i].port += MAIN_Options[OPT_ADDR].value;
     QEMM_IODT* SB_Iodt = MAIN_Options[OPT_OPL].value ? MAIN_SB_IODT : MAIN_SB_IODT+4;
     int SB_IodtCount = MAIN_Options[OPT_OPL].value ? countof(MAIN_SB_IODT) : countof(MAIN_SB_IODT)-4;
-    
-    printf("Sound Blaster emulation enabled at Adress: %x, IRQ: %x, DMA: %x\n", MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value);
+
+    printf("Sound Blaster %s emulation enabled at Adress: %x, IRQ: %x, DMA: %x\n", MAIN_SBTypeString[MAIN_Options[OPT_TYPE].value], MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value);
 
     BOOL QEMMInstalledVDMA = !enableRM || QEMM_Install_IOPortTrap(MAIN_VDMA_IODT, countof(MAIN_VDMA_IODT), &MAIN_VDMA_IOPT);
     #if 1//will crash with VIRQ installed, do it temporarily. TODO: figure out why
