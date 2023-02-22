@@ -444,7 +444,7 @@ int SBEMU_GetSampleRate()
 
 int SBEMU_GetSampleBytes()
 {
-    return SBEMU_Samples + 1;
+    return (SBEMU_Samples + 1)*SBEMU_Bits/8;
 }
 
 int SBEMU_GetAuto()

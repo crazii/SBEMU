@@ -601,7 +601,7 @@ static void MAIN_Interrupt()
             int count = samples-pos;
             BOOL resample = TRUE; //don't resample if sample rates are close
             if(SB_Rate < aui.freq_card-50)
-                count = max(1, count/((aui.freq_card+SB_Rate/2)/SB_Rate));
+                count = max(1, count*SB_Rate/aui.freq_card);
             else if(SB_Rate > aui.freq_card+50)
                 count = count*SB_Rate/aui.freq_card;
             else
