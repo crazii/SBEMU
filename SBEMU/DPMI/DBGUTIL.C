@@ -37,8 +37,8 @@ static uint32_t VGA_GetCursor()
     uint32_t offset = (uint32_t)inp(VGA_DATA_REGISTER) << 8;
     outp(VGA_CTRL_REGISTER, VGA_OFFSET_LOW);
     offset += inp(VGA_DATA_REGISTER);
-    static int l = 0;
-    return (l+=20)%(80*25);
+    //static int l = 0;
+    //return (l+=20)%(80*25);
     return offset;
 }
 
@@ -129,7 +129,7 @@ void DBG_Logv(const char* fmt, va_list aptr)
     len = min(len, SIZE-1);
     buf[len] = '\0';
 
-    #if 1
+    #if 0
     outp(0x3F8+3, 0x03);
     for(int i = 0; i < len; ++i)
     {

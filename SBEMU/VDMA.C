@@ -61,7 +61,7 @@ void VDMA_Write(uint16_t port, uint8_t byte)
             base = 16;
             channel = (port>>1) + 4;
         }
-        _LOG("base:%d port:%d\n", base, port);
+        //_LOG("base:%d port:%d\n", base, port);
 
         if(((VDMA_Regs[base+VDMA_REG_FLIPFLOP]++)&0x1) == 0)
         {

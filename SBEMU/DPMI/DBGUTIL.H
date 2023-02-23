@@ -23,11 +23,12 @@ extern "C"
 {
 #endif
 
-#if _LOG_ENABLE
-
-//_LOG() can be called in interrupt handler. DO NOT use sys calls, i.e. printf/INT10h in interrupt handler.
 void DBG_Logv(const char* fmt, va_list aptr);
 void DBG_Log(const char* fmt, ...);
+
+//_LOG() can be called in interrupt handler. DO NOT use sys calls, i.e. printf/INT10h in interrupt handler.
+#if _LOG_ENABLE
+
 #define _LOG DBG_Log
 
 #else //_LOG_ENABLE

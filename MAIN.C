@@ -23,6 +23,12 @@ extern int16_t* TEST_Sample;
 extern unsigned long TEST_SampleLen;
 //-TEST
 
+#define MAIN_TRAP_PIC_ONDEMAND 1
+
+#define MAIN_TSR_INT 0x2D   //multiplex 2F is not working using HDPMI, use AMIS.
+#define MAIN_TSR_INT_ID 0x01 //start id
+#define MAIN_TSR_ID 0x53424530  //'SBE0'
+
 mpxplay_audioout_info_s aui = {0};
 
 #define MAIN_PCM_SAMPLESIZE 16384
@@ -36,9 +42,17 @@ static uint32_t MAIN_DMA_Size = 0;
 static uint32_t MAIN_DMA_MappedAddr = 0;
 static uint16_t MAIN_SB_VOL = 0; //intial set volume will cause interrupt missing?
 static uint16_t MAIN_GLB_VOL = 0; //TODO: add hotkey
+static uint8_t MAIN_QEMM_Present = 0;
+static uint8_t MAIN_HDPMI_Present = 0;
 
 static void MAIN_Interrupt();
 static void MAIN_InterruptPM();
+
+static DPMI_ISR_HANDLE MAIN_TSRIntHandle;
+static DPMI_REG MAIN_TSRREG;
+static uint32_t MAIN_TSR_INT_FNO = MAIN_TSR_INT_ID;
+static void MAIN_TSR_InstallationCheck();
+static void MAIN_TSR_Interrupt();
 
 static uint32_t MAIN_OPL3_388(uint32_t port, uint32_t val, uint32_t out)
 {
@@ -174,6 +188,8 @@ static QEMM_IODT MAIN_SB_IODT[13] =
     0x0F, &MAIN_SB_DSP_ReadINT16BitACK,
 };
 
+QEMM_IOPT OPL3IOPT;
+QEMM_IOPT OPL3IOPT_PM;
 QEMM_IOPT MAIN_VDMA_IOPT;
 QEMM_IOPT MAIN_VIRQ_IOPT;
 QEMM_IOPT MAIN_SB_IOPT;
@@ -192,22 +208,23 @@ struct
     const char* option;
     const char* desc;
     int value;
+    int setcmd; //set by command line
 }MAIN_Options[] =
 {
-    "/?", "Show help", FALSE,
-    "/A", "Specify IO address, valid value: 220,240", 0x220,
-    "/I", "Specify IRQ number, valud value: 5,7", 7,
-    "/D", "Specify DMA channel, valid value: 0,1,3", 1,
-    "/T", "Specify SB Type, valid value: 0-6", 5,
-    "/H", "Specify High DMA channel, valid value: 5,6,7", 5,
-    "/OPL", "Enable OPL3 emulation", TRUE,
-    "/PM", "Support protected mode games", TRUE,
-    "/RM", "Support real mode games", TRUE,
-    "/O", "Select output. 0: headphone, 1: speaker. Intel HDA only", 1,
-    "/VOL", "Set master volume (0-9)", 7,
+    "/?", "Show help", FALSE, 0,
+    "/A", "Specify IO address, valid value: 220,240", 0x220, 0,
+    "/I", "Specify IRQ number, valud value: 5,7", 7, 0,
+    "/D", "Specify DMA channel, valid value: 0,1,3", 1, 0,
+    "/T", "Specify SB Type, valid value: 1-6", 5, 0,
+    "/H", "Specify High DMA channel, valid value: 5,6,7", 5, 0,
+    "/OPL", "Enable OPL3 emulation", TRUE, 0,
+    "/PM", "Support protected mode games", TRUE, 0,
+    "/RM", "Support real mode games", TRUE, 0,
+    "/O", "Select output. 0: headphone, 1: speaker. Intel HDA only", 1, 0,
+    "/VOL", "Set master volume (0-9)", 7, 0,
 
 #if DEBUG
-    "/test", "Test sound and exit", FALSE,
+    "/test", "Test sound and exit", FALSE, 0,
 #endif
     NULL, NULL, 0,
 };
@@ -300,6 +317,7 @@ int main(int argc, char* argv[])
             {
                 int arglen = strlen(argv[i]);
                 MAIN_Options[j].value = arglen == len ? 1 : strtol(&argv[i][len], NULL, 16);
+                MAIN_Options[j].setcmd = TRUE;
                 break;
             }
         }
@@ -339,7 +357,7 @@ int main(int argc, char* argv[])
         MAIN_Options[OPT_HDMA].value = MAIN_Options[OPT_DMA].value; //16 bit transfer through 8 bit dma
 
     DPMI_Init();
-    
+ 
     //alter BLASTER env.
     {
         char buf[256];
@@ -366,23 +384,34 @@ int main(int argc, char* argv[])
     }
 #endif
 
+    MAIN_QEMM_Present = TRUE;
     if(MAIN_Options[OPT_RM].value)
     {
+        MAIN_Options[OPT_RM].value = TRUE; //set to known value for compare
         int bcd = QEMM_GetVersion();
         _LOG("QEMM version: %x.%02x\n", bcd>>8, bcd&0xFF);
         if(bcd < 0x703)
         {
             printf("QEMM not installed, or version bellow 7.03: %x.%02x, disable real mode support.\n", bcd>>8, bcd&0xFF);
             MAIN_Options[OPT_RM].value = FALSE;
+            MAIN_QEMM_Present = FALSE;
         }
     }
+    MAIN_HDPMI_Present = FALSE;
     if(MAIN_Options[OPT_PM].value)
     {
+        MAIN_Options[OPT_PM].value = TRUE; //set to known value for compare
         BOOL hasHDPMI = HDPMIPT_Detect(); //another DPMI host used other than HDPMI
         if(!hasHDPMI)
             printf("HDPMI not installed, disable protected mode support.\n");
         MAIN_Options[OPT_PM].value = hasHDPMI;
+        MAIN_HDPMI_Present = hasHDPMI;
     }
+    MAIN_Options[OPT_OPL].value = (MAIN_Options[OPT_OPL].value) ? TRUE : FALSE;
+
+    //TSR installation check
+    MAIN_TSR_InstallationCheck();
+
     BOOL enablePM = MAIN_Options[OPT_PM].value;
     BOOL enableRM = MAIN_Options[OPT_RM].value;
     if(!enablePM && !enableRM)
@@ -403,12 +432,13 @@ int main(int argc, char* argv[])
     AU_ini_interrupts(&aui);
     AU_setmixer_init(&aui);
     AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 100);
-    MAIN_GLB_VOL = MAIN_Options[OPT_VOL].value;
-    MAIN_SB_VOL = 256*MAIN_GLB_VOL/9;
-    AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, MAIN_GLB_VOL*100/9);
     //use fixed rate
     mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, SBEMU_SAMPLERATE, SBEMU_CHANNELS, SBEMU_CHANNELS, NULL, SBEMU_BITS, SBEMU_BITS/8, 0};
     AU_setrate(&aui, &adi);
+    //set volume
+    MAIN_GLB_VOL = MAIN_Options[OPT_VOL].value;
+    MAIN_SB_VOL = 256*MAIN_GLB_VOL/9;
+    AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, MAIN_GLB_VOL*100/9);
     
     printf("Real mode support: %s.\n", enableRM ? "enabled" : "disabled");
     printf("Protected mode support: %s.\n", enablePM ? "enabled" : "disabled");
@@ -423,8 +453,6 @@ int main(int argc, char* argv[])
         UntrappedIO_IN_Handler = &HDPMIPT_UntrappedIO_Read;
     }
 
-    QEMM_IOPT OPL3IOPT;
-    QEMM_IOPT OPL3IOPT_PM;
     if(MAIN_Options[OPT_OPL].value)
     {
         if(enableRM && !QEMM_Install_IOPortTrap(MAIN_OPL3IODT, 4, &OPL3IOPT))
@@ -455,7 +483,7 @@ int main(int argc, char* argv[])
     printf("Sound Blaster %s emulation enabled at Adress: %x, IRQ: %x, DMA: %x\n", MAIN_SBTypeString[MAIN_Options[OPT_TYPE].value], MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value);
 
     BOOL QEMMInstalledVDMA = !enableRM || QEMM_Install_IOPortTrap(MAIN_VDMA_IODT, countof(MAIN_VDMA_IODT), &MAIN_VDMA_IOPT);
-    #if 1//will crash with VIRQ installed, do it temporarily. TODO: figure out why
+    #if MAIN_TRAP_PIC_ONDEMAND//will crash with VIRQ installed, do it temporarily. TODO: figure out why
     BOOL QEMMInstalledVIRQ = TRUE;
     #else
     BOOL QEMMInstalledVIRQ = !enableRM || QEMM_Install_IOPortTrap(MAIN_VIRQ_IODT, countof(MAIN_VIRQ_IODT), &MAIN_VIRQ_IOPT);
@@ -468,8 +496,13 @@ int main(int argc, char* argv[])
     BOOL HDPMIInstalledVHDMA1 = !enablePM || HDPMIPT_Install_IOPortTrap(0xC0, 0xDE, MAIN_VDMA_IODT+20, 16, &MAIN_VHDMA_IOPT_PM1);
     BOOL HDPMIInstalledVHDMA2 = !enablePM || HDPMIPT_Install_IOPortTrap(0x89, 0x8B, MAIN_VDMA_IODT+36, 3, &MAIN_VHDMA_IOPT_PM2);
     BOOL HDPMIInstalledVHDMA3 = !enablePM || HDPMIPT_Install_IOPortTrap(0x8F, 0x8F, MAIN_VDMA_IODT+39, 1, &MAIN_VHDMA_IOPT_PM3);
+    #if MAIN_TRAP_PIC_ONDEMAND
+    BOOL HDPMIInstalledVIRQ1 = TRUE;
+    BOOL HDPMIInstalledVIRQ2 = TRUE;
+    #else
     BOOL HDPMIInstalledVIRQ1 = !enablePM || HDPMIPT_Install_IOPortTrap(0x20, 0x21, MAIN_VIRQ_IODT, 2, &MAIN_VIRQ_IOPT_PM1);
     BOOL HDPMIInstalledVIRQ2 = !enablePM || HDPMIPT_Install_IOPortTrap(0xA0, 0xA1, MAIN_VIRQ_IODT+2, 2, &MAIN_VIRQ_IOPT_PM2);
+    #endif
     BOOL HDPMIInstalledSB = !enablePM || HDPMIPT_Install_IOPortTrap(MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_ADDR].value+0x0F, SB_Iodt, SB_IodtCount, &MAIN_SB_IOPT_PM);
 
     _LOG("sound card IRQ: %d\n", aui.card_irq);
@@ -486,11 +519,25 @@ int main(int argc, char* argv[])
     HDPMIPT_InstallIRQACKHandler(aui.card_irq, MAIN_IntHandlePM.wrapper_cs, MAIN_IntHandlePM.wrapper_offset);
     PIC_UnmaskIRQ(aui.card_irq);
 
+    BOOL TSR_ISR = FALSE;
+    for(int i = MAIN_TSR_INT_ID; i <= 0xFF; ++i)
+    {
+        DPMI_REG r = {0};
+        r.h.ah = i;
+        //DBG_DumpREG(&r);
+        DPMI_CallRealModeINT(MAIN_TSR_INT, &r);
+        if(r.h.al != 0) //find free multiplex number
+            continue;
+        MAIN_TSR_INT_FNO = i;
+        TSR_ISR = DPMI_InstallRealModeISR(MAIN_TSR_INT, MAIN_TSR_Interrupt, &MAIN_TSRREG, &MAIN_TSRIntHandle) == 0;
+        break;
+    }
+
     AU_prestart(&aui);
     AU_start(&aui);
 
     BOOL TSR = TRUE;
-    if(!PM_ISR
+    if(!PM_ISR || !TSR_ISR
     || !QEMMInstalledVDMA || !QEMMInstalledVIRQ || !QEMMInstalledSB
     || !HDPMIInstalledVDMA1 || !HDPMIInstalledVDMA2 || !HDPMIInstalledVDMA3 || !HDPMIInstalledVHDMA1 || !HDPMIInstalledVHDMA2 || !HDPMIInstalledVHDMA3 
     || !HDPMIInstalledVIRQ1 || !HDPMIInstalledVIRQ2 || !HDPMIInstalledSB
@@ -505,7 +552,7 @@ int main(int argc, char* argv[])
         if(!QEMMInstalledVDMA || !QEMMInstalledVIRQ || !QEMMInstalledSB)
             printf("Error: Failed installing IO port trap for QEMM.\n");
         if(enableRM && QEMMInstalledVDMA) QEMM_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT);
-        #if 0
+        #if !MAIN_TRAP_PIC_ONDEMAND
         if(enableRM && QEMMInstalledVIRQ) QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
         #endif
         if(enableRM && QEMMInstalledSB) QEMM_Uninstall_IOPortTrap(&MAIN_SB_IOPT);
@@ -518,13 +565,18 @@ int main(int argc, char* argv[])
         if(enablePM && HDPMIInstalledVHDMA1) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VHDMA_IOPT_PM1);
         if(enablePM && HDPMIInstalledVHDMA2) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VHDMA_IOPT_PM2);
         if(enablePM && HDPMIInstalledVHDMA3) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VHDMA_IOPT_PM3);
+        #if !MAIN_TRAP_PIC_ONDEMAND
         if(enablePM && HDPMIInstalledVIRQ1) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM1);
         if(enablePM && HDPMIInstalledVIRQ2) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM2);
+        #endif
         if(enablePM && HDPMIInstalledSB) HDPMIPT_Uninstall_IOPortTrap(&MAIN_SB_IOPT_PM);
 
         if(!PM_ISR)
             printf("Error: Failed installing sound card ISR.\n");
         if(PM_ISR) DPMI_UninstallISR(&MAIN_IntHandlePM);
+        if(!TSR_ISR)
+            printf("Error: Failed installing TSR interrupt.\n");
+        if(TSR_ISR) DPMI_UninstallISR(&MAIN_TSRIntHandle);
 
         if(!TSR)
             printf("Error: Failed installing TSR.\n");
@@ -567,9 +619,23 @@ static void MAIN_Interrupt()
 
     if(SBEMU_IRQTriggered())
     {
+        #if MAIN_TRAP_PIC_ONDEMAND
         if(MAIN_Options[OPT_RM].value) QEMM_Install_IOPortTrap(MAIN_VIRQ_IODT, countof(MAIN_VIRQ_IODT), &MAIN_VIRQ_IOPT);
+        if(MAIN_Options[OPT_PM].value)
+        {
+            HDPMIPT_Install_IOPortTrap(0x20, 0x21, MAIN_VIRQ_IODT, 2, &MAIN_VIRQ_IOPT_PM1);
+            HDPMIPT_Install_IOPortTrap(0xA0, 0xA1, MAIN_VIRQ_IODT+2, 2, &MAIN_VIRQ_IOPT_PM2);
+        }
+        #endif
         VIRQ_Invoke(SBEMU_GetIRQ());
+        #if MAIN_TRAP_PIC_ONDEMAND
         if(MAIN_Options[OPT_RM].value) QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
+        if(MAIN_Options[OPT_PM].value)
+        {
+            HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM1);
+            HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM2);
+        }
+        #endif
         SBEMU_SetIRQTriggered(FALSE);
     }
     int32_t vol;
@@ -678,9 +744,23 @@ static void MAIN_Interrupt()
                     SBEMU_Stop();
                 SB_Pos = SBEMU_SetPos(0);
                 
+                #if MAIN_TRAP_PIC_ONDEMAND
                 if(MAIN_Options[OPT_RM].value) QEMM_Install_IOPortTrap(MAIN_VIRQ_IODT, countof(MAIN_VIRQ_IODT), &MAIN_VIRQ_IOPT);
+                if(MAIN_Options[OPT_PM].value)
+                {
+                    HDPMIPT_Install_IOPortTrap(0x20, 0x21, MAIN_VIRQ_IODT, 2, &MAIN_VIRQ_IOPT_PM1);
+                    HDPMIPT_Install_IOPortTrap(0xA0, 0xA1, MAIN_VIRQ_IODT+2, 2, &MAIN_VIRQ_IOPT_PM2);
+                }
+                #endif
                 VIRQ_Invoke(SBEMU_GetIRQ());
+                #if MAIN_TRAP_PIC_ONDEMAND
                 if(MAIN_Options[OPT_RM].value) QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
+                if(MAIN_Options[OPT_PM].value)
+                {
+                    HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM1);
+                    HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM2);
+                }
+                #endif
                 
                 SB_Bytes = SBEMU_GetSampleBytes();
                 SB_Pos = SBEMU_GetPos();
@@ -737,4 +817,251 @@ static void MAIN_Interrupt()
 
     //_LOG("MAIN INT END\n");
     #endif
+}
+
+void MAIN_TSR_InstallationCheck()
+{
+    for(int i = MAIN_TSR_INT_ID; i <= 0xFF; ++i)
+    { //detect TSR existence
+        DPMI_REG r = {0};
+        r.h.ah = i;
+        DPMI_CallRealModeINT(MAIN_TSR_INT, &r);
+        if(r.h.al == 0)
+            continue;
+        if(r.w.dx == (MAIN_TSR_ID>>16) && r.w.di == (MAIN_TSR_ID&0xFFFF))
+        {
+            printf("SBEMU is active.\n\n");
+
+            r.h.ah = i;
+            r.h.al = 0x01; //get current settings
+            DPMI_CallRealModeINT(MAIN_TSR_INT, &r);
+
+            uint16_t addr = r.w.dx;
+            uint8_t dma = (r.h.bl&0xF);
+            uint8_t hdma = (r.h.bl>>4)&0xF;
+            uint8_t irq = r.h.bh&0xF;
+            uint8_t vol = (r.h.bh>>4)&0xF;
+            uint8_t OPL = (r.h.cl&0x1);
+            uint8_t PM = (r.h.cl&0x2) >> 1;
+            uint8_t RM = (r.h.cl&0x4) >> 2;
+            uint8_t output = (r.h.cl&0x8) >> 3;
+            uint8_t type = r.h.ch;
+
+            if(irq != MAIN_Options[OPT_IRQ].value && MAIN_Options[OPT_IRQ].setcmd)
+                printf("Sound Blaster IRQ changed to: %x\n", MAIN_Options[OPT_IRQ].value);
+            if(vol != MAIN_Options[OPT_VOL].value && MAIN_Options[OPT_VOL].setcmd)
+                printf("Volume changed to: %x\n", MAIN_Options[OPT_VOL].value);
+            if(PM != MAIN_Options[OPT_PM].value && MAIN_Options[OPT_PM].setcmd)
+                printf("Protected mode support: changed to: %s\n", MAIN_Options[OPT_PM].value ? "enabled" : "disabled");
+            if(RM != MAIN_Options[OPT_RM].value && MAIN_Options[OPT_RM].setcmd)
+                printf("Real mode support: changed to: %s\n", MAIN_Options[OPT_RM].value ? "enabled" : "disabled");
+            if(output != MAIN_Options[OPT_OUTPUT].value && MAIN_Options[OPT_OUTPUT].setcmd)
+                printf("HDA Output changed to: %s\n", MAIN_Options[OPT_OUTPUT].value ? "speaker" : "headphone");
+            if(type != MAIN_Options[OPT_TYPE].value && MAIN_Options[OPT_TYPE].setcmd)
+                printf("Type changed to: Sound Blaster %s\n", MAIN_SBTypeString[MAIN_Options[OPT_TYPE].value]);
+
+            r.w.dx = MAIN_Options[OPT_ADDR].setcmd ? MAIN_Options[OPT_ADDR].value : r.w.dx;
+            r.h.bl = (MAIN_Options[OPT_DMA].setcmd ? (MAIN_Options[OPT_DMA].value&0xF) : (r.h.bl&0xF)) | (MAIN_Options[OPT_HDMA].setcmd ? (MAIN_Options[OPT_HDMA].value<<4) : (r.h.bl&0xF0));
+            r.h.bh = (MAIN_Options[OPT_IRQ].setcmd ? (MAIN_Options[OPT_IRQ].value&0xF) : (r.h.bh&0xF)) | (MAIN_Options[OPT_VOL].setcmd ? (MAIN_Options[OPT_VOL].value<<4) : (r.h.bh&0xF0));
+            r.h.cl = (MAIN_Options[OPT_OPL].setcmd ? MAIN_Options[OPT_OPL].value : (r.h.cl&0x1)) 
+                | (MAIN_Options[OPT_PM].setcmd ? (MAIN_Options[OPT_PM].value<<1) : (r.h.cl&0x2))
+                | (MAIN_Options[OPT_RM].setcmd ? (MAIN_Options[OPT_RM].value<<2) : (r.h.cl&0x4))
+                | (MAIN_Options[OPT_OUTPUT].setcmd ? (MAIN_Options[OPT_OUTPUT].value<<3) : (r.h.cl&0x08));
+            r.h.ch = MAIN_Options[OPT_TYPE].setcmd ? MAIN_Options[OPT_TYPE].value : r.h.ch;
+            r.h.ah = i;
+            r.h.al = 0x02; //set new settings
+            DPMI_CallRealModeINT(MAIN_TSR_INT, &r);
+
+            r.h.ah = i;
+            r.h.al = 0x01;
+            DPMI_CallRealModeINT(MAIN_TSR_INT, &r);
+            MAIN_Options[OPT_ADDR].value = r.w.dx;
+            MAIN_Options[OPT_DMA].value = (r.h.bl&0xF);
+            MAIN_Options[OPT_HDMA].value = r.h.bl>>4;
+            MAIN_Options[OPT_IRQ].value = r.h.bh&0xF;
+            MAIN_Options[OPT_VOL].value = r.h.bh>>4;
+            MAIN_Options[OPT_OPL].value = r.h.cl&0x1;
+            MAIN_Options[OPT_PM].value = (r.h.cl&0x2) >> 1;
+            MAIN_Options[OPT_RM].value = (r.h.cl&0x4) >> 2;
+            MAIN_Options[OPT_OUTPUT].value = (r.h.cl&0x8) >> 3;
+            MAIN_Options[OPT_TYPE].value = r.h.ch;
+            printf("Current settings:\n");
+            for(int i = OPT_Help+1; i < OPT_COUNT; ++i)
+                printf("%s: %-4x\n", MAIN_Options[i].option, MAIN_Options[i].value);
+            exit(0);
+        }
+    }
+}
+
+static void MAIN_TSR_Interrupt()
+{
+    if(MAIN_TSRREG.h.ah != MAIN_TSR_INT_FNO)
+    {
+        //DBG_Log("chain %x ",MAIN_TSRREG.d.eax);
+        //DBG_DumpREG(&MAIN_TSRREG);
+        DPMI_CallRealModeOldISR(&MAIN_TSRIntHandle, &MAIN_TSRREG);
+        return;
+    }
+    //DBG_Log("call tsr\n");
+    switch(MAIN_TSRREG.h.al)
+    {
+        case 0x00:  //AMIS installation check
+            MAIN_TSRREG.h.al = 0xFF;
+            MAIN_TSRREG.w.cx = 0x0100;
+            MAIN_TSRREG.w.dx = MAIN_TSR_ID>>16; //don't bother to keep a real mode string buffer
+            MAIN_TSRREG.w.di = MAIN_TSR_ID&0xFFFF; //but it may collide if the MAIN_TSR_ID is another TSR's id buffer. TODO:
+        return;
+        case 0x01: //query
+        {
+            MAIN_TSRREG.w.dx = MAIN_Options[OPT_ADDR].value;
+            MAIN_TSRREG.h.bl = (MAIN_Options[OPT_DMA].value&0xF) | (MAIN_Options[OPT_HDMA].value<<4);
+            MAIN_TSRREG.h.bh = (MAIN_Options[OPT_IRQ].value&0xF) | (MAIN_Options[OPT_VOL].value<<4);
+            MAIN_TSRREG.h.cl = (MAIN_Options[OPT_OPL].value ? 1 : 0) | (MAIN_Options[OPT_PM].value ? 2 : 0) | (MAIN_Options[OPT_RM].value ? 4 : 0) | (MAIN_Options[OPT_OUTPUT].value ? 8 : 0);
+            MAIN_TSRREG.h.ch = MAIN_Options[OPT_TYPE].value;
+        }
+        return;
+        case 0x02: //set
+        {
+            uint16_t addr = MAIN_TSRREG.w.dx;
+            uint8_t dma = (MAIN_TSRREG.h.bl&0xF);
+            uint8_t hdma = MAIN_TSRREG.h.bl>>4;
+            uint8_t irq = MAIN_TSRREG.h.bh&0xF;
+            uint8_t vol = MAIN_TSRREG.h.bh>>4;
+            uint8_t OPL = MAIN_TSRREG.h.cl&0x1;
+            uint8_t PM = (MAIN_TSRREG.h.cl&0x2) >> 1;
+            uint8_t RM = (MAIN_TSRREG.h.cl&0x4) >> 2;
+            uint8_t output = (MAIN_TSRREG.h.cl&0x8) >> 3;
+            uint8_t type = MAIN_TSRREG.h.ch;
+
+            if(output != MAIN_Options[OPT_OUTPUT].value)
+            {
+                aui.card_select_config = MAIN_Options[OPT_OUTPUT].value = output;
+                AU_close(&aui);
+                AU_init(&aui);
+                AU_ini_interrupts(&aui);
+                AU_setmixer_init(&aui);
+                AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 100);
+                //use fixed rate
+                mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, SBEMU_SAMPLERATE, SBEMU_CHANNELS, SBEMU_CHANNELS, NULL, SBEMU_BITS, SBEMU_BITS/8, 0};
+                AU_setrate(&aui, &adi);
+                MAIN_Options[OPT_VOL].value = ~vol; //mark volume dirty
+            }
+            if(MAIN_Options[OPT_VOL].value != vol)
+            {
+                MAIN_Options[OPT_VOL].value = vol;
+                MAIN_GLB_VOL = MAIN_Options[OPT_VOL].value;
+                MAIN_SB_VOL = 256*MAIN_GLB_VOL/9;
+                AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, MAIN_GLB_VOL*100/9);
+            }
+
+            if(MAIN_Options[OPT_DMA].value != dma)
+            {
+                VDMA_Virtualize(MAIN_Options[OPT_DMA].value, FALSE);
+                VDMA_Virtualize(dma, TRUE);
+            }
+            if(MAIN_Options[OPT_HDMA].value != hdma)
+            {
+                VDMA_Virtualize(MAIN_Options[OPT_HDMA].value, FALSE);
+                VDMA_Virtualize(hdma, TRUE);
+            }
+            if(MAIN_Options[OPT_DMA].value != dma || MAIN_Options[OPT_HDMA].value != hdma || MAIN_Options[OPT_IRQ].value != irq || type != MAIN_Options[OPT_TYPE].value)
+            {
+                MAIN_Options[OPT_DMA].value = dma;
+                MAIN_Options[OPT_HDMA].value = hdma;
+                MAIN_Options[OPT_IRQ].value = irq;
+                MAIN_Options[OPT_TYPE].value = type;
+                SBEMU_Init(irq, dma, hdma, MAIN_SB_DSPVersion[type], &MAIN_Interrupt);
+            }
+
+            if(MAIN_Options[OPT_OPL].value == OPL && MAIN_Options[OPT_ADDR].value == addr && MAIN_Options[OPT_PM].value == PM && MAIN_Options[OPT_RM].value == RM)
+                return;
+
+            //re-install all
+            if(MAIN_Options[OPT_RM].value)
+            {
+                _LOG("uninstall qemm\n");
+                if(MAIN_Options[OPT_OPL].value) QEMM_Uninstall_IOPortTrap(&OPL3IOPT);
+                QEMM_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT);
+                #if !MAIN_TRAP_PIC_ONDEMAND
+                QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
+                #endif
+                QEMM_Uninstall_IOPortTrap(&MAIN_SB_IOPT);
+            }
+            if(MAIN_Options[OPT_PM].value)
+            {
+                _LOG("uninstall hdpmi\n");
+                if(MAIN_Options[OPT_OPL].value) HDPMIPT_Uninstall_IOPortTrap(&OPL3IOPT_PM);
+                HDPMIPT_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT_PM1);
+                HDPMIPT_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT_PM2);
+                HDPMIPT_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT_PM3);
+                HDPMIPT_Uninstall_IOPortTrap(&MAIN_VHDMA_IOPT_PM1);
+                HDPMIPT_Uninstall_IOPortTrap(&MAIN_VHDMA_IOPT_PM2);
+                HDPMIPT_Uninstall_IOPortTrap(&MAIN_VHDMA_IOPT_PM3);
+                #if !MAIN_TRAP_PIC_ONDEMAND
+                HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM1);
+                HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM2);
+                #endif
+                HDPMIPT_Uninstall_IOPortTrap(&MAIN_SB_IOPT_PM);
+            }
+            PM = PM && MAIN_HDPMI_Present;
+            RM = RM && MAIN_QEMM_Present;
+
+            if(OPL)
+            {
+                _LOG("install opl\n");
+                if(RM) QEMM_Install_IOPortTrap(MAIN_OPL3IODT, 4, &OPL3IOPT);
+                if(PM) HDPMIPT_Install_IOPortTrap(0x388, 0x38B, MAIN_OPL3IODT, 4, &OPL3IOPT_PM);
+            }
+
+            QEMM_IODT* SB_Iodt = OPL ? MAIN_SB_IODT : MAIN_SB_IODT+4;
+            int SB_IodtCount = OPL ? countof(MAIN_SB_IODT) : countof(MAIN_SB_IODT)-4;
+            if(addr != MAIN_Options[OPT_ADDR].value)
+            {
+                for(int i = 0; i < countof(MAIN_SB_IODT); ++i)
+                    MAIN_SB_IODT[i].port = MAIN_SB_IODT[i].port - MAIN_Options[OPT_ADDR].value + addr;
+                MAIN_Options[OPT_ADDR].value = addr;
+            }
+
+            if(RM)
+            {
+                _LOG("install qemm\n");
+                QEMM_Install_IOPortTrap(MAIN_VDMA_IODT, countof(MAIN_VDMA_IODT), &MAIN_VDMA_IOPT);
+                QEMM_Install_IOPortTrap(SB_Iodt, SB_IodtCount, &MAIN_SB_IOPT);
+                #if !MAIN_TRAP_PIC_ONDEMAND
+                QEMM_Install_IOPortTrap(MAIN_VIRQ_IODT, countof(MAIN_VIRQ_IODT), &MAIN_VIRQ_IOPT);
+                #endif
+            }
+
+            if(PM)
+            {
+                _LOG("install hdpmi\n");
+                HDPMIPT_Install_IOPortTrap(0x0, 0xF, MAIN_VDMA_IODT, 16, &MAIN_VDMA_IOPT_PM1);
+                HDPMIPT_Install_IOPortTrap(0x81, 0x83, MAIN_VDMA_IODT+16, 3, &MAIN_VDMA_IOPT_PM2);
+                HDPMIPT_Install_IOPortTrap(0x87, 0x87, MAIN_VDMA_IODT+19, 1, &MAIN_VDMA_IOPT_PM3);
+                HDPMIPT_Install_IOPortTrap(0xC0, 0xDE, MAIN_VDMA_IODT+20, 16, &MAIN_VHDMA_IOPT_PM1);
+                HDPMIPT_Install_IOPortTrap(0x89, 0x8B, MAIN_VDMA_IODT+36, 3, &MAIN_VHDMA_IOPT_PM2);
+                HDPMIPT_Install_IOPortTrap(0x8F, 0x8F, MAIN_VDMA_IODT+39, 1, &MAIN_VHDMA_IOPT_PM3);
+                #if !MAIN_TRAP_PIC_ONDEMAND
+                HDPMIPT_Install_IOPortTrap(0x20, 0x21, MAIN_VIRQ_IODT, 2, &MAIN_VIRQ_IOPT_PM1);
+                HDPMIPT_Install_IOPortTrap(0xA0, 0xA1, MAIN_VIRQ_IODT+2, 2, &MAIN_VIRQ_IOPT_PM2);
+                #endif
+                HDPMIPT_Install_IOPortTrap(MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_ADDR].value+0x0F, SB_Iodt, SB_IodtCount, &MAIN_SB_IOPT_PM);
+            }
+
+            if(RM)
+            {
+                UntrappedIO_OUT_Handler = &QEMM_UntrappedIO_Write;
+                UntrappedIO_IN_Handler = &QEMM_UntrappedIO_Read;
+            }
+            else
+            {
+                UntrappedIO_OUT_Handler = &HDPMIPT_UntrappedIO_Write;
+                UntrappedIO_IN_Handler = &HDPMIPT_UntrappedIO_Read;
+            }
+            MAIN_Options[OPT_PM].value = PM;
+            MAIN_Options[OPT_RM].value = RM;
+            MAIN_Options[OPT_OPL].value = OPL;
+        }
+        return;
+    }
 }
