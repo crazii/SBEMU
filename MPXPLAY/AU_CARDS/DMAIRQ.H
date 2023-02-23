@@ -64,11 +64,11 @@ extern unsigned int MIrq_autodetect(struct mpxplay_audioout_info_s *aui);
 
 #else//DJGPP
 
-#define ENTER_CRITICAL int cpu__fd = IRQ_PUSH_OFF()
-static int /*__attribute__((naked))*/ IRQ_PUSH_OFF (void) { asm( "pushfl \n\t popl %eax \n\t cli"); }
+#define ENTER_CRITICAL int __fd = IRQ_PUSH_OFF()
+static int /*__attribute__((naked))*/ IRQ_PUSH_OFF (void) { int x; asm( "pushfl \n\t cli \n\t popl %0" :"=m"(x)); return x;}
 
-#define LEAVE_CRITICAL IRQ_POP(cpu__fd)
-static void /*__attribute__((naked))*/ IRQ_POP (int fd) {asm("pushl %0 \n\t popfl" ::"r"(fd)); }
+#define LEAVE_CRITICAL IRQ_POP(__fd)
+static void /*__attribute__((naked))*/ IRQ_POP (int fd) {asm("push %0 \n\t popfl \n\t"::"m"(fd));}
 
 #endif
 
