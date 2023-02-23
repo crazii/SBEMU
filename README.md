@@ -11,7 +11,7 @@ ICH & HDA tested working in virtualbox, not verified on real machine yet.\
 HDA tested working by community.
 
 Emulated modes/cards:\
-8 bit DMA (mono, stereo, high-speed)\
+8 bit & 16 bit DMA (mono, stereo, high-speed)\
 Sound blaster 1.0, 2.0, Pro, 16.
 
 Requirements:

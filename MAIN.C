@@ -25,7 +25,7 @@ extern unsigned long TEST_SampleLen;
 
 #define MAIN_TRAP_PIC_ONDEMAND 1
 
-#define MAIN_TSR_INT 0x2D   //multiplex 2F is not working using HDPMI, use AMIS.
+#define MAIN_TSR_INT 0x2D   //AMIS multiplex. TODO: 0x2F?
 #define MAIN_TSR_INT_ID 0x01 //start id
 #define MAIN_TSR_ID 0x53424530  //'SBE0'
 
