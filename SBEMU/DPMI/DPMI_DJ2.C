@@ -426,7 +426,7 @@ uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), DPMI_ISR_HANDLE* outputp h
     go32pa.pm_selector = (uint16_t)_my_cs();
     go32pa.pm_offset = (uintptr_t)ISR;
     //_go32_interrupt_stack_size = 2048; //512 minimal. default:16K
-    if( _go32_dpmi_allocate_iret_wrapper(&go32pa) != 0)
+    if(_go32_dpmi_allocate_iret_wrapper(&go32pa) != 0)
         return -1;
 
     _go32_dpmi_seginfo go32pa_rm = {0};
@@ -450,7 +450,7 @@ uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), DPMI_ISR_HANDLE* outputp h
     return (uint16_t)result;
 }
 
-#define RAW_HOOK 1
+#define RAW_HOOK 0
 //http://www.delorie.com/djgpp/v2faq/faq18_9.html
 uint16_t DPMI_InstallRealModeISR(uint8_t i, void(*ISR_RM)(void), DPMI_REG* RMReg, DPMI_ISR_HANDLE* outputp handle)
 {
@@ -460,7 +460,7 @@ uint16_t DPMI_InstallRealModeISR(uint8_t i, void(*ISR_RM)(void), DPMI_REG* RMReg
     _go32_dpmi_seginfo go32pa_rm = {0};
     go32pa_rm.pm_selector = _my_cs();
     go32pa_rm.pm_offset = (uintptr_t)ISR_RM;
-    if( _go32_dpmi_allocate_real_mode_callback_iret(&go32pa_rm, (_go32_dpmi_registers*)&RMReg) != 0)
+    if(_go32_dpmi_allocate_real_mode_callback_iret(&go32pa_rm, (_go32_dpmi_registers*)RMReg) != 0)
         return -1;
     
     __dpmi_raddr ra;
@@ -525,15 +525,16 @@ uint32_t DPMI_CallOldISR(DPMI_ISR_HANDLE* inputp handle)
     return 0;
 }
 
-uint32_t DPMI_CallRealModeOldISR(DPMI_ISR_HANDLE* inputp handle)
+uint32_t DPMI_CallRealModeOldISR(DPMI_ISR_HANDLE* inputp handle, DPMI_REG* regs)
 {
-    DPMI_REG r = {0};
-    r.w.cs = handle->old_rm_cs;
-    r.w.ip = handle->old_rm_offset;
+    //DPMI_REG regs = {0};
+    DPMI_REG* r = regs;
+    r->w.cs = handle->old_rm_cs;
+    r->w.ip = handle->old_rm_offset;
     #if RAW_HOOK
-    return DPMI_CallRealModeIRET(&r);
+    return DPMI_CallRealModeIRET(r);
     #endif
-    return DPMI_CallRealModeINT(handle->n,&r);
+    return DPMI_CallRealModeINT(handle->n,r);
 }
 
 uint32_t DPMI_GetISR(uint8_t i, DPMI_ISR_HANDLE* outputp handle)
