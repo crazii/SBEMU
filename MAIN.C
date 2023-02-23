@@ -409,7 +409,7 @@ int main(int argc, char* argv[])
     }
     MAIN_Options[OPT_OPL].value = (MAIN_Options[OPT_OPL].value) ? TRUE : FALSE;
 
-    //TSR installation check
+    //TSR installation check: update parameter & exit if already installed
     MAIN_TSR_InstallationCheck();
 
     BOOL enablePM = MAIN_Options[OPT_PM].value;
