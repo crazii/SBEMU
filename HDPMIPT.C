@@ -154,7 +154,7 @@ static BOOL HDPMI_Internal_UninstallTrap(const HDPMIPT_ENTRY* entry, uint32_t ha
     BOOL result = FALSE;
     asm(
     "mov %2, %%edx \n\t"  //EDX=handle
-    "mov $6, %%eax \n\t" //ax=7, unistall port trap
+    "mov $7, %%eax \n\t" //ax=7, unistall port trap
     "lcall *%1\n\t"
     "jc 1f \n\t"
     "mov $1, %%eax \n\t"
@@ -186,13 +186,13 @@ BOOL HDPMIPT_Install_IOPortTrap(uint16_t start, uint16_t end, QEMM_IODT* inputp 
             puts("Failed to get HDPMI Vendor entry point.\n");
             return FALSE;
         }
-        _LOG("HDPMI vendor entry: %04x:%08x\n", HDPMIPT_Entry.es, HDPMIPT_Entry.edi);
+        //_LOG("HDPMI vendor entry: %04x:%08x\n", HDPMIPT_Entry.es, HDPMIPT_Entry.edi);
     }
 
     uint32_t handle = HDPMI_Internal_InstallTrap(&HDPMIPT_Entry, start, end, &HDPMIPT_TrapHandlerWrapper);
     if(!handle)
     {
-        puts("Failed to intall HDPMI io port trap.\n");
+        _LOG("Failed to install HDPMI io port trap.\n");
         return FALSE;
     }
     
@@ -228,7 +228,9 @@ BOOL HDPMIPT_Uninstall_IOPortTrap(QEMM_IOPT* inputp iopt)
     if(HDPMIPT_IODT_Link == link)
         HDPMIPT_IODT_Link = link->prev;
     STIL();
-    HDPMI_Internal_UninstallTrap(&HDPMIPT_Entry, iopt->handle);
+    BOOL result = HDPMI_Internal_UninstallTrap(&HDPMIPT_Entry, iopt->handle);
+    if(!result)
+        _LOG("Failed to uninstall HDPMI io port trap.\n");
     free(link->iodt);
     free(link);
     
