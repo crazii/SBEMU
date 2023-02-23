@@ -22,6 +22,7 @@ static uint16_t QEMM_EntryCS;
 static BOOL QEMM_InCallback;
 static uint16_t QEMM_OldCallbackIP;
 static uint16_t QEMM_OldCallbackCS;
+static uint32_t QEMM_DOSMEM;
 
 static void __NAKED QEMM_RM_Wrapper()
 {//al=data,cl=out,dx=port
@@ -173,30 +174,36 @@ BOOL QEMM_Install_IOPortTrap(QEMM_IODT* inputp iodt, uint16_t count, QEMM_IOPT* 
             return FALSE;
         QEMM_OldCallbackIP = r.w.es;
         QEMM_OldCallbackCS = r.w.di;
-        //printf("QEMM old callback: %04x:%04x\n",r.w.es, r.w.di);
+        //_LOG("QEMM old callback: %04x:%04x\n",r.w.es, r.w.di);
 
-        uint32_t codesize = (uintptr_t)&QEMM_RM_WrapperEnd - (uintptr_t)&QEMM_RM_Wrapper;
-        uint32_t dosmem = DPMI_HighMalloc((codesize + 4 + 2 + 15)>>4, TRUE);
-        uint32_t rmcb = DPMI_AllocateRMCB_RETF(&QEMM_TrapHandler, &QEMM_TrapHandlerREG);
-        if(rmcb == 0)
+        if(QEMM_DOSMEM == 0)
         {
-            DPMI_HighFree(dosmem);
-            return FALSE;
+            uint32_t codesize = (uintptr_t)&QEMM_RM_WrapperEnd - (uintptr_t)&QEMM_RM_Wrapper;
+            //_LOG("QEMM dos mem size: %d\n", codesize);
+            QEMM_DOSMEM = DPMI_HighMalloc((codesize + 4 + 2 + 15)>>4, TRUE);
+            uint32_t rmcb = DPMI_AllocateRMCB_RETF(&QEMM_TrapHandler, &QEMM_TrapHandlerREG);
+            if(rmcb == 0)
+            {
+                DPMI_HighFree(QEMM_DOSMEM);
+                QEMM_DOSMEM = 0;
+                return FALSE;
+            }
+            DPMI_CopyLinear(DPMI_SEGOFF2L(QEMM_DOSMEM, 0), DPMI_PTR2L(&rmcb), 4);
+            void* buf = malloc(codesize);
+            memcpy_c2d(buf, &QEMM_RM_Wrapper, codesize); //copy to ds seg in case cs&ds are not same
+            DPMI_CopyLinear(DPMI_SEGOFF2L(QEMM_DOSMEM, 4+2), DPMI_PTR2L(buf), codesize);
+            free(buf);
         }
-        DPMI_CopyLinear(DPMI_SEGOFF2L(dosmem, 0), DPMI_PTR2L(&rmcb), 4);
-        void* buf = malloc(codesize);
-        memcpy_c2d(buf, &QEMM_RM_Wrapper, codesize); //copy to ds seg in case cs&ds are not same
-        DPMI_CopyLinear(DPMI_SEGOFF2L(dosmem, 4+2), DPMI_PTR2L(buf), codesize);
-        free(buf);
 
         r.w.cs = QEMM_EntryCS;
         r.w.ip = QEMM_EntryIP;
         r.w.ax = 0x1A07;
-        r.w.es = dosmem&0xFFFF;
+        r.w.es = QEMM_DOSMEM&0xFFFF;
         r.w.di = 4+2;
         if( DPMI_CallRealModeRETF(&r) != 0 || (r.w.flags&CPU_CFLAG))
         {
-            DPMI_HighFree(dosmem);
+            DPMI_HighFree(QEMM_DOSMEM);
+            QEMM_DOSMEM = 0;
             return FALSE;
         }
     }
@@ -268,6 +275,8 @@ BOOL QEMM_Uninstall_IOPortTrap(QEMM_IOPT* inputp iopt)
         r.w.ax = 0x1A07;
         r.w.es = QEMM_OldCallbackCS;
         r.w.di = QEMM_OldCallbackIP;
+        //DPMI_HighFree(QEMM_DOSMEM);
+        //QEMM_DOSMEM = 0;
         if( DPMI_CallRealModeRETF(&r) != 0) //restore old handler
             return FALSE;
     }
