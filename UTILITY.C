@@ -38,7 +38,7 @@ int setenv(const char *name, const char *value, int rewrite)
     s = buf;
     do
     {
-#if DEBUG
+#if DEBUG && 0
         s += printf("%s\n", s);
 #else
         s += strlen(s) + 1;
@@ -74,7 +74,7 @@ int setenv(const char *name, const char *value, int rewrite)
     *(s + sprintf(s, "%s=%s", name, value)+1)='\0';
     //size = namelen + vallen + 2;
 
-    #if DEBUG
+    #if DEBUG && 0
     s = buf;
     do
     {

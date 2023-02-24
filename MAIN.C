@@ -26,8 +26,7 @@ extern unsigned long TEST_SampleLen;
 #define MAIN_TRAP_PIC_ONDEMAND 1
 
 #define MAIN_TSR_INT 0x2D   //AMIS multiplex. TODO: 0x2F?
-#define MAIN_TSR_INT_ID 0x01 //start id
-#define MAIN_TSR_ID 0x53424530  //'SBE0'
+#define MAIN_TSR_INTSTART_ID 0x01 //start id
 
 mpxplay_audioout_info_s aui = {0};
 
@@ -50,7 +49,9 @@ static void MAIN_InterruptPM();
 
 static DPMI_ISR_HANDLE MAIN_TSRIntHandle;
 static DPMI_REG MAIN_TSRREG;
-static uint32_t MAIN_TSR_INT_FNO = MAIN_TSR_INT_ID;
+static uint32_t MAIN_TSR_INT_FNO = MAIN_TSR_INTSTART_ID;
+static uint32_t MAIN_ISR_DOSID;
+static const char MAIN_ISR_DOSID_String[] = "Crazii  SBEMU   Sound Blaster emulation on AC97"; //8:8:asciiz
 static void MAIN_TSR_InstallationCheck();
 static void MAIN_TSR_Interrupt();
 
@@ -520,7 +521,7 @@ int main(int argc, char* argv[])
     PIC_UnmaskIRQ(aui.card_irq);
 
     BOOL TSR_ISR = FALSE;
-    for(int i = MAIN_TSR_INT_ID; i <= 0xFF; ++i)
+    for(int i = MAIN_TSR_INTSTART_ID; i <= 0xFF; ++i)
     {
         DPMI_REG r = {0};
         r.h.ah = i;
@@ -530,6 +531,11 @@ int main(int argc, char* argv[])
             continue;
         MAIN_TSR_INT_FNO = i;
         TSR_ISR = DPMI_InstallRealModeISR(MAIN_TSR_INT, MAIN_TSR_Interrupt, &MAIN_TSRREG, &MAIN_TSRIntHandle) == 0;
+        if(!TSR_ISR)
+            break;
+        MAIN_ISR_DOSID = DPMI_HighMalloc((sizeof(MAIN_ISR_DOSID_String)+15)>>4, TRUE);
+        //printf("DOSID:%x\n", DPMI_SEGOFF2L(MAIN_ISR_DOSID,0));
+        DPMI_CopyLinear(DPMI_SEGOFF2L(MAIN_ISR_DOSID,0), DPMI_PTR2L((char*)MAIN_ISR_DOSID_String), sizeof(MAIN_ISR_DOSID_String));
         break;
     }
 
@@ -821,14 +827,15 @@ static void MAIN_Interrupt()
 
 void MAIN_TSR_InstallationCheck()
 {
-    for(int i = MAIN_TSR_INT_ID; i <= 0xFF; ++i)
+    for(int i = MAIN_TSR_INTSTART_ID; i <= 0xFF; ++i)
     { //detect TSR existence
         DPMI_REG r = {0};
         r.h.ah = i;
         DPMI_CallRealModeINT(MAIN_TSR_INT, &r);
         if(r.h.al == 0)
             continue;
-        if(r.w.dx == (MAIN_TSR_ID>>16) && r.w.di == (MAIN_TSR_ID&0xFFFF))
+        //printf("DOSID:%x\n", DPMI_SEGOFF2L(r.w.dx, r.w.di));
+        if(DPMI_CompareLinear(DPMI_SEGOFF2L(r.w.dx, r.w.di), DPMI_PTR2L((char*)MAIN_ISR_DOSID_String), 16) == 0)
         {
             printf("SBEMU is active.\n\n");
 
@@ -882,9 +889,9 @@ static void MAIN_TSR_Interrupt()
     {
         case 0x00:  //AMIS installation check
             MAIN_TSRREG.h.al = 0xFF;
-            MAIN_TSRREG.w.cx = 0x0100;
-            MAIN_TSRREG.w.dx = MAIN_TSR_ID>>16; //don't bother to keep a real mode string buffer
-            MAIN_TSRREG.w.di = MAIN_TSR_ID&0xFFFF; //but it may collide if the MAIN_TSR_ID is another TSR's id buffer. TODO:
+            MAIN_TSRREG.w.cx = 0x0100; //bcd version
+            MAIN_TSRREG.w.dx = (MAIN_ISR_DOSID&0xFFFF); //a real mode string buffer of identification: segment
+            MAIN_TSRREG.w.di = 0; //offset
         return;
         case 0x01: //query
         {
