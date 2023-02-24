@@ -36,6 +36,8 @@ static int16_t MAIN_OPLPCM[MAIN_PCM_SAMPLESIZE+256];
 static int16_t MAIN_PCM[MAIN_PCM_SAMPLESIZE+256];
 
 static DPMI_ISR_HANDLE MAIN_IntHandlePM;
+static DPMI_ISR_HANDLE MAIN_IntHandleRM;
+static DPMI_REG MAIN_IntREG;
 static uint32_t MAIN_DMA_Addr = 0;
 static uint32_t MAIN_DMA_Size = 0;
 static uint32_t MAIN_DMA_MappedAddr = 0;
@@ -43,9 +45,11 @@ static uint16_t MAIN_SB_VOL = 0; //intial set volume will cause interrupt missin
 static uint16_t MAIN_GLB_VOL = 0; //TODO: add hotkey
 static uint8_t MAIN_QEMM_Present = 0;
 static uint8_t MAIN_HDPMI_Present = 0;
+static uint8_t MAIN_InINT;
 
 static void MAIN_Interrupt();
 static void MAIN_InterruptPM();
+static void MAIN_InterruptRM();
 
 static DPMI_ISR_HANDLE MAIN_TSRIntHandle;
 static DPMI_REG MAIN_TSRREG;
@@ -518,6 +522,7 @@ int main(int argc, char* argv[])
         }
     }
     HDPMIPT_InstallIRQACKHandler(aui.card_irq, MAIN_IntHandlePM.wrapper_cs, MAIN_IntHandlePM.wrapper_offset);
+    BOOL RM_ISR = DPMI_InstallRealModeISR(PIC_IRQ2VEC(aui.card_irq), MAIN_InterruptRM, &MAIN_IntREG, &MAIN_IntHandleRM) == 0;
     PIC_UnmaskIRQ(aui.card_irq);
 
     BOOL TSR_ISR = FALSE;
@@ -543,7 +548,7 @@ int main(int argc, char* argv[])
     AU_start(&aui);
 
     BOOL TSR = TRUE;
-    if(!PM_ISR || !TSR_ISR
+    if(!PM_ISR || !RM_ISR || !TSR_ISR
     || !QEMMInstalledVDMA || !QEMMInstalledVIRQ || !QEMMInstalledSB
     || !HDPMIInstalledVDMA1 || !HDPMIInstalledVDMA2 || !HDPMIInstalledVDMA3 || !HDPMIInstalledVHDMA1 || !HDPMIInstalledVHDMA2 || !HDPMIInstalledVHDMA3 
     || !HDPMIInstalledVIRQ1 || !HDPMIInstalledVIRQ2 || !HDPMIInstalledSB
@@ -579,7 +584,10 @@ int main(int argc, char* argv[])
 
         if(!PM_ISR)
             printf("Error: Failed installing sound card ISR.\n");
+        if(!RM_ISR)
+            printf("Error: Failed installing sound card ISR.\n");
         if(PM_ISR) DPMI_UninstallISR(&MAIN_IntHandlePM);
+        if(RM_ISR) DPMI_UninstallISR(&MAIN_IntHandleRM);
         if(!TSR_ISR)
             printf("Error: Failed installing TSR interrupt.\n");
         if(TSR_ISR) DPMI_UninstallISR(&MAIN_TSRIntHandle);
@@ -592,6 +600,8 @@ int main(int argc, char* argv[])
 
 static void MAIN_InterruptPM()
 {
+    if(MAIN_InINT) return;
+    MAIN_InINT = TRUE;
     if(aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
     {
         MAIN_Interrupt();
@@ -599,11 +609,27 @@ static void MAIN_InterruptPM()
     }
     else
     {
-        //_LOG("OLDISR\n");
         DPMI_CallOldISR(&MAIN_IntHandlePM);
-        //DPMI_CallRealModeOldISR(&MAIN_IntHandlePM);
         PIC_UnmaskIRQ(aui.card_irq);
     }
+    MAIN_InINT = FALSE;
+}
+
+static void MAIN_InterruptRM()
+{
+    if(MAIN_InINT) return;
+    MAIN_InINT = TRUE;
+    if(aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
+    {
+        MAIN_Interrupt();
+        PIC_SendEOIWithIRQ(aui.card_irq);
+    }
+    else
+    {
+        DPMI_CallRealModeOldISR(&MAIN_IntHandleRM, &MAIN_IntREG);
+        PIC_UnmaskIRQ(aui.card_irq);
+    }
+    MAIN_InINT = FALSE;
 }
 
 static void MAIN_Interrupt()

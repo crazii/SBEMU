@@ -450,7 +450,7 @@ uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), DPMI_ISR_HANDLE* outputp h
     return (uint16_t)result;
 }
 
-#define RAW_HOOK 0
+#define RAW_HOOK 1
 //http://www.delorie.com/djgpp/v2faq/faq18_9.html
 uint16_t DPMI_InstallRealModeISR(uint8_t i, void(*ISR_RM)(void), DPMI_REG* RMReg, DPMI_ISR_HANDLE* outputp handle)
 {
@@ -519,6 +519,7 @@ uint32_t DPMI_CallOldISR(DPMI_ISR_HANDLE* inputp handle)
 {
     asm(
         "pushfl \n\t"
+        "cli \n\t"
         "lcall *%0 \n\t"
         ::"m"(*handle)
     );

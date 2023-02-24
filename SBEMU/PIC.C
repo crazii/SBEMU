@@ -42,7 +42,7 @@ void PIC_SendEOI(void)
         if(inp(PIC_PORT2))
             outp(PIC_PORT2, 0x20);
     }
-    if(mask&~0x4)
+    if(mask)
         outp(PIC_PORT1, 0x20);
     STIL();
 }
