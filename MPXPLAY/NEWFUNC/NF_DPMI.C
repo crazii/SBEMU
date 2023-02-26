@@ -300,9 +300,8 @@ static __dpmi_meminfo physicalmaps[PHYSICAL_MAP_COUNT];
 
 unsigned long pds_dpmi_map_physical_memory(unsigned long phys_addr,unsigned long memsize)
 {
- memsize = (memsize+4095)/4096*4096; //__dpmi_set_segment_limit need page aligned
+ memsize = (memsize+1023)/1024*1024;
  __dpmi_meminfo info = {0, memsize, phys_addr};
-
  int i = 0;
  for(; i < PHYSICAL_MAP_COUNT; ++i)
  {
@@ -338,7 +337,9 @@ unsigned long pds_dpmi_map_physical_memory(unsigned long phys_addr,unsigned long
     info.address -= base;
     physicalmaps[i] = info;
     unsigned long newlimit = info.address + memsize - 1;
+    newlimit = ((newlimit+1+0xFFF)&~0xFFF)-1;//__dpmi_set_segment_limit need page aligned
     __dpmi_set_segment_limit(_my_ds(), max(limit, newlimit));
+    __dpmi_set_segment_limit(__djgpp_ds_alias, max(limit, newlimit));
     return info.address;
  }
  return 0;
@@ -435,7 +436,7 @@ int pds_xms_free(unsigned short handle)
 int pds_dpmi_xms_allocmem(xmsmem_t * mem,unsigned int size)
 {
     unsigned long addr;
-    size = (size+4095)/1024*1024;
+    size = (size+1023)/1024*1024;
     if( (mem->xms=pds_xms_alloc(size/1024, &addr)) )
     {
         unsigned long base = 0;
