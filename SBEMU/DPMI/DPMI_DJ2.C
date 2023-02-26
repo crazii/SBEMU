@@ -462,7 +462,6 @@ uint16_t DPMI_InstallRealModeISR(uint8_t i, void(*ISR_RM)(void), DPMI_REG* RMReg
     go32pa_rm.pm_offset = (uintptr_t)ISR_RM;
     if(_go32_dpmi_allocate_real_mode_callback_iret(&go32pa_rm, (_go32_dpmi_registers*)RMReg) != 0)
         return -1;
-    
     __dpmi_raddr ra;
     #if RAW_HOOK
     ra.offset16 = DPMI_LoadW(i*4);

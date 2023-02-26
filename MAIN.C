@@ -24,6 +24,7 @@ extern unsigned long TEST_SampleLen;
 //-TEST
 
 #define MAIN_TRAP_PIC_ONDEMAND 1
+#define MAIN_INSTALL_RM_ISR 1 //not needed. but to workaround some rm games' problem. need RAW_HOOk in dpmi_dj2.c
 
 #define MAIN_TSR_INT 0x2D   //AMIS multiplex. TODO: 0x2F?
 #define MAIN_TSR_INTSTART_ID 0x01 //start id
@@ -38,6 +39,7 @@ static int16_t MAIN_PCM[MAIN_PCM_SAMPLESIZE+256];
 static DPMI_ISR_HANDLE MAIN_IntHandlePM;
 static DPMI_ISR_HANDLE MAIN_IntHandleRM;
 static DPMI_REG MAIN_IntREG;
+static INTCONTEXT MAIN_IntContext;
 static uint32_t MAIN_DMA_Addr = 0;
 static uint32_t MAIN_DMA_Size = 0;
 static uint32_t MAIN_DMA_MappedAddr = 0;
@@ -274,6 +276,28 @@ static int MAIN_SB_DSPVersion[] =
     0x0302,
     0x0400,
 };
+
+static void MAIN_InvokeIRQ(uint8_t irq)
+{
+    #if MAIN_TRAP_PIC_ONDEMAND
+    if(MAIN_Options[OPT_RM].value) QEMM_Install_IOPortTrap(MAIN_VIRQ_IODT, countof(MAIN_VIRQ_IODT), &MAIN_VIRQ_IOPT);
+    if(MAIN_Options[OPT_PM].value)
+    {
+        HDPMIPT_Install_IOPortTrap(0x20, 0x21, MAIN_VIRQ_IODT, 2, &MAIN_VIRQ_IOPT_PM1);
+        HDPMIPT_Install_IOPortTrap(0xA0, 0xA1, MAIN_VIRQ_IODT+2, 2, &MAIN_VIRQ_IOPT_PM2);
+    }
+    #endif
+    VIRQ_Invoke(irq, &MAIN_IntContext.regs, MAIN_IntContext.EFLAGS&CPU_VMFLAG);
+    #if MAIN_TRAP_PIC_ONDEMAND
+    if(MAIN_Options[OPT_RM].value) QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
+    if(MAIN_Options[OPT_PM].value)
+    {
+        HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM1);
+        HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM2);
+    }
+    #endif
+}
+
 
 int main(int argc, char* argv[])
 {
@@ -522,7 +546,11 @@ int main(int argc, char* argv[])
         }
     }
     HDPMIPT_InstallIRQACKHandler(aui.card_irq, MAIN_IntHandlePM.wrapper_cs, MAIN_IntHandlePM.wrapper_offset);
+    #if MAIN_INSTALL_RM_ISR
     BOOL RM_ISR = DPMI_InstallRealModeISR(PIC_IRQ2VEC(aui.card_irq), MAIN_InterruptRM, &MAIN_IntREG, &MAIN_IntHandleRM) == 0;
+    #else
+    BOOL RM_ISR = TRUE;
+    #endif
     PIC_UnmaskIRQ(aui.card_irq);
 
     BOOL TSR_ISR = FALSE;
@@ -587,7 +615,9 @@ int main(int argc, char* argv[])
         if(!RM_ISR)
             printf("Error: Failed installing sound card ISR.\n");
         if(PM_ISR) DPMI_UninstallISR(&MAIN_IntHandlePM);
+        #if MAIN_INSTALL_RM_ISR
         if(RM_ISR) DPMI_UninstallISR(&MAIN_IntHandleRM);
+        #endif
         if(!TSR_ISR)
             printf("Error: Failed installing TSR interrupt.\n");
         if(TSR_ISR) DPMI_UninstallISR(&MAIN_TSRIntHandle);
@@ -604,6 +634,7 @@ static void MAIN_InterruptPM()
     MAIN_InINT = TRUE;
     if(aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
     {
+        HDPMIPT_GetInterrupContext(&MAIN_IntContext);
         MAIN_Interrupt();
         PIC_SendEOIWithIRQ(aui.card_irq);
     }
@@ -621,6 +652,8 @@ static void MAIN_InterruptRM()
     MAIN_InINT = TRUE;
     if(aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
     {
+        MAIN_IntContext.regs = MAIN_IntREG;
+        MAIN_IntContext.EFLAGS = MAIN_IntREG.w.flags | CPU_VMFLAG;
         MAIN_Interrupt();
         PIC_SendEOIWithIRQ(aui.card_irq);
     }
@@ -651,23 +684,7 @@ static void MAIN_Interrupt()
 
     if(SBEMU_IRQTriggered())
     {
-        #if MAIN_TRAP_PIC_ONDEMAND
-        if(MAIN_Options[OPT_RM].value) QEMM_Install_IOPortTrap(MAIN_VIRQ_IODT, countof(MAIN_VIRQ_IODT), &MAIN_VIRQ_IOPT);
-        if(MAIN_Options[OPT_PM].value)
-        {
-            HDPMIPT_Install_IOPortTrap(0x20, 0x21, MAIN_VIRQ_IODT, 2, &MAIN_VIRQ_IOPT_PM1);
-            HDPMIPT_Install_IOPortTrap(0xA0, 0xA1, MAIN_VIRQ_IODT+2, 2, &MAIN_VIRQ_IOPT_PM2);
-        }
-        #endif
-        VIRQ_Invoke(SBEMU_GetIRQ());
-        #if MAIN_TRAP_PIC_ONDEMAND
-        if(MAIN_Options[OPT_RM].value) QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
-        if(MAIN_Options[OPT_PM].value)
-        {
-            HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM1);
-            HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM2);
-        }
-        #endif
+        MAIN_InvokeIRQ(SBEMU_GetIRQ());
         SBEMU_SetIRQTriggered(FALSE);
     }
     int32_t vol;
@@ -776,23 +793,7 @@ static void MAIN_Interrupt()
                     SBEMU_Stop();
                 SB_Pos = SBEMU_SetPos(0);
                 
-                #if MAIN_TRAP_PIC_ONDEMAND
-                if(MAIN_Options[OPT_RM].value) QEMM_Install_IOPortTrap(MAIN_VIRQ_IODT, countof(MAIN_VIRQ_IODT), &MAIN_VIRQ_IOPT);
-                if(MAIN_Options[OPT_PM].value)
-                {
-                    HDPMIPT_Install_IOPortTrap(0x20, 0x21, MAIN_VIRQ_IODT, 2, &MAIN_VIRQ_IOPT_PM1);
-                    HDPMIPT_Install_IOPortTrap(0xA0, 0xA1, MAIN_VIRQ_IODT+2, 2, &MAIN_VIRQ_IOPT_PM2);
-                }
-                #endif
-                VIRQ_Invoke(SBEMU_GetIRQ());
-                #if MAIN_TRAP_PIC_ONDEMAND
-                if(MAIN_Options[OPT_RM].value) QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
-                if(MAIN_Options[OPT_PM].value)
-                {
-                    HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM1);
-                    HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM2);
-                }
-                #endif
+                MAIN_InvokeIRQ(SBEMU_GetIRQ());
                 
                 SB_Bytes = SBEMU_GetSampleBytes();
                 SB_Pos = SBEMU_GetPos();
@@ -876,7 +877,7 @@ void MAIN_TSR_InstallationCheck()
             {
                 if(MAIN_Options[j].setcmd && MAIN_Options[j].value != opt[j].value)
                 {
-                    printf("%s set to %x\n", MAIN_Options[j].option, MAIN_Options[j].value);
+                    printf("%s changed from %x to %x\n", MAIN_Options[j].option, opt[j].value, MAIN_Options[j].value);
                     opt[j].value = MAIN_Options[j].value;
                 }
             }
@@ -893,7 +894,7 @@ void MAIN_TSR_InstallationCheck()
             DPMI_CopyLinear(DPMI_PTR2L(opt), r.d.ebx, sizeof(MAIN_Options));
             printf("Current settings:\n");
             for(int i = OPT_Help+1; i < OPT_COUNT; ++i)
-                printf("%s: %-8x\n", MAIN_Options[i].option, opt[i].value);
+                printf("%-8s: %x\n", MAIN_Options[i].option, opt[i].value);
 
             free(opt);
             exit(0);

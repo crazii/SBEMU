@@ -316,8 +316,8 @@ void DBG_Flush(DBG_DBuff* buff)
 
 void DBG_DumpREG(DPMI_REG* reg)
 {
-    DBG_Log("eax:%08lx ebx:%08lx ecx:%08lx edx:%08lx\n", reg->d.eax, reg->d.ebx, reg->d.ecx, reg->d.edx);
-    DBG_Log("ds:%04x es:%04x esi:%08lx edi:%08lx\n", reg->w.ds, reg->w.es, reg->d.esi, reg->d.edi);
+    DBG_Log("eax:%08lx ebx:%08lx ecx:%08lx edx:%08lx esi:%08lx edi:%08lx\n", reg->d.eax, reg->d.ebx, reg->d.ecx, reg->d.edx, reg->d.esi, reg->d.edi);
+    DBG_Log("ds:%04x es:%04x fs:%04x gs:%04x\n", reg->w.ds, reg->w.es, reg->w.fs, reg->w.gs);
     DBG_Log("ss:sp:%04x:%04x cs:ip:%04x:%04x flags:%04x\n", reg->w.ss, reg->w.sp, reg->w.cs, reg->w.ip, reg->w.flags);
 }
 

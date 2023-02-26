@@ -4,6 +4,7 @@
 #include "UNTRAPIO.H"
 #include "DPMI/DBGUTIL.H"
 #include <dos.h>
+#include <string.h>
 
 static int VIRQ_Irq = -1;
 static uint8_t VIRQ_ISR[2];
@@ -57,7 +58,7 @@ uint8_t VIRQ_Read(uint16_t port)
     return UntrappedIO_IN(port);
 }
 
-void VIRQ_Invoke(uint8_t irq)
+void VIRQ_Invoke(uint8_t irq, DPMI_REG* reg, BOOL VM)
 {
     _LOG("CALLINT %d\n", irq);
     //CLIS();
@@ -73,25 +74,42 @@ void VIRQ_Invoke(uint8_t irq)
     }
     
     VIRQ_Irq = irq;
-    DPMI_REG r = {0};
-    r.w.flags = 0;
-    r.w.ss = r.w.sp = 0;
-    #if 0
-    DPMI_CallRealModeINT(PIC_IRQ2VEC(irq), &r); //real mode vector are local in HDPMI, IVT changes not recorded after TSR, use raw IVT.
-    #elif 1
-    int n = PIC_IRQ2VEC(irq);
-    r.w.ip = DPMI_LoadW(n*4);
-    r.w.cs = DPMI_LoadW(n*4+2);
-    DPMI_CallRealModeIRET(&r);
-    #else
-    if(irq == 7)
-        asm("int $0x0F");
+    DPMI_REG r = *reg;
+    if(VM || 1) //pm/rm int method not working good yet (Miles Sound)
+    {
+        #if 1
+        memset(&r, 0, sizeof(r));
+        int n = PIC_IRQ2VEC(irq);
+        r.w.ip = DPMI_LoadW(n*4);
+        r.w.cs = DPMI_LoadW(n*4+2);
+        DPMI_CallRealModeIRET(&r);
+        #else
+        r.w.ss = r.w.sp = 0;
+        DPMI_CallRealModeINT(PIC_IRQ2VEC(irq), &r); //now this works with new HDPMI
+        #endif
+    }
     else
-        asm("int $0x0D");
-    #endif
+    {
+        asm( //restore interrupt context (all registers except ss:esp and cs:eip), and call irq 05/07 (int 0d/0f)
+        "pushal \n\t pushfl \n\t"
+        "push %%ds \n\t push %%es \n\t push %%fs \n\t push %%gs \n\t"
 
+        "mov %0, %%eax \n\t mov %1, %%ecx \n\t mov %2, %%edx \n\t mov %3, %%ebx \n\t mov %4, %%esi \n\t mov %5, %%edi \n\t"
+        "push %6 \n\t pop %%ds \n\t push %7 \n\t pop %%es \n\t push %8 \n\t pop %%fs \n\t push %9 \n\t pop %%gs \n\t"
+
+        "cmpb $5, %10 \n\t jne 1f \n\t push %11 \n\t andw $0xFCFF, (%%esp) \n\t popf \n\t push %12 \n\t pop %%ebp \n\t int $0x0D \n\t jmp 2f \n\t"
+        "1: push %11 \n\t andw $0xFCFF, (%%esp) \n\t popf \n\t push %12 \n\t pop %%ebp \n\t int $0x0F \n\t" //ebp must be the last since we need read irq using ebp
+
+        "2: pop %%gs \n\t pop %%fs \n\t pop %%es \n\t pop %%ds \n\t"
+        "popfl \n\t popal \n\t"
+        ::"m"(r.d.eax),"m"(r.d.ecx),"m"(r.d.edx),"m"(r.d.ebx),"m"(r.d.esi),"m"(r.d.edi),
+        "m"(r.w.ds),"m"(r.w.es),"m"(r.w.fs),"m"(r.w.gs),
+        "m"(irq),"m"(r.w.flags),
+        "m"(r.d.ebp)
+        );
+    }
     VIRQ_Irq = -1;
-    //CLIS();
+
     //_LOG("CPU FLAGS: %x\n", CPU_FLAGS());
     PIC_SetIRQMask(mask);
     //STIL();

@@ -268,7 +268,7 @@ uint8_t HDPMIPT_UntrappedIO_Read(uint16_t port)
     if(HDPMIPT_Entry.es == 0 || HDPMIPT_Entry.edi == 0)
     {
         if(!HDPMIPT_GetVendorEntry(&HDPMIPT_Entry))
-            return 0;
+            return FALSE;
     }
     uint8_t result = 0;
     asm(
@@ -289,12 +289,12 @@ BOOL HDPMIPT_InstallIRQACKHandler(uint8_t irq, uint16_t cs, uint32_t offset)
     if(HDPMIPT_Entry.es == 0 || HDPMIPT_Entry.edi == 0)
     {
         if(!HDPMIPT_GetVendorEntry(&HDPMIPT_Entry))
-            return 0;
+            return FALSE;
     }
 
     asm(
     "push %%esi \n\t"
-    "mov $0x0A, %%eax \n\t" //function no.
+    "mov $0x0B, %%eax \n\t" //function no.
     "movzx %1, %%esi \n\t" //esi=irq
     "movzx %2, %%ecx \n\t"   //ecx=selector
     "mov %3, %%edx \n\t"    //edx=offset
@@ -304,5 +304,27 @@ BOOL HDPMIPT_InstallIRQACKHandler(uint8_t irq, uint16_t cs, uint32_t offset)
     :"m"(HDPMIPT_Entry),"m"(irq),"m"(cs),"m"(offset)
     :"eax","ecx","edx"
     );
+    return TRUE;
+}
+
+BOOL HDPMIPT_GetInterrupContext(INTCONTEXT* context)
+{
+    if(HDPMIPT_Entry.es == 0 || HDPMIPT_Entry.edi == 0)
+    {
+        if(!HDPMIPT_GetVendorEntry(&HDPMIPT_Entry))
+            return FALSE;
+    }
+    asm(
+    "push %%edi \n\t"
+    "mov %%ds, %%dx \n\t"
+    "mov %1, %%edi \n\t"
+    "mov $0x0C, %%eax \n\t"
+    "lcall *%0 \n\t"
+    "pop %%edi \n\t"
+    :
+    :"m"(HDPMIPT_Entry), "m"(context)
+    :"eax", "edx"
+    );
+    //DBG_DumpREG(&context->regs);
     return TRUE;
 }

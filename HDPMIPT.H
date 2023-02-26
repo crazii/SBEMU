@@ -16,4 +16,14 @@ uint8_t HDPMIPT_UntrappedIO_Read(uint16_t port);
 //doom hack
 BOOL HDPMIPT_InstallIRQACKHandler(uint8_t irq, uint16_t cs, uint32_t offset);
 
+typedef struct IntContext //must be same as in HDPMI
+{
+    uint32_t EIP;
+    uint32_t ESP;
+    uint32_t EFLAGS;
+    DPMI_REG regs;
+}INTCONTEXT;
+
+BOOL HDPMIPT_GetInterrupContext(INTCONTEXT* context);
+
 #endif //_HDPMIPT_H_
