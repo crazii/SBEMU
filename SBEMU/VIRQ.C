@@ -74,39 +74,26 @@ void VIRQ_Invoke(uint8_t irq, DPMI_REG* reg, BOOL VM)
     }
     
     VIRQ_Irq = irq;
-    DPMI_REG r = *reg;
     if(VM || 1) //pm/rm int method not working good yet (Miles Sound)
     {
         #if 1
-        memset(&r, 0, sizeof(r));
+        DPMI_REG r = {0};
         int n = PIC_IRQ2VEC(irq);
         r.w.ip = DPMI_LoadW(n*4);
         r.w.cs = DPMI_LoadW(n*4+2);
         DPMI_CallRealModeIRET(&r);
         #else
+        DPMI_REG r = *reg;
         r.w.ss = r.w.sp = 0;
         DPMI_CallRealModeINT(PIC_IRQ2VEC(irq), &r); //now this works with new HDPMI
         #endif
     }
     else
     {
-        asm( //restore interrupt context (all registers except ss:esp and cs:eip), and call irq 05/07 (int 0d/0f)
-        "pushal \n\t pushfl \n\t"
-        "push %%ds \n\t push %%es \n\t push %%fs \n\t push %%gs \n\t"
-
-        "mov %0, %%eax \n\t mov %1, %%ecx \n\t mov %2, %%edx \n\t mov %3, %%ebx \n\t mov %4, %%esi \n\t mov %5, %%edi \n\t"
-        "push %6 \n\t pop %%ds \n\t push %7 \n\t pop %%es \n\t push %8 \n\t pop %%fs \n\t push %9 \n\t pop %%gs \n\t"
-
-        "cmpb $5, %10 \n\t jne 1f \n\t push %11 \n\t andw $0xFCFF, (%%esp) \n\t popf \n\t push %12 \n\t pop %%ebp \n\t int $0x0D \n\t jmp 2f \n\t"
-        "1: push %11 \n\t andw $0xFCFF, (%%esp) \n\t popf \n\t push %12 \n\t pop %%ebp \n\t int $0x0F \n\t" //ebp must be the last since we need read irq using ebp
-
-        "2: pop %%gs \n\t pop %%fs \n\t pop %%es \n\t pop %%ds \n\t"
-        "popfl \n\t popal \n\t"
-        ::"m"(r.d.eax),"m"(r.d.ecx),"m"(r.d.edx),"m"(r.d.ebx),"m"(r.d.esi),"m"(r.d.edi),
-        "m"(r.w.ds),"m"(r.w.es),"m"(r.w.fs),"m"(r.w.gs),
-        "m"(irq),"m"(r.w.flags),
-        "m"(r.d.ebp)
-        );
+        if(irq == 5)
+            DPMI_CallProtectedModeINT(0x0D, *reg);
+        else //7
+            DPMI_CallProtectedModeINT(0x0F, *reg);
     }
     VIRQ_Irq = -1;
 
