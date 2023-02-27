@@ -229,6 +229,7 @@ struct MAIN_OPT
     "/RM", "Support real mode games", TRUE, 0,
     "/O", "Select output. 0: headphone, 1: speaker. Intel HDA only", 1, 0,
     "/VOL", "Set master volume (0-9)", 7, 0,
+    "/K", "Set internal sample rate, valid value: 22050,44100", 0x22050, 0,
 
 #if DEBUG
     "/test", "Test sound and exit", FALSE, 0,
@@ -248,6 +249,7 @@ enum EOption
     OPT_RM,
     OPT_OUTPUT,
     OPT_VOL,
+    OPT_RATE,
 
 #if DEBUG
     OPT_TEST,
@@ -255,6 +257,7 @@ enum EOption
     OPT_COUNT,
 };
 
+//T1~T6 maps
 static const char* MAIN_SBTypeString[] =
 {
     "0",
@@ -265,7 +268,6 @@ static const char* MAIN_SBTypeString[] =
     "Pro",
     "16",
 };
-
 static int MAIN_SB_DSPVersion[] =
 {
     0,
@@ -354,7 +356,7 @@ int main(int argc, char* argv[])
 
     if(MAIN_Options[OPT_ADDR].value != 0x220 && MAIN_Options[OPT_ADDR].value != 0x240)
     {
-        printf("Error: invalid IO port address: %x.\n", MAIN_Options[OPT_ADDR].value);
+        printf("Error: Invalid IO port address: %x.\n", MAIN_Options[OPT_ADDR].value);
         return 1;
     }
     if(MAIN_Options[OPT_IRQ].value != 0x5 && MAIN_Options[OPT_IRQ].value != 0x7)
@@ -377,9 +379,14 @@ int main(int argc, char* argv[])
         printf("Error: Invalid Output.\n");
         return 1;
     }
-     if(MAIN_Options[OPT_VOL].value < 0 || MAIN_Options[OPT_VOL].value > 9)
+    if(MAIN_Options[OPT_VOL].value < 0 || MAIN_Options[OPT_VOL].value > 9)
     {
         printf("Error: Invalid Volume.\n");
+        return 1;
+    }
+    if(MAIN_Options[OPT_RATE].value != 0x22050 && MAIN_Options[OPT_RATE].value != 0x44100)
+    {
+        printf("Error: Invalid Sample rate.\n");
         return 1;
     }
     if(MAIN_Options[OPT_TYPE].value != 6)
@@ -461,8 +468,8 @@ int main(int argc, char* argv[])
     AU_ini_interrupts(&aui);
     AU_setmixer_init(&aui);
     AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 100);
-    //use fixed rate
-    mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, SBEMU_SAMPLERATE, SBEMU_CHANNELS, SBEMU_CHANNELS, NULL, SBEMU_BITS, SBEMU_BITS/8, 0};
+    int samplerate = (MAIN_Options[OPT_RATE].value == 0x22050) ? 22050 : 44100;
+    mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, samplerate, SBEMU_CHANNELS, SBEMU_CHANNELS, NULL, SBEMU_BITS, SBEMU_BITS/8, 0};
     AU_setrate(&aui, &adi);
     //set volume
     MAIN_GLB_VOL = MAIN_Options[OPT_VOL].value;
@@ -930,18 +937,23 @@ static void MAIN_TSR_Interrupt()
             struct MAIN_OPT* opt = (struct MAIN_OPT*)malloc(sizeof(MAIN_Options));
             DPMI_CopyLinear(DPMI_PTR2L(opt), MAIN_TSRREG.d.ebx, sizeof(MAIN_Options));
 
-            if(opt[OPT_OUTPUT].value != MAIN_Options[OPT_OUTPUT].value)
+            if(MAIN_Options[OPT_OUTPUT].value != opt[OPT_OUTPUT].value || MAIN_Options[OPT_RATE].value != opt[OPT_RATE].value)
             {
-                aui.card_select_config = MAIN_Options[OPT_OUTPUT].value = opt[OPT_OUTPUT].value;
-                AU_close(&aui);
-                AU_init(&aui);
-                AU_ini_interrupts(&aui);
-                AU_setmixer_init(&aui);
-                AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 100);
-                //use fixed rate
-                mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, SBEMU_SAMPLERATE, SBEMU_CHANNELS, SBEMU_CHANNELS, NULL, SBEMU_BITS, SBEMU_BITS/8, 0};
+                if(opt[OPT_OUTPUT].value != MAIN_Options[OPT_OUTPUT].value)
+                {
+                    aui.card_select_config = MAIN_Options[OPT_OUTPUT].value = opt[OPT_OUTPUT].value;
+                    AU_close(&aui);
+                    AU_init(&aui);
+                    AU_ini_interrupts(&aui);
+                    AU_setmixer_init(&aui);
+                    AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 100);
+                    MAIN_Options[OPT_VOL].value = ~opt[OPT_VOL].value; //mark volume dirty
+                }
+
+                MAIN_Options[OPT_RATE].value = opt[OPT_RATE].value;
+                int samplerate = (MAIN_Options[OPT_RATE].value == 0x22050) ? 22050 : 44100;
+                mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, samplerate, SBEMU_CHANNELS, SBEMU_CHANNELS, NULL, SBEMU_BITS, SBEMU_BITS/8, 0};
                 AU_setrate(&aui, &adi);
-                MAIN_Options[OPT_VOL].value = ~opt[OPT_VOL].value; //mark volume dirty
             }
             if(MAIN_Options[OPT_VOL].value != opt[OPT_VOL].value)
             {
