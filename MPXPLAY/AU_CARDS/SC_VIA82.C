@@ -259,7 +259,7 @@ static int VIA82XX_adetect(struct mpxplay_audioout_info_s *aui)
  card->model  = pcibios_ReadConfig_Word(card->pci_dev, PCIR_SSID);
  #ifdef SBEMU
  aui->card_irq = card->irq;
- printf("VT82 irq: %d\n",aui->card_irq);
+ //printf("VT82 irq: %d\n",aui->card_irq);
  if(aui->card_irq == 0 || aui->card_irq == 0xFF)
  {
      aui->card_irq = card->irq = 10;

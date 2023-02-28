@@ -74,9 +74,9 @@ void VIRQ_Invoke(uint8_t irq, DPMI_REG* reg, BOOL VM)
     }
     
     VIRQ_Irq = irq;
-    if(VM || 1) //pm/rm int method not working good yet (Miles Sound)
+    if(VM) //pm/rm int method not working good yet (Miles Sound) - works after modify HDPMI.
     {
-        #if 1
+        #if 0
         DPMI_REG r = {0};
         int n = PIC_IRQ2VEC(irq);
         r.w.ip = DPMI_LoadW(n*4);
@@ -85,6 +85,7 @@ void VIRQ_Invoke(uint8_t irq, DPMI_REG* reg, BOOL VM)
         #else
         DPMI_REG r = *reg;
         r.w.ss = r.w.sp = 0;
+        r.w.flags = 0;
         DPMI_CallRealModeINT(PIC_IRQ2VEC(irq), &r); //now this works with new HDPMI
         #endif
     }
