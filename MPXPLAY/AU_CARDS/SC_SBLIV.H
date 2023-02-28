@@ -21,7 +21,7 @@ typedef struct emu_card_version_s{
  uint8_t  max_channels;
 }emu_card_version_s;
 
-typedef struct emu10k1_card;
+typedef struct emu10k1_card emu10k1_card;
 
 typedef struct emu_driver_func_s{
  unsigned int (*selector)(struct emu10k1_card *card,struct mpxplay_audioout_info_s *aui);
@@ -35,6 +35,9 @@ typedef struct emu_driver_func_s{
  void (*clear_cache)(struct emu10k1_card *card);
  unsigned int (*mixer_read)(struct emu10k1_card *card,unsigned int reg);
  void (*mixer_write)(struct emu10k1_card *card,unsigned int reg,unsigned int value);
+ #ifdef SBEMU
+ int (*interrupt_isr)(struct emu10k1_card *card);
+ #endif
  aucards_allmixerchan_s *mixerset;
 }emu_driver_func_s;
 
@@ -51,7 +54,7 @@ typedef struct emu10k1_card
  struct emu_card_version_s *card_capabilities;
  struct emu_driver_func_s *driver_funcs;
 
- dosmem_t *dm;                     // now it's ca. 72k only
+ cardmem_t *dm;                     // now it's ca. 72k only
  //char *cardbuf_mem;              // but later we should use DPMI memory
  uint32_t *virtualpagetable;
  void *silentpage;

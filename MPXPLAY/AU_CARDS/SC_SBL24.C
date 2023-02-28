@@ -15,8 +15,8 @@
 //function: SB Live24/Audigy LS (CA0106) low level routines (with sc_sbliv.c)
 //based on the ALSA (http://www.alsa-project.org)
 
-//#define MPXPLAY_USE_DEBUGF 1
-//#define SBL_DEBUG_OUTPUT stdout
+#define MPXPLAY_USE_DEBUGF 1
+#define SBL_DEBUG_OUTPUT stdout
 
 #include "mpxplay.h"
 
@@ -267,10 +267,10 @@ static void snd_ca0106_pcm_prepare_playback(struct emu10k1_card *card,struct mpx
   table_base[i*2+1]=period_size_bytes<<16;
  }
 
- snd_ca0106_ptr_write(card, PLAYBACK_LIST_ADDR, channel, (uint32_t)(table_base));
+ snd_ca0106_ptr_write(card, PLAYBACK_LIST_ADDR, channel, (uint32_t)pds_cardmem_physicalptr(card->dm,table_base));
  snd_ca0106_ptr_write(card, PLAYBACK_LIST_SIZE, channel, (CA0106_DMABUF_PERIODS - 1) << 19);
  snd_ca0106_ptr_write(card, PLAYBACK_LIST_PTR, channel, 0);
- snd_ca0106_ptr_write(card, PLAYBACK_DMA_ADDR, channel, (uint32_t)card->pcmout_buffer);
+ snd_ca0106_ptr_write(card, PLAYBACK_DMA_ADDR, channel, (uint32_t)pds_cardmem_physicalptr(card->dm, card->pcmout_buffer));
  snd_ca0106_ptr_write(card, PLAYBACK_PERIOD_SIZE, channel, 0);
  //snd_ca0106_ptr_write(card, PLAYBACK_PERIOD_SIZE, channel, period_size_bytes<<16);
  snd_ca0106_ptr_write(card, PLAYBACK_POINTER, channel, 0);
@@ -365,6 +365,16 @@ static void snd_live24_mixer_write(struct emu10k1_card *card,unsigned int reg,un
  snd_ca0106_ptr_write(card,reg,channel_id,value);
 }
 
+#ifdef SBEMU
+static int snd_live24_isr(emu10k1_card *card)
+{
+ //const uint32_t channel=0;
+ int intmask = snd_ca0106_ptr_read(card, EXTENDED_INT_MASK, 0);
+ snd_ca0106_ptr_write(card, EXTENDED_INT_MASK, 0, intmask); //ack
+ return intmask;
+}
+#endif
+
 static aucards_onemixerchan_s emu_live24_analog_front={
  AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_MASTER,AU_MIXCHANFUNC_VOLUME),2,
  {
@@ -404,10 +414,16 @@ struct emu_driver_func_s emu_driver_audigyls_funcs={
 #ifdef AUDIGYLS_USE_AC97
  &snd_emu_ac97_read,
  &snd_emu_ac97_write,
+ #ifdef SBEMU
+ &snd_live24_isr,
+ #endif
  &mpxplay_aucards_ac97chan_mixerset[0]
 #else
  &snd_live24_mixer_read,
  &snd_live24_mixer_write,
+ #ifdef SBEMU
+ &snd_live24_isr,
+ #endif
  &emu_live24_mixerset[0]
 #endif
 };
@@ -424,6 +440,9 @@ struct emu_driver_func_s emu_driver_live24_funcs={
  NULL,
  &snd_live24_mixer_read,
  &snd_live24_mixer_write,
+ #ifdef SBEMU
+ &snd_live24_isr,
+ #endif
  &emu_live24_mixerset[0]
 };
 

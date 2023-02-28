@@ -16,8 +16,8 @@
 //based on the Creative (http://sourceforge.net/projects/emu10k1)
 //         and ALSA (http://www.alsa-project.org) drivers
 
-//#define MPXPLAY_USE_DEBUGF 1
-//#define SBL_DEBUG_OUTPUT stdout
+#define MPXPLAY_USE_DEBUGF 1
+#define SBL_DEBUG_OUTPUT stdout
 
 #include "mpxplay.h"
 
@@ -271,15 +271,15 @@ static void snd_emu10k1_hw_init(struct emu10k1_card *card)
 
  if(card->chip_select&EMU_CHIPS_10KX){
   //buffer config
-  emu10k1_writeptr(card, PTB, 0, (uint32_t) card->virtualpagetable);
+  emu10k1_writeptr(card, PTB, 0, (uint32_t) pds_cardmem_physicalptr(card->dm, card->virtualpagetable));
   emu10k1_writeptr(card, TCB, 0, 0);
   emu10k1_writeptr(card, TCBS, 0, 4);
 
   silent_page = (((uint32_t)card->silentpage) << 1) | MAP_PTI_MASK;
 
   for (ch = 0; ch < NUM_G; ch++) {
-   emu10k1_writeptr(card, MAPA, ch, silent_page);
-   emu10k1_writeptr(card, MAPB, ch, silent_page);
+   emu10k1_writeptr(card, MAPA, ch, (uint32_t)pds_cardmem_physicalptr(card->dm,silent_page));
+   emu10k1_writeptr(card, MAPB, ch, (uint32_t)pds_cardmem_physicalptr(card->dm,silent_page));
   }
  }
 
@@ -812,11 +812,11 @@ static unsigned int snd_emu10kx_buffer_init(struct emu10k1_card *card,struct mpx
  pcmbufp=(uint32_t)card->pcmout_buffer;
  pcmbufp<<=1;
  for(pagecount = 0; pagecount < (card->pcmout_bufsize/EMUPAGESIZE); pagecount++){
-  card->virtualpagetable[pagecount] = pcmbufp | pagecount;
+  card->virtualpagetable[pagecount] = (uint32_t)pds_cardmem_physicalptr(card->dm,pcmbufp) | pagecount;
   pcmbufp+=EMUPAGESIZE*2;
  }
  for( ; pagecount<MAXPAGES; pagecount++)
-  card->virtualpagetable[pagecount] = ((uint32_t)card->silentpage)<<1;
+  card->virtualpagetable[pagecount] = ((uint32_t)pds_cardmem_physicalptr(card->dm,card->silentpage))<<1;
 
  return 1;
 }
@@ -875,6 +875,15 @@ static void snd_emu10kx_clear_cache(struct emu10k1_card *card)
  snd_emu10k1_playback_invalidate_cache(card,0,VOICE_FLAGS_STEREO|VOICE_FLAGS_16BIT);
 }
 
+#ifdef SBEMU
+static int snd_emu_10kx_isr(struct emu10k1_card *card)
+{
+  int interrupts = emu10k1_readptr(card, IPR, 0);
+  emu10k1_writeptr(card, IPR, 0, interrupts);
+  return interrupts;
+}
+#endif
+
 static struct emu_driver_func_s emu_driver_10k1_funcs={
  &snd_emu10k1_selector,
  &snd_emu10k1_hw_init,
@@ -887,6 +896,7 @@ static struct emu_driver_func_s emu_driver_10k1_funcs={
  &snd_emu10kx_clear_cache,
  &snd_emu_ac97_read,
  &snd_emu_ac97_write,
+ &snd_emu_10kx_isr,
  &mpxplay_aucards_ac97chan_mixerset[0]
 };
 
@@ -918,10 +928,16 @@ static struct emu_driver_func_s emu_driver_10k2_funcs={
 #ifdef AUDIGY1_USE_AC97 // !!! it doesn't check the Audigy type here (A2,A4 will not sound)
  &snd_emu_ac97_read,
  &snd_emu_ac97_write,
+ #ifdef SBEMU
+ &snd_emu_10kx_isr,
+ #endif
  &mpxplay_aucards_ac97chan_mixerset[0]
 #else
  &snd_emu10kx_read_control_gpr,
  &snd_emu10kx_set_control_gpr,
+ #ifdef SBEMU
+ &snd_emu_10kx_isr,
+ #endif
  &emu_10k2_mixerset[0]
 #endif
 };
@@ -962,18 +978,21 @@ static void snd_p16v_pcm_prepare_playback(struct emu10k1_card *card,unsigned int
  snd_emu_set_spdif_freq(card,freq);
 
  for(i=0; i<AUDIGY2_P16V_PERIODS; i++) {
-  table_base[i*2]=(uint32_t)((char *)card->pcmout_buffer+(i*period_size_bytes));
+  table_base[i*2]=(uint32_t)pds_cardmem_physicalptr(card->dm,(char *)card->pcmout_buffer+(i*period_size_bytes));
   table_base[i*2+1]=period_size_bytes<<16;
  }
 
- emu10k1_ptr20_write(card, PLAYBACK_LIST_ADDR, channel, (uint32_t)(table_base));
+ emu10k1_ptr20_write(card, PLAYBACK_LIST_ADDR, channel, (uint32_t)pds_cardmem_physicalptr(card->dm,table_base));
  emu10k1_ptr20_write(card, PLAYBACK_LIST_SIZE, channel, (AUDIGY2_P16V_PERIODS - 1) << 19);
  emu10k1_ptr20_write(card, PLAYBACK_LIST_PTR, channel, 0);
- emu10k1_ptr20_write(card, PLAYBACK_DMA_ADDR, channel, (uint32_t)card->pcmout_buffer);
+ emu10k1_ptr20_write(card, PLAYBACK_DMA_ADDR, channel, (uint32_t)pds_cardmem_physicalptr(card->dm,card->pcmout_buffer));
  emu10k1_ptr20_write(card, PLAYBACK_PERIOD_SIZE, channel, period_size_bytes<<16);
  emu10k1_ptr20_write(card, PLAYBACK_POINTER, channel, 0);
  emu10k1_ptr20_write(card, 0x07, channel, 0x0);
  emu10k1_ptr20_write(card, 0x08, channel, 0);
+ #ifdef SBEMU
+ emu10k1_ptr20_write(card, INTE2, channel,  emu10k1_ptr20_read(card, INTE2, channel)|INTE2_PLAYBACK_CH_0_HALF_LOOP);
+ #endif
 }
 
 static void snd_p16v_setrate(struct emu10k1_card *card,struct mpxplay_audioout_info_s *aui)
@@ -1046,6 +1065,15 @@ static void snd_p16v_mixer_write(struct emu10k1_card *card,unsigned int reg,unsi
  emu10k1_ptr20_write(card,reg,0,value);
 }
 
+#ifdef SBEMU
+static int snd_p16v_isr(struct emu10k1_card *card)
+{
+  int interrupts = emu10k1_ptr20_read(card, IPR2, 0);
+  emu10k1_ptr20_write(card, IPR2, 0, interrupts);
+  return interrupts;
+}
+#endif
+
 static aucards_onemixerchan_s emu_p16v_analog_out_vol={
  AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_MASTER,AU_MIXCHANFUNC_VOLUME),2,
  {
@@ -1084,6 +1112,9 @@ static struct emu_driver_func_s emu_driver_p16v_funcs={
  NULL,
  &snd_p16v_mixer_read,
  &snd_p16v_mixer_write,
+ #ifdef SBEMU
+ &snd_p16v_isr,
+ #endif
  &emu_p16v_mixerset[0]
 };
 
@@ -1192,7 +1223,7 @@ static int SBLIVE_adetect(struct mpxplay_audioout_info_s *aui)
  if(!card->pci_dev)
   goto err_adetect;
 
- if(pcibios_search_devices(&creative_devices,card->pci_dev)!=PCI_SUCCESSFUL)
+ if(pcibios_search_devices(creative_devices,card->pci_dev)!=PCI_SUCCESSFUL)
   goto err_adetect;
 
  pcibios_set_master(card->pci_dev);
@@ -1201,7 +1232,7 @@ static int SBLIVE_adetect(struct mpxplay_audioout_info_s *aui)
  if(!card->iobase)
   goto err_adetect;
 
- card->irq    = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
+ aui->card_irq = card->irq = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
  card->chiprev= pcibios_ReadConfig_Byte(card->pci_dev, PCIR_RID);
  card->model  = pcibios_ReadConfig_Word(card->pci_dev, PCIR_SSID);
  card->serial = pcibios_ReadConfig_Dword(card->pci_dev, PCIR_SSVID);
@@ -1339,8 +1370,14 @@ static unsigned long SBLIVE_readMIXER(struct mpxplay_audioout_info_s *aui,unsign
  return retval;
 }
 
+static int SBLIVE_IRQRoutine(struct mpxplay_audioout_info_s *aui)
+{
+ struct emu10k1_card *card=aui->card_private_data;
+ return card->driver_funcs->interrupt_isr(card);
+}
+
 one_sndcard_info SBLIVE_sndcard_info={
- "SBA",
+ "SB Live!/Audigy",
  SNDCARD_LOWLEVELHAND|SNDCARD_INT08_ALLOWED,
 
  NULL,
@@ -1356,8 +1393,12 @@ one_sndcard_info SBLIVE_sndcard_info={
  &SBLIVE_getbufpos,
  &SBLIVE_clearbuf,
  &MDma_interrupt_monitor,
- NULL,
 
+#ifdef SBEMU
+ &SBLIVE_IRQRoutine,
+#else
+ NULL,
+#endif
  &SBLIVE_writeMIXER,
  &SBLIVE_readMIXER,
  NULL
