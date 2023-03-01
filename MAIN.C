@@ -788,7 +788,6 @@ static void MAIN_Interrupt()
             pos += count;
             //_LOG("samples:%d %d %d\n", count, pos, samples);
             DMA_Index = VDMA_SetIndexCounter(dma, DMA_Index+bytes, DMA_Count-bytes);
-            //int LastDMACount = DMA_Count;
             DMA_Count = VDMA_GetCounter(dma);
             SB_Pos = SBEMU_SetPos(SB_Pos+bytes);
             //_LOG("SB bytes: %d %d\n", SB_Pos, SB_Bytes);
@@ -801,13 +800,15 @@ static void MAIN_Interrupt()
                 SB_Pos = SBEMU_SetPos(0);
                 
                 MAIN_InvokeIRQ(SBEMU_GetIRQ());
+                if(SB_Bytes <= 32) //detection routine?
+                {
+                    SBEMU_Stop(); //fix problem when Miles Sound using SB driver on SBPro
+                    break; //fix crash in virtualbox.
+                }
                 
                 SB_Bytes = SBEMU_GetSampleBytes();
                 SB_Pos = SBEMU_GetPos();
                 SB_Rate = SBEMU_GetSampleRate();
-                //if(LastDMACount <= 32) //detection routine?
-                    //break; fix crash in virtualbox.
-                //    pos = 0;
                 //incase IRQ handler re-programs DMA
                 DMA_Index = VDMA_GetIndex(dma);
                 DMA_Count = VDMA_GetCounter(dma);
