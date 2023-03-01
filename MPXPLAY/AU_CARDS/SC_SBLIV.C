@@ -1237,6 +1237,8 @@ static int SBLIVE_adetect(struct mpxplay_audioout_info_s *aui)
  card->model  = pcibios_ReadConfig_Word(card->pci_dev, PCIR_SSID);
  card->serial = pcibios_ReadConfig_Dword(card->pci_dev, PCIR_SSVID);
 
+ mpxplay_debugf(SBL_DEBUG_OUTPUT,"SB sound card: %x %x %x", card->pci_dev->device_id, card->chiprev, card->serial);
+
  emucv=&emucard_versions[0];
  do{
   if(emucv->device==card->pci_dev->device_id)
@@ -1251,7 +1253,10 @@ static int SBLIVE_adetect(struct mpxplay_audioout_info_s *aui)
  }while(emucv->longname);
 
  if(!card->card_capabilities)
+ {
+  mpxplay_debugf(SBL_DEBUG_OUTPUT,"card version not found.");
   goto err_adetect;
+ }
 
  card->chip_select=card->chips=card->card_capabilities->chips;
 
@@ -1265,10 +1270,16 @@ static int SBLIVE_adetect(struct mpxplay_audioout_info_s *aui)
  }while(card->driver_funcs);
 
  if(!card->driver_funcs)
+ {
+  mpxplay_debugf(SBL_DEBUG_OUTPUT,"no driver funcs");
   goto err_adetect;
+ }
 
  if(!card->driver_funcs->buffer_init(card,aui))
+ {
+  mpxplay_debugf(SBL_DEBUG_OUTPUT,"buffer_init failed")
   goto err_adetect;
+ }
 
  aui->card_DMABUFF=card->pcmout_buffer;
 
