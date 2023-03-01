@@ -719,6 +719,10 @@ static void emu10k1_pcm_init_voice(struct emu10k1_card *card,
  emu10k1_writeptr(card, PEFE_FILTERAMOUNT, voice, 0); // was 0x7f
  // pitch envelope
  emu10k1_writeptr(card, PEFE_PITCHAMOUNT, voice, 0);
+
+ #ifdef SBEMU
+ emu10k1_writeptr(card, INTE, 0,  emu10k1_readptr(card, INTE, 0)|INTE_FXDSPENABLE);
+ #endif
 }
 
 static void snd_emu10k1_playback_start_voice(struct emu10k1_card *card,
@@ -991,7 +995,8 @@ static void snd_p16v_pcm_prepare_playback(struct emu10k1_card *card,unsigned int
  emu10k1_ptr20_write(card, 0x07, channel, 0x0);
  emu10k1_ptr20_write(card, 0x08, channel, 0);
  #ifdef SBEMU
- emu10k1_ptr20_write(card, INTE2, channel,  emu10k1_ptr20_read(card, INTE2, channel)|INTE2_PLAYBACK_CH_0_HALF_LOOP);
+ emu10k1_writeptr(card, INTE, channel,  emu10k1_readptr(card, INTE, channel)|INTE_FXDSPENABLE);
+ emu10k1_writeptr(card, INTE2, channel,  emu10k1_readptr(card, INTE2, channel)|INTE2_PLAYBACK_CH_0_HALF_LOOP|INTE2_PLAYBACK_CH_0_LOOP);
  #endif
 }
 
@@ -1068,9 +1073,11 @@ static void snd_p16v_mixer_write(struct emu10k1_card *card,unsigned int reg,unsi
 #ifdef SBEMU
 static int snd_p16v_isr(struct emu10k1_card *card)
 {
-  int interrupts = emu10k1_ptr20_read(card, IPR2, 0);
-  emu10k1_ptr20_write(card, IPR2, 0, interrupts);
-  return interrupts;
+  int interrupts = emu10k1_readptr(card, IPR, 0);
+  emu10k1_writeptr(card, IPR, 0, interrupts);
+  int interrupts2 = emu10k1_readptr(card, IPR2, 0);
+  emu10k1_writeptr(card, IPR2, 0, interrupts);
+  return interrupts || interrupts2;
 }
 #endif
 
