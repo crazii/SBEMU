@@ -76,6 +76,15 @@ void SBEMU_Mixer_Write(uint16_t port, uint8_t value)
             SBEMU_MixerRegs[SBEMU_MIXERREG_VOICESTEREO] = 0xFF;
             SBEMU_MixerRegs[SBEMU_MIXERREG_MASTERSTEREO] = 0xFF;
             SBEMU_MixerRegs[SBEMU_MIXERREG_MIDISTEREO] = 0xFF;
+
+            //5bits (5:3)
+            SBEMU_MixerRegs[SBEMU_MIXRREG_MASTERL] = 0xF8;
+            SBEMU_MixerRegs[SBEMU_MIXRREG_MASTERR] = 0xF8;
+            SBEMU_MixerRegs[SBEMU_MIXRREG_VOICEL] = 0xF8;
+            SBEMU_MixerRegs[SBEMU_MIXRREG_VOICER] = 0xF8;
+            SBEMU_MixerRegs[SBEMU_MIXRREG_MIDIL] = 0xF8;
+            SBEMU_MixerRegs[SBEMU_MIXRREG_MIDIR] = 0xF8;
+
         }
     }
     if(SBEMU_DSPVER >= 0x0400) //SB16
@@ -275,7 +284,8 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                 {
                     SBEMU_Samples |= value<<8;
                     SBEMU_Bits = (SBEMU_DSPCMD==SBEMU_CMD_MODE_PCM8_MONO || SBEMU_DSPCMD==SBEMU_CMD_MODE_PCM8_STEREO) ? 8 : 16;
-                    SBEMU_MixerRegs[SBEMU_MIXERREG_MODEFILTER] |= (SBEMU_DSPCMD==SBEMU_CMD_MODE_PCM8_STEREO || SBEMU_DSPCMD==SBEMU_CMD_MODE_PCM16_STEREO) ? 2 : 0;
+                    SBEMU_MixerRegs[SBEMU_MIXERREG_MODEFILTER] &= ~0x2;
+                    SBEMU_MixerRegs[SBEMU_MIXERREG_MODEFILTER] |= (SBEMU_DSPCMD==SBEMU_CMD_MODE_PCM8_STEREO || SBEMU_DSPCMD==SBEMU_CMD_MODE_PCM16_STEREO) ? 0x2 : 0;
                     SBEMU_Started = TRUE; //start transfer here
                     SBEMU_Pos = 0;
                 }
