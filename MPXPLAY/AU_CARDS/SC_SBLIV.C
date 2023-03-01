@@ -1277,7 +1277,7 @@ static int SBLIVE_adetect(struct mpxplay_audioout_info_s *aui)
 
  if(!card->driver_funcs->buffer_init(card,aui))
  {
-  mpxplay_debugf(SBL_DEBUG_OUTPUT,"buffer_init failed")
+  mpxplay_debugf(SBL_DEBUG_OUTPUT,"buffer_init failed");
   goto err_adetect;
  }
 
