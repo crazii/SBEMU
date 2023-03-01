@@ -802,7 +802,10 @@ static void MAIN_Interrupt()
                 MAIN_InvokeIRQ(SBEMU_GetIRQ());
                 if(SB_Bytes <= 32) //detection routine?
                 {
-                    SBEMU_Stop(); //fix problem when Miles Sound using SB driver on SBPro
+                    int c = SBEMU_GetDetectionCounter();
+                    if(++c >= 256)
+                        SBEMU_Stop(); //fix problem when Miles Sound using SB driver on SBPro
+                    SBEMU_SetDetectionCounter(c);
                     break; //fix crash in virtualbox.
                 }
                 

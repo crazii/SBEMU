@@ -22,6 +22,7 @@ static int SBEMU_DSPCMD_Subindex = 0;
 static int SBEMU_DSPDATA_Subindex = 0;
 static int SBEMU_TriggerIRQ = 0;
 static int SBEMU_Pos = 0;
+static int SBEMU_DetectionCounter = 0;
 static uint8_t SBEMU_IRQMap[4] = {2,5,7,10};
 static uint8_t SBEMU_MixerRegIndex = 0;
 static uint8_t SBEMU_idbyte;
@@ -132,6 +133,7 @@ void SBEMU_DSP_Reset(uint16_t port, uint8_t value)
         SBEMU_Pos = 0;
         SBEMU_HighSpeed = 0;
         SBEMU_TriggerIRQ = 0;
+        SBEMU_DetectionCounter = 0;
 
         SBEMU_Mixer_WriteAddr(0, SBEMU_MIXERREG_RESET);
         SBEMU_Mixer_Write(0, 1);
@@ -486,4 +488,14 @@ void SBEMU_SetIRQTriggered(int triggered)
 uint8_t SBEMU_GetMixerReg(uint8_t index)
 {
     return SBEMU_MixerRegs[index];
+}
+
+int SBEMU_GetDetectionCounter()
+{
+    return SBEMU_DetectionCounter; 
+}
+
+void SBEMU_SetDetectionCounter(int c)
+{
+    SBEMU_DetectionCounter = c;
 }

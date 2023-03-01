@@ -122,6 +122,11 @@ int SBEMU_IRQTriggered();
 void SBEMU_SetIRQTriggered(int triggered);
 uint8_t SBEMU_GetMixerReg(uint8_t index);
 
+
+//hacks/workarounds
+int SBEMU_GetDetectionCounter();
+void SBEMU_SetDetectionCounter(int c);
+
 #ifdef __cplusplus
 }
 #endif
