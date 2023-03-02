@@ -277,6 +277,7 @@ static void snd_ca0106_pcm_prepare_playback(struct emu10k1_card *card,struct mpx
  snd_ca0106_ptr_write(card, 0x07, channel, 0x0);
  snd_ca0106_ptr_write(card, 0x08, channel, 0);
  snd_ca0106_ptr_write(card, PLAYBACK_MUTE, 0x0, 0x0); // unmute output
+ snd_ca0106_ptr_write(card, EXTENDED_INT_MASK, channel, snd_ca0106_ptr_read(card, EXTENDED_INT_MASK, channel) | 0x00000010); //full perioid interrupt
 
  mpxplay_debugf(SBL_DEBUG_OUTPUT,"prepare playback end");
 }
@@ -369,8 +370,10 @@ static void snd_live24_mixer_write(struct emu10k1_card *card,unsigned int reg,un
 static int snd_live24_isr(emu10k1_card *card)
 {
  //const uint32_t channel=0;
- int intmask = snd_ca0106_ptr_read(card, EXTENDED_INT_MASK, 0);
- snd_ca0106_ptr_write(card, EXTENDED_INT_MASK, 0, intmask); //ack
+ int intmask = inl(card->iobase+IPR);
+ outl(card->iobase+IPR, intmask);
+ int intmask2 = snd_ca0106_ptr_read(card, EXTENDED_INT, 0);
+ snd_ca0106_ptr_write(card, EXTENDED_INT, 0, intmask2); //ack
  return intmask;
 }
 #endif
