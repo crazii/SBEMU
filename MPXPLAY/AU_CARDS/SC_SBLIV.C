@@ -129,12 +129,14 @@ static void snd_emu10k1_hw_init(struct emu10k1_card *card)
  emu10k1_writeptr(card, ADCBS, 0, ADCBS_BUFSIZE_NONE);
  emu10k1_writeptr(card, ADCBA, 0, 0);
 
- // disable channel interrupt
+ // enbale channel interrupt
  emu10k1_writefn0(card, INTE, 0);
- emu10k1_writeptr(card, CLIEL, 0, 0);
- emu10k1_writeptr(card, CLIEH, 0, 0);
- emu10k1_writeptr(card, SOLEL, 0, 0);
- emu10k1_writeptr(card, SOLEH, 0, 0);
+ emu10k1_writeptr(card, CLIEL, 0, 1);
+ emu10k1_writeptr(card, CLIEH, 0, 1);
+ emu10k1_writeptr(card, HLIEL, 0, 1);
+ emu10k1_writeptr(card, HLIEH, 0, 1);
+ emu10k1_writeptr(card, SOLEL, 0, 1);
+ emu10k1_writeptr(card, SOLEH, 0, 1);
 
  if(card->chips&EMU_CHIPS_10K2){
   emu10k1_writeptr(card, SPBYPASS, 0, SPBYPASS_FORMAT);
@@ -722,7 +724,7 @@ static void emu10k1_pcm_init_voice(struct emu10k1_card *card,
  emu10k1_writeptr(card, PEFE_PITCHAMOUNT, voice, 0);
 
  #ifdef SBEMU
- emu10k1_writefn0(card, INTE, emu10k1_readfn0(card, INTE)|INTE_FXDSPENABLE);
+ emu10k1_writefn0(card, INTE, emu10k1_readfn0(card, INTE)|INTE_SAMPLERATETRACKER);
  #endif
 }
 
@@ -885,7 +887,15 @@ static int snd_emu_10kx_isr(struct emu10k1_card *card)
 {
   int interrupts = emu10k1_readptr(card, IPR, 0);
   emu10k1_writeptr(card, IPR, 0, interrupts);
-  return interrupts;
+  int clipl = emu10k1_readptr(card, CLIPL, 0);
+  emu10k1_writeptr(card, CLIPL, 0, clipl);
+  int cliph = emu10k1_readptr(card, CLIPH, 0);
+  emu10k1_writeptr(card, CLIPH, 0, clipl);
+  int hlipl = emu10k1_readptr(card, HLIPL, 0);
+  emu10k1_writeptr(card, HLIPL, 0, hlipl);
+  int hliph = emu10k1_readptr(card, HLIPH, 0);
+  emu10k1_writeptr(card, HLIPL, 0, hliph);
+  return interrupts | clipl | cliph | hlipl | hliph;
 }
 #endif
 
@@ -996,7 +1006,7 @@ static void snd_p16v_pcm_prepare_playback(struct emu10k1_card *card,unsigned int
  emu10k1_ptr20_write(card, 0x07, channel, 0x0);
  emu10k1_ptr20_write(card, 0x08, channel, 0);
  #ifdef SBEMU
- emu10k1_writefn0(card, INTE, emu10k1_readfn0(card, INTE)|INTE_FXDSPENABLE);
+ emu10k1_writefn0(card, INTE, emu10k1_readfn0(card, INTE)|INTE_SAMPLERATETRACKER);
  emu10k1_writefn0(card, INTE2, emu10k1_readfn0(card, INTE2)|INTE2_PLAYBACK_CH_0_PERIOID);
  #endif
 }
@@ -1078,7 +1088,7 @@ static int snd_p16v_isr(struct emu10k1_card *card)
   emu10k1_writefn0(card, IPR, interrupts);
   int interrupts2 = emu10k1_readfn0(card, IPR2);
   emu10k1_writefn0(card, IPR2, interrupts2);
-  return interrupts || interrupts2;
+  return interrupts | interrupts2;
 }
 #endif
 

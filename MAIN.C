@@ -803,8 +803,8 @@ static void MAIN_Interrupt()
                 if(SB_Bytes <= 32) //detection routine?
                 {
                     int c = SBEMU_GetDetectionCounter();
-                    if(++c >= 256)
-                        SBEMU_Stop(); //fix problem when Miles Sound using SB driver on SBPro
+                    if(++c >= 256) //Miles Sound will "freeze" or crash when we continually send virtual interrupt to it, it seems it processes slow and virtual interrupt keeps happening until crash.
+                        SBEMU_Stop(); //fix problem when Miles Sound using SB driver on SBPro emulation
                     SBEMU_SetDetectionCounter(c);
                     break; //fix crash in virtualbox.
                 }
