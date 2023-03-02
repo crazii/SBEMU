@@ -27,6 +27,8 @@ static DBOPL::Chip* OPL3EMU_Chip;
 
 void OPL3EMU_Init(int samplerate)
 {
+    if(OPL3EMU_Chip)
+        delete OPL3EMU_Chip;
     OPL3EMU_Chip = new DBOPL::Chip(true);
     OPL3EMU_Chip->Setup(samplerate);
 }
