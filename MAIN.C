@@ -637,7 +637,12 @@ int main(int argc, char* argv[])
 
 static void MAIN_InterruptPM()
 {
-    if(MAIN_InINT) return;
+    if(MAIN_InINT)
+    {
+        DPMI_CallOldISR(&MAIN_IntHandlePM);
+        PIC_UnmaskIRQ(aui.card_irq);
+        return;
+    }
     MAIN_InINT = TRUE;
     if(aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
     {
@@ -655,7 +660,12 @@ static void MAIN_InterruptPM()
 
 static void MAIN_InterruptRM()
 {
-    if(MAIN_InINT) return;
+    if(MAIN_InINT)
+    {
+        DPMI_CallRealModeOldISR(&MAIN_IntHandleRM, &MAIN_IntREG);
+        PIC_UnmaskIRQ(aui.card_irq);
+        return;
+    }
     MAIN_InINT = TRUE;
     if(aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
     {
