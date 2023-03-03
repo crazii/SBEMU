@@ -820,7 +820,7 @@ static unsigned int snd_emu10kx_buffer_init(struct emu10k1_card *card,struct mpx
  pcmbufp=(uint32_t)card->pcmout_buffer;
  for(pagecount = 0; pagecount < (card->pcmout_bufsize/EMUPAGESIZE); pagecount++){
   card->virtualpagetable[pagecount] = (((uint32_t)pds_cardmem_physicalptr(card->dm,pcmbufp))<<1) | pagecount;
-  pcmbufp=EMUPAGESIZE;
+  pcmbufp+=EMUPAGESIZE;
  }
  for( ; pagecount<MAXPAGES; pagecount++)
   card->virtualpagetable[pagecount] = ((uint32_t)pds_cardmem_physicalptr(card->dm,card->silentpage))<<1;
