@@ -525,6 +525,30 @@ uint32_t DPMI_CallOldISR(DPMI_ISR_HANDLE* inputp handle)
     return 0;
 }
 
+uint32_t DPMI_CallOldISRWithContext(DPMI_ISR_HANDLE* inputp handle, DPMI_REG* regs)
+{
+    DPMI_REG r = *regs; /*make sure regs on the stack, accessed with ebp, not esi/edi/ebx */
+    DPMI_ISR_HANDLE h = *handle;
+    asm(
+    "pushal \n\t pushfl \n\t"
+    "push %%ds \n\t push %%es \n\t push %%fs \n\t push %%gs \n\t"
+    
+    "mov %0, %%eax \n\t mov %1, %%ecx \n\t mov %2, %%edx \n\t mov %3, %%ebx \n\t mov %4, %%esi \n\t mov %5, %%edi \n\t"
+    "push %6 \n\t pop %%ds \n\t push %7 \n\t pop %%es \n\t push %8 \n\t pop %%fs \n\t push %9 \n\t pop %%gs \n\t"
+    
+    //"pushl %10 \n\t andw $0xFCFF, (%%esp) \n\t" //don't restore ebp, lcall uses it.
+    "pushfl \n\t"
+    "lcall *%11 \n\t"
+    
+    "pop %%gs \n\t pop %%fs \n\t pop %%es \n\t pop %%ds \n\t" 
+    "popfl \n\t popal \n\t"
+    ::"m"(r.d.eax),"m"(r.d.ecx),"m"(r.d.edx),"m"(r.d.ebx),"m"(r.d.esi),"m"(r.d.edi),
+    "m"(r.w.ds),"m"(r.w.es),"m"(r.w.fs),"m"(r.w.gs),
+    "m"(r.w.flags), "m"(h.old_offset)
+    );
+    return 0;
+}
+
 uint32_t DPMI_CallRealModeOldISR(DPMI_ISR_HANDLE* inputp handle, DPMI_REG* regs)
 {
     //DPMI_REG regs = {0};

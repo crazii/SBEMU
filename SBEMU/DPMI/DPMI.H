@@ -215,6 +215,7 @@ uint16_t DPMI_InstallRealModeISR(uint8_t i, void(*ISR_RM)(void), DPMI_REG* RMReg
 
 uint16_t DPMI_UninstallISR(DPMI_ISR_HANDLE* inputp handle);
 uint32_t DPMI_CallOldISR(DPMI_ISR_HANDLE* inputp handle);
+uint32_t DPMI_CallOldISRWithContext(DPMI_ISR_HANDLE* inputp handle, DPMI_REG* regs); //do not call it with VM context (vm context cannot be restored)
 uint32_t DPMI_CallRealModeOldISR(DPMI_ISR_HANDLE* inputp handle, DPMI_REG* regs);
 
 uint32_t DPMI_GetISR(uint8_t i, DPMI_ISR_HANDLE* outputp handle);

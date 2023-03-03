@@ -637,37 +637,28 @@ int main(int argc, char* argv[])
 
 static void MAIN_InterruptPM()
 {
-    if(MAIN_InINT)
+    HDPMIPT_GetInterrupContext(&MAIN_IntContext);
+    if(!MAIN_InINT && aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
     {
-        DPMI_CallOldISR(&MAIN_IntHandlePM);
-        PIC_UnmaskIRQ(aui.card_irq);
-        return;
-    }
-    MAIN_InINT = TRUE;
-    if(aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
-    {
-        HDPMIPT_GetInterrupContext(&MAIN_IntContext);
         MAIN_Interrupt();
         PIC_SendEOIWithIRQ(aui.card_irq);
     }
     else
     {
-        DPMI_CallOldISR(&MAIN_IntHandlePM);
+        BOOL InInt = MAIN_InINT;
+        MAIN_InINT = TRUE;
+        if(MAIN_IntContext.EFLAGS&CPU_VMFLAG)
+            DPMI_CallOldISR(&MAIN_IntHandlePM);
+        else
+            DPMI_CallOldISRWithContext(&MAIN_IntHandlePM, &MAIN_IntContext.regs);
         PIC_UnmaskIRQ(aui.card_irq);
+        MAIN_InINT = InInt;
     }
-    MAIN_InINT = FALSE;
 }
 
 static void MAIN_InterruptRM()
 {
-    if(MAIN_InINT)
-    {
-        DPMI_CallRealModeOldISR(&MAIN_IntHandleRM, &MAIN_IntREG);
-        PIC_UnmaskIRQ(aui.card_irq);
-        return;
-    }
-    MAIN_InINT = TRUE;
-    if(aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
+    if(!MAIN_InINT && aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
     {
         MAIN_IntContext.regs = MAIN_IntREG;
         MAIN_IntContext.EFLAGS = MAIN_IntREG.w.flags | CPU_VMFLAG;
@@ -676,10 +667,12 @@ static void MAIN_InterruptRM()
     }
     else
     {
+        BOOL InInt = MAIN_InINT;
+        MAIN_InINT = TRUE;
         DPMI_CallRealModeOldISR(&MAIN_IntHandleRM, &MAIN_IntREG);
         PIC_UnmaskIRQ(aui.card_irq);
+        MAIN_InINT = InInt;
     }
-    MAIN_InINT = FALSE;
 }
 
 static void MAIN_Interrupt()
