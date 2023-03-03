@@ -282,8 +282,8 @@
                          * 0x00110000 Capture. Int on half buffer.
                          */
 #define INTE2            0x2c        /* P16V Interrupt enable register.     */
-#define INTE2_PLAYBACK_CH_0_PERIOID   0x00000010 // playback channel 0 period, guessed from sblive24: EXTENDED_INT_MASK
-#define INTE2_PLAYBACK_CH_0_HALF_PERIOID   0x00000001
+//#define INTE2_PLAYBACK_CH_0_PERIOD   0x00000010 // playback channel 0 period, guessed from sblive24: EXTENDED_INT_MASK
+//#define INTE2_PLAYBACK_CH_0_HALF_PERIOD   0x00000001 //not working
 #define INTE2_PLAYBACK_CH_0_LOOP      0x00001000 /* Playback Channel 0 loop                               */
 #define INTE2_PLAYBACK_CH_0_HALF_LOOP 0x00000100 /* Playback Channel 0 half loop                          */
 #define INTE2_PLAYBACK_CH_1_LOOP      0x00002000 /* Playback Channel 1 loop                               */
