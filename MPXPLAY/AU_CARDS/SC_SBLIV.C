@@ -725,7 +725,7 @@ static void emu10k1_pcm_init_voice(struct emu10k1_card *card,
 
  #ifdef SBEMU
  emu10k1_writefn0(card, INTE, emu10k1_readfn0(card, INTE)|INTE_SAMPLERATETRACKER|INTE_INTERVALTIMERENB); //enable timer interrupt
- emu10k1_writefn0(card, TIMER, 0x3FF); //set timer rate
+ emu10k1_writefn0(card, TIMER, 0x240); //set timer rate
  #endif
 }
 
@@ -885,8 +885,8 @@ static void snd_emu10kx_clear_cache(struct emu10k1_card *card)
 #ifdef SBEMU
 static int snd_emu_10kx_isr(struct emu10k1_card *card)
 {
-  int interrupts = emu10k1_readfn0(card, IPR, 0);
-  emu10k1_writefn0(card, IPR, 0, interrupts);
+  int interrupts = emu10k1_readfn0(card, IPR);
+  emu10k1_writefn0(card, IPR, interrupts);
   return interrupts;
 }
 #endif
@@ -999,7 +999,7 @@ static void snd_p16v_pcm_prepare_playback(struct emu10k1_card *card,unsigned int
  emu10k1_ptr20_write(card, 0x08, channel, 0);
  #ifdef SBEMU
  emu10k1_writefn0(card, INTE, emu10k1_readfn0(card, INTE)|INTE_SAMPLERATETRACKER|INTE_INTERVALTIMERENB); //enable timer interrupt
- emu10k1_writefn0(card, TIMER, 0x3FF); //set timer rate
+ emu10k1_writefn0(card, TIMER, 0x240); //set timer rate
  #endif
 }
 
