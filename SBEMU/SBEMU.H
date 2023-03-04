@@ -63,6 +63,15 @@
 #define SBEMU_CMD_8BIT_OUT_AUTO     0x1C
 #define SBEMU_CMD_8BIT_OUT_1_HS     0x91 //high speed mode, need a reset(acutally restore to previous) to exit hs mode
 #define SBEMU_CMD_8BIT_OUT_AUTO_HS  0x90
+#define SBEMU_CMD_4BIT_OUT_1        0x75 //4bit ADPCM
+#define SBEMU_CMD_4BIT_OUT_1_NREF   0x74
+#define SBEMU_CMD_4BIT_OUT_AUTO     0x7D
+#define SBEMU_CMD_3BIT_OUT_1        0x77 //3bit ADPCM
+#define SBEMU_CMD_3BIT_OUT_1_NREF   0x76
+#define SBEMU_CMD_3BIT_OUT_AUTO     0x7F
+#define SBEMU_CMD_2BIT_OUT_1        0x17 //2bit  ADPCM
+#define SBEMU_CMD_2BIT_OUT_1_NREF   0x16
+#define SBEMU_CMD_2BIT_OUT_AUTO     0x1F
 
 //sample rate used
 //fllowing commands
@@ -71,6 +80,7 @@
 #define SBEMU_CMD_8OR16_8_OUT_AUTO_NOFIFO 0xC4 //undocumented, FIFO bit(bit 1) off. from DOSBox source comments
 #define SBEMU_CMD_8OR16_16_OUT_1    0xB0
 #define SBEMU_CMD_8OR16_16_OUT_AUTO 0xB6
+#define SBEMU_CMD_8OR16_16_OUT_AUTO_NOFIFO 0xB4
 //fllowiing modes
 #define SBEMU_CMD_MODE_PCM8_MONO    0x00
 #define SBEMU_CMD_MODE_PCM8_STEREO  0x20
@@ -122,6 +132,7 @@ int SBEMU_IRQTriggered();
 void SBEMU_SetIRQTriggered(int triggered);
 uint8_t SBEMU_GetMixerReg(uint8_t index);
 
+int SBEMU_DecodeADPCM(uint8_t* adpcm, int bytes); //decode in place
 
 //hacks/workarounds
 int SBEMU_GetDetectionCounter();

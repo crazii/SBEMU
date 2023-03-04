@@ -733,7 +733,7 @@ static void MAIN_Interrupt()
         return;
     
     BOOL digital = SBEMU_HasStarted();
-    int dma = (SBEMU_GetBits() == 8 || MAIN_Options[OPT_TYPE].value < 6) ? SBEMU_GetDMA() : SBEMU_GetHDMA();
+    int dma = (SBEMU_GetBits() <= 8 || MAIN_Options[OPT_TYPE].value < 6) ? SBEMU_GetDMA() : SBEMU_GetHDMA();
     int32_t DMA_Count = VDMA_GetCounter(dma); //count in bytes
     if(digital)//&& DMA_Count != 0x10000) //-1(0xFFFF)+1=0
     {
@@ -742,7 +742,7 @@ static void MAIN_Interrupt()
         uint32_t SB_Bytes = SBEMU_GetSampleBytes();
         uint32_t SB_Pos = SBEMU_GetPos();
         uint32_t SB_Rate = SBEMU_GetSampleRate();
-        int samplesize = SBEMU_GetBits()/8; //sample size in bytes 1 for 8bit. 2 for 16bit
+        int samplesize = max(1, SBEMU_GetBits()/8); //sample size in bytes 1 for 8bit. 2 for 16bit
         int channels = SBEMU_GetChannels();
         _LOG("sample rate: %d %d\n", SB_Rate, aui.freq_card);
         _LOG("channels: %d, size:%d\n", channels, samplesize);
@@ -775,6 +775,8 @@ static void MAIN_Interrupt()
                 resample = FALSE;
             count = min(count, max(1,(DMA_Count)/samplesize/channels)); //max for stereo initial 1 byte
             count = min(count, max(1,(SB_Bytes-SB_Pos)/samplesize/channels)); //max for stereo initial 1 byte. 1/2channel = 0, make it 1
+            if(SBEMU_GetBits()<8) //ADPCM 8bit
+                count = max(1, count / (9 / SBEMU_GetBits()));
             _LOG("samples:%d %d %d, %d %d, %d %d\n", samples, pos+count, count, DMA_Count, DMA_Index, SB_Bytes, SB_Pos);
             int bytes = count * samplesize * channels;
 
@@ -782,6 +784,8 @@ static void MAIN_Interrupt()
                 memset(MAIN_PCM+pos*2, 0, bytes);
             else
                 DPMI_CopyLinear(DPMI_PTR2L(MAIN_PCM+pos*2), MAIN_DMA_MappedAddr+(DMA_Addr-MAIN_DMA_Addr)+DMA_Index, bytes);
+            if(SBEMU_GetBits()<8) //ADPCM  8bit
+                count = SBEMU_DecodeADPCM((uint8_t*)(MAIN_PCM+pos*2), bytes);
             if(samplesize != 2)
                 cv_bits_n_to_m(MAIN_PCM+pos*2, count*channels, samplesize, 2);
             if(resample/*SB_Rate != aui.freq_card*/)
