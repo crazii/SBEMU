@@ -16,8 +16,8 @@ Emulated modes/cards:\
 Sound blaster 1.0, 2.0, Pro, 16.
 
 Requirements:
- * HDPMI32i (HDPMI with IOPL0)
- * QEMM (optional, used for real mode games)
+ * HDPMI32i (HDPMI with IOPL0) (https://github.com/crazii/HX)
+ * QEMM (optional, used for real mode games) or JEMM (https://github.com/Baron-von-Riedesel/Jemm)
  
 SBEMU uses some source codes from:
  * MPXPlay: https://mpxplay.sourceforge.net/, for sound card drivers
