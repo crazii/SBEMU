@@ -64,10 +64,11 @@
 
 #define ICH_BD_IOC        0x8000 //buffer descriptor high word: interrupt on completion (IOC)
 
-#define ICH_DMABUF_PERIODS  32
+#define ICH_DMABUF_MAX_PERIODS  32
+#define ICH_DMABUF_PERIODS   4
 #define ICH_MAX_CHANNELS     2
 #define ICH_MAX_BYTES        4
-#define ICH_DMABUF_ALIGN (ICH_DMABUF_PERIODS*ICH_MAX_CHANNELS*ICH_MAX_BYTES) // 256
+#define ICH_DMABUF_ALIGN (ICH_DMABUF_MAX_PERIODS*ICH_MAX_CHANNELS*ICH_MAX_BYTES) // 256
 #ifdef SBEMU
 #define ICH_INT_INTERVAL     1 //interrupt interval in periods //long interval won't work for doom/doom2
 #endif
@@ -176,9 +177,9 @@ static unsigned int snd_intel_buffer_init(struct intel_card_s *card,struct mpxpl
  unsigned int bytes_per_sample=(aui->bits_set>16)? 4:2;
 
  card->pcmout_bufsize=MDma_get_max_pcmoutbufsize(aui,0,ICH_DMABUF_ALIGN,bytes_per_sample,0);
- card->dm=MDma_alloc_cardmem(ICH_DMABUF_PERIODS*2*sizeof(uint32_t)+card->pcmout_bufsize);
+ card->dm=MDma_alloc_cardmem(ICH_DMABUF_MAX_PERIODS*2*sizeof(uint32_t)+card->pcmout_bufsize);
  card->virtualpagetable=(uint32_t *)card->dm->linearptr; // pagetable requires 8 byte align, but dos-allocmem gives 16 byte align (so we don't need alignment correction)
- card->pcmout_buffer=((char *)card->virtualpagetable)+ICH_DMABUF_PERIODS*2*sizeof(uint32_t);
+ card->pcmout_buffer=((char *)card->virtualpagetable)+ICH_DMABUF_MAX_PERIODS*2*sizeof(uint32_t);
  aui->card_DMABUFF=card->pcmout_buffer;
  #ifdef SBEMU
  memset(card->pcmout_buffer, 0, card->pcmout_bufsize);
@@ -312,6 +313,11 @@ static void snd_intel_prepare_playback(struct intel_card_s *card,struct mpxplay_
   #else
   table_base[i*2+1]=period_size_samples;
   #endif
+ }
+ for(; i < ICH_DMABUF_MAX_PERIODS; ++i)
+ {
+  table_base[i*2]=0;
+  table_base[i*2+1]=0;
  }
  snd_intel_write_32(card,ICH_PO_BDBAR_REG,(uint32_t)pds_cardmem_physicalptr(card->dm,table_base));
 

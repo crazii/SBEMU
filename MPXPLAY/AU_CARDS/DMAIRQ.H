@@ -10,9 +10,14 @@
 extern "C" {
 #endif
 
+#ifdef SBEMU
+#define AUCARDS_DMABUFSIZE_NORMAL 4096
+#define AUCARDS_DMABUFSIZE_BLOCK  512   // default page (block) size
+#else
 #define AUCARDS_DMABUFSIZE_NORMAL 32768
-#define AUCARDS_DMABUFSIZE_MAX    131072
 #define AUCARDS_DMABUFSIZE_BLOCK  4096   // default page (block) size
+#endif
+#define AUCARDS_DMABUFSIZE_MAX    131072
 
 #define DMAMODE_AUTOINIT_OFF 0
 #define DMAMODE_AUTOINIT_ON  0x10
