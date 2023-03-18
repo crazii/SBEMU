@@ -230,6 +230,8 @@ struct MAIN_OPT
     "/O", "Select output. 0: headphone, 1: speaker. Intel HDA only", 1, 0,
     "/VOL", "Set master volume (0-9)", 7, 0,
     "/K", "Set internal sample rate, valid value: 22050,44100", 0x22050, 0,
+    "/SCL", "List installed sound cards", 0, 0,
+    "/SC", "Select sound card index in list (/SCL)", 0, 0,
 
 #if DEBUG
     "/test", "Test sound and exit", FALSE, 0,
@@ -250,6 +252,8 @@ enum EOption
     OPT_OUTPUT,
     OPT_VOL,
     OPT_RATE,
+    OPT_SCLIST,
+    OPT_SC,
 
 #if DEBUG
     OPT_TEST,
@@ -455,7 +459,11 @@ int main(int argc, char* argv[])
         printf("Both real mode & protected mode supprted are disabled, exiting.\n");
         return 1;
     }
-    
+
+    if(MAIN_Options[OPT_SCLIST].value)
+        aui.card_controlbits |= AUINFOS_CARDCNTRLBIT_TESTCARD; //note: this bit will make aui.card_handler == NULL and quit.
+    if(MAIN_Options[OPT_SC].value)
+        aui.card_select_index = MAIN_Options[OPT_SC].value; //TODO: this is a HEX in commandline, it's OK to not inform user since there's might not be over 10 (0xA) sound cards installed
     aui.card_select_config = MAIN_Options[OPT_OUTPUT].value;
     AU_init(&aui);
     if(!aui.card_handler)

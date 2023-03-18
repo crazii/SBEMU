@@ -207,8 +207,10 @@ auinit_retry:
    }else
 #endif
    {
+    if(!(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_TESTCARD)){
     sprintf(sout,"Unknown soundcard (output module) name : %s",cardselectname);
     pds_textdisplay_printf(sout);
+    }
     goto err_out_auinit;
    }
   }
@@ -281,6 +283,9 @@ auinit_retry:
   if(!aui->card_handler || (aui->card_controlbits&AUINFOS_CARDCNTRLBIT_TESTCARD)){
    asip=&all_sndcard_info[0];
    aui->card_handler=*asip;
+#ifdef SBEMU
+   aui->card_test_index = 1;
+#endif
    do{
     if(aui->card_handler->card_detect){
      if(!(aui->card_handler->infobits&SNDCARD_SELECT_ONLY)
@@ -289,8 +294,15 @@ auinit_retry:
 #endif
      ){
       if(carddetect(aui,0)){
-       if(!(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_TESTCARD))
+       if(!(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_TESTCARD)
+#ifdef SBEMU
+ && (aui->card_select_index == 0 || aui->card_select_index == aui->card_test_index)
+#endif
+)
         break;
+#ifdef SBEMU
+        ++aui->card_test_index;
+#endif
        if(aui->card_handler->card_close)
         aui->card_handler->card_close(aui);
        aui->card_private_data=NULL;
@@ -343,7 +355,12 @@ auinit_retry:
   }
  }
 
- printf("Found sound card: %s\n", aui->card_handler->shortname);
+#ifdef SBEMU
+ if(aui->card_select_index)
+  printf("Selected sound card %d: %s\n", aui->card_select_index, aui->card_handler->shortname);
+ else
+  printf("Found sound card: %s\n", aui->card_handler->shortname);
+#endif
 
  if(intsoundconfig&INTSOUND_NOINT08)
   funcbit_disable(aui->card_handler->infobits,SNDCARD_INT08_ALLOWED);
@@ -410,7 +427,12 @@ jump_back:
     pds_textdisplay_printf("Warning: initial soundcard config failed! Using default values: stereo, 16 bits");
    }
    if(aui->card_handler->card_info && (aui->card_controlbits&AUINFOS_CARDCNTRLBIT_TESTCARD))
+   {
+#ifdef SBEMU
+    printf("%d: ", aui->card_test_index);
+#endif
     aui->card_handler->card_info(aui);
+   }
    return 1;
   }
  }

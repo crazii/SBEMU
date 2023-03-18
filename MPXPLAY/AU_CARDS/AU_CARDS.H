@@ -223,7 +223,11 @@ typedef struct mpxplay_audioout_info_s{
  cardmem_t *card_dma_dosmem;
  char *card_DMABUFF;
 
- char *card_selectname;          // select card by name
+ char *card_selectname;          // select card by name - NOT used by SBEMU
+ #ifdef SBEMU
+ int card_test_index;
+ int card_select_index;
+ #endif
  struct one_sndcard_info *card_handler; // function structure of the card
  void *card_private_data;        // extra private datas can be pointed here (with malloc)
  unsigned short card_type;
