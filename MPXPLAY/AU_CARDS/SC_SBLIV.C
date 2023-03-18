@@ -722,11 +722,6 @@ static void emu10k1_pcm_init_voice(struct emu10k1_card *card,
  emu10k1_writeptr(card, PEFE_FILTERAMOUNT, voice, 0); // was 0x7f
  // pitch envelope
  emu10k1_writeptr(card, PEFE_PITCHAMOUNT, voice, 0);
-
- #ifdef SBEMU
- emu10k1_writefn0(card, INTE, emu10k1_readfn0(card, INTE)|INTE_SAMPLERATETRACKER|INTE_INTERVALTIMERENB); //enable timer interrupt
- emu10k1_writefn0(card, TIMER, 0x240); //set timer rate
- #endif
 }
 
 static void snd_emu10k1_playback_start_voice(struct emu10k1_card *card,
@@ -862,6 +857,11 @@ static void snd_emu10kx_setrate(struct emu10k1_card *card,struct mpxplay_audioou
 
 static void snd_emu10kx_pcm_start_playback(struct emu10k1_card *card)
 {
+#ifdef SBEMU
+ emu10k1_writefn0(card, INTE, emu10k1_readfn0(card, INTE)|INTE_SAMPLERATETRACKER|INTE_INTERVALTIMERENB); //enable timer interrupt
+ emu10k1_writefn0(card, TIMER, 0x240); //set timer rate
+#endif
+
  snd_emu10k1_playback_start_voice(card,0,VOICE_FLAGS_MASTER);
  snd_emu10k1_playback_start_voice(card,1,0);
 }
@@ -997,10 +997,6 @@ static void snd_p16v_pcm_prepare_playback(struct emu10k1_card *card,unsigned int
  emu10k1_ptr20_write(card, PLAYBACK_POINTER, channel, 0);
  emu10k1_ptr20_write(card, 0x07, channel, 0x0);
  emu10k1_ptr20_write(card, 0x08, channel, 0);
- #ifdef SBEMU
- emu10k1_writefn0(card, INTE, emu10k1_readfn0(card, INTE)|INTE_SAMPLERATETRACKER|INTE_INTERVALTIMERENB); //enable timer interrupt
- emu10k1_writefn0(card, TIMER, 0x240); //set timer rate
- #endif
 }
 
 static void snd_p16v_setrate(struct emu10k1_card *card,struct mpxplay_audioout_info_s *aui)
@@ -1034,6 +1030,10 @@ static void snd_p16v_pcm_start_playback(struct emu10k1_card *card)
 {
  const uint32_t channel=0;
  emu10k1_ptr20_write(card, BASIC_INTERRUPT, 0, emu10k1_ptr20_read(card, BASIC_INTERRUPT, 0) | (0x1<<channel));
+ #ifdef SBEMU
+ emu10k1_writefn0(card, INTE, emu10k1_readfn0(card, INTE)|INTE_SAMPLERATETRACKER|INTE_INTERVALTIMERENB); //enable timer interrupt
+ emu10k1_writefn0(card, TIMER, 0x240); //set timer rate
+ #endif
 }
 
 static void snd_p16v_pcm_stop_playback(struct emu10k1_card *card)
