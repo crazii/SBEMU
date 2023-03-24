@@ -41,6 +41,7 @@
 #define VIA_REG_OFFSET_STATUS         0x00    /* byte - channel status */
 #define VIA_REG_STATUS_FLAG 0x01
 #define VIA_REG_STATUS_EOL  0x02
+#define VIA_REG_STATUS_STOP_IDX 0x04
 
 #define VIA_REG_OFFSET_CONTROL         0x01    /* byte - channel control */
 #define  VIA_REG_CTRL_START         0x80    /* WO */
@@ -260,15 +261,6 @@ static int VIA82XX_adetect(struct mpxplay_audioout_info_s *aui)
  card->irq    = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
  card->chiprev= pcibios_ReadConfig_Byte(card->pci_dev, PCIR_RID);
  card->model  = pcibios_ReadConfig_Word(card->pci_dev, PCIR_SSID);
- #ifdef SBEMU
- aui->card_irq = card->irq;
- //printf("VT82 irq: %d\n",aui->card_irq);
- if(aui->card_irq == 0 || aui->card_irq == 0xFF)
- {
-     aui->card_irq = card->irq = 10;
-     pcibios_WriteConfig_Byte(card->pci_dev, PCIR_INTR_LN, aui->card_irq); //RW
- }
- #endif
 
  // alloc buffers
  card->pcmout_bufsize=MDma_get_max_pcmoutbufsize(aui,0,PCMBUFFERPAGESIZE,2,0);
@@ -284,6 +276,16 @@ static int VIA82XX_adetect(struct mpxplay_audioout_info_s *aui)
 
  // init chip
  via82xx_chip_init(card);
+
+ #ifdef SBEMU
+ aui->card_irq = card->irq;
+ //printf("VT82 irq: %d\n",aui->card_irq);
+ if(aui->card_irq == 0 || aui->card_irq == 0xFF)
+ {
+     aui->card_irq = card->irq = 10;
+     //pcibios_WriteConfig_Byte(card->pci_dev, PCIR_INTR_LN, aui->card_irq); //RW //delayed in VIA82XX_start
+ }
+ #endif
 
  return 1;
 
@@ -361,13 +363,8 @@ static void VIA82XX_setrate(struct mpxplay_audioout_info_s *aui)
 
  if(card->pci_dev->device_id==PCI_DEVICE_ID_VT82C686){
   outb(card->iobase+VIA_REG_OFFSET_TYPE,
-  #ifndef SBEMU
     VIA_REG_TYPE_AUTOSTART |
     VIA_REG_TYPE_16BIT | VIA_REG_TYPE_STEREO ); // old: 0xB0
-  #else
-    VIA_REG_TYPE_AUTOSTART |
-    VIA_REG_TYPE_16BIT | VIA_REG_TYPE_STEREO | VIA_REG_TYPE_INT_LSAMPLE | VIA_REG_TYPE_INT_EOL | VIA_REG_TYPE_INT_FLAG);
-  #endif
     //VIA_REG_TYPE_INT_LSAMPLE |                     // ?????
     //VIA_REG_TYPE_INT_EOL | VIA_REG_TYPE_INT_FLAG); // ?????
     // new: 0xB7
@@ -391,12 +388,21 @@ static void VIA82XX_start(struct mpxplay_audioout_info_s *aui)
 {
  struct via82xx_card *card=aui->card_private_data;
  if(card->pci_dev->device_id==PCI_DEVICE_ID_VT82C686)
+ {
+  #ifdef SBEMU
+  outb(card->iobase+VIA_REG_OFFSET_TYPE, inb(card->iobase+VIA_REG_OFFSET_TYPE) | VIA_REG_TYPE_INT_LSAMPLE | VIA_REG_TYPE_INT_EOL | VIA_REG_TYPE_INT_FLAG);
+  #endif
   outb(card->iobase + VIA_REG_OFFSET_CONTROL, VIA_REG_CTRL_START);
+ }
  else
  #ifdef SBEMU
   outb(card->iobase + VIA_REG_OFFSET_CONTROL, VIA_REG_CTRL_START | VIA_REG_CTRL_AUTOSTART | VIA_REG_CTRL_INT_FLAG | VIA_REG_CTRL_INT_EOL); //enable EOL & FLAG interrupt
  #else
   outb(card->iobase + VIA_REG_OFFSET_CONTROL, VIA_REG_CTRL_START | VIA_REG_CTRL_AUTOSTART);
+ #endif
+
+ #ifdef SBEMU
+  pcibios_WriteConfig_Byte(card->pci_dev, PCIR_INTR_LN, aui->card_irq); //INTR_LN:RW. in case original irq is invalid(0 or 0xFF)
  #endif
 }
 
@@ -553,7 +559,7 @@ static int VIA82XX_IRQRoutine(mpxplay_audioout_info_s* aui)
 {
   struct via82xx_card *card=aui->card_private_data;
 
-  int status = inb(card->iobase + VIA_REG_OFFSET_STATUS)&(VIA_REG_STATUS_FLAG|VIA_REG_STATUS_EOL);
+  int status = inb(card->iobase + VIA_REG_OFFSET_STATUS)&(VIA_REG_STATUS_FLAG|VIA_REG_STATUS_EOL|VIA_REG_STATUS_STOP_IDX);
   if(status)
     outb(card->iobase+VIA_REG_OFFSET_STATUS, status);
   return status != 0;
