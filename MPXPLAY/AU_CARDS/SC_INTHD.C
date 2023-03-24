@@ -522,6 +522,10 @@ static int parse_output_path(struct intelhd_card_s *card,struct hda_gnode *node,
  if(node->checked)
   return 0;
 
+  #ifdef SBEMU
+  snd_hda_codec_write(card, node->nid, 0, AC_VERB_SET_POWER_STATE, 0/*full power*/); 
+  #endif
+
  node->checked = 1;
  if(node->type == AC_WID_AUD_OUT) {
   if(node->wid_caps & AC_WCAP_DIGITAL)
