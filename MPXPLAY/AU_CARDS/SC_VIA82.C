@@ -46,7 +46,7 @@
 #define  VIA_REG_CTRL_START         0x80    /* WO */
 #define  VIA_REG_CTRL_TERMINATE         0x40    /* WO */
 #define  VIA_REG_CTRL_PAUSE         0x08    /* RW */
-#define  VIA_REG_CTRL_RESET         0x01    /* RW - probably reset? undocumented */
+//#define  VIA_REG_CTRL_RESET         0x01    /* RW - probably reset? undocumented */
 
 #define VIA_REG_OFFSET_TYPE          0x02    /* byte - channel type */
 #define  VIA_REG_TYPE_INT_LSAMPLE    0x04    /* interrupt on last sample sent */
@@ -59,6 +59,9 @@
 
 // VT8233
 #define VIA_REG_CTRL_AUTOSTART         0x20
+#define VIA_REG_CTRL_INT_STOP_IDX      0x04  /* interrupt on stop index */
+#define VIA_REG_CTRL_INT_EOL           0x02  /* interrupt on end of link */
+#define VIA_REG_CTRL_INT_FLAG          0x01  /* interrupt on flag */
 #define VIA_REG_OFFSET_STOP_IDX      0x08    /* dword - stop index, channel type, sample rate */
 #define VIA_REG_TYPE_AUTOSTART         0x80    /* RW - autostart at EOL */
 #define VIA_REG_TYPE_16BIT         0x20    /* RW */
@@ -130,7 +133,7 @@ static void via82xx_channel_reset(struct via82xx_card *card)
 {
  unsigned int baseport = card->iobase;
 
- outb(baseport+VIA_REG_OFFSET_CONTROL, VIA_REG_CTRL_PAUSE|VIA_REG_CTRL_TERMINATE|VIA_REG_CTRL_RESET);
+ outb(baseport+VIA_REG_OFFSET_CONTROL, VIA_REG_CTRL_PAUSE|VIA_REG_CTRL_TERMINATE/*|VIA_REG_CTRL_RESET*/);
  pds_delay_10us(5);
  outb(baseport + VIA_REG_OFFSET_CONTROL, 0x00);
  outb(baseport + VIA_REG_OFFSET_STATUS, 0xFF);
@@ -277,11 +280,6 @@ static int VIA82XX_adetect(struct mpxplay_audioout_info_s *aui)
  card->virtualpagetable=(void *)(((uint32_t)card->dm->linearptr+4095)&(~4095));
  card->pcmout_buffer=(char *)card->virtualpagetable+VIRTUALPAGETABLESIZE;
 
- #ifdef SBEMU
- memset(card->virtualpagetable, 0, VIRTUALPAGETABLESIZE);
- memset(card->pcmout_buffer, 0, card->pcmout_bufsize);
- #endif
-
  aui->card_DMABUFF=card->pcmout_buffer;
 
  // init chip
@@ -395,7 +393,11 @@ static void VIA82XX_start(struct mpxplay_audioout_info_s *aui)
  if(card->pci_dev->device_id==PCI_DEVICE_ID_VT82C686)
   outb(card->iobase + VIA_REG_OFFSET_CONTROL, VIA_REG_CTRL_START);
  else
+ #ifdef SBEMU
+  outb(card->iobase + VIA_REG_OFFSET_CONTROL, VIA_REG_CTRL_START | VIA_REG_CTRL_AUTOSTART | VIA_REG_CTRL_INT_FLAG | VIA_REG_CTRL_INT_EOL); //enable EOL & FLAG interrupt
+ #else
   outb(card->iobase + VIA_REG_OFFSET_CONTROL, VIA_REG_CTRL_START | VIA_REG_CTRL_AUTOSTART);
+ #endif
 }
 
 static void VIA82XX_stop(struct mpxplay_audioout_info_s *aui)
