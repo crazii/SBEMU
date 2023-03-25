@@ -522,10 +522,6 @@ static int parse_output_path(struct intelhd_card_s *card,struct hda_gnode *node,
  if(node->checked)
   return 0;
 
-  #ifdef SBEMU
-  snd_hda_codec_write(card, node->nid, 0, AC_VERB_SET_POWER_STATE, 0/*full power*/); 
-  #endif
-
  node->checked = 1;
  if(node->type == AC_WID_AUD_OUT) {
   if(node->wid_caps & AC_WCAP_DIGITAL)
@@ -817,8 +813,17 @@ static unsigned int snd_ihd_mixer_init(struct intelhd_card_s *card)
  if(!card->afg_nodes)
   goto err_out_mixinit;
 
+  #ifdef SBEMU
+  snd_hda_codec_write(card, card->afg_root_nodenum, 0, AC_VERB_SET_POWER_STATE, 0/*full power*/); 
+  #endif
+
  for(i=0;i<card->afg_num_nodes;i++,nid++)
+ {
   snd_hda_add_new_node(card,&card->afg_nodes[i],nid);
+  #ifdef SBEMU
+  snd_hda_codec_write(card, nid, 0, AC_VERB_SET_POWER_STATE, 0/*full power*/); 
+  #endif
+ }
 
  if(!snd_hda_parse_output(card))
   goto err_out_mixinit;
@@ -1356,6 +1361,7 @@ static unsigned long INTELHD_readMIXER(struct mpxplay_audioout_info_s *aui,unsig
 static int INTELHD_IRQRoutine(mpxplay_audioout_info_s* aui)
 {
   struct intelhd_card_s *card=aui->card_private_data;
+
   int status = azx_sd_readb(card, SD_STS)&SD_INT_MASK;
   if(status)
     azx_sd_writeb(card, SD_STS, status); //ack all
@@ -1374,7 +1380,7 @@ static int INTELHD_IRQRoutine(mpxplay_audioout_info_s* aui)
     azx_writew(card, GSTS, gsts);
   if(statests)
     azx_writew(card, STATESTS, statests);
-  return status || corbsts || rirbsts;
+  return status | corbsts | rirbsts | gsts | statests;
 }
 #endif
 
