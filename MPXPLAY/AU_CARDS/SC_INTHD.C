@@ -1367,6 +1367,13 @@ static int INTELHD_IRQRoutine(mpxplay_audioout_info_s* aui)
     azx_writeb(card, CORBSTS, corbsts);
   if(rirbsts)
     azx_writeb(card, RIRBSTS, rirbsts);
+  //ack gsts & statests ?
+  int gsts = azx_readw(card, GSTS);
+  int statests = azx_readw(card, STATESTS);
+  if(gsts)
+    azx_writew(card, GSTS, gsts);
+  if(statests)
+    azx_writew(card, STATESTS, statests);
   return status || corbsts || rirbsts;
 }
 #endif

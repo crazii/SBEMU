@@ -207,7 +207,7 @@ auinit_retry:
    }else
 #endif
    {
-    if(!(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_TESTCARD)){
+    if(!(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_TESTCARD) && !(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_SILENT)){
     sprintf(sout,"Unknown soundcard (output module) name : %s",cardselectname);
     pds_textdisplay_printf(sout);
     }
@@ -222,7 +222,7 @@ auinit_retry:
    if(!carddetect(aui,1))
     aui->card_handler=NULL;
   }
-  if(!aui->card_handler){
+  if(!aui->card_handler && !(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_SILENT)){
    sprintf(sout,"Cannot initialize %s soundcard (not exists or unsupported settings)!",cardselectname);
    pds_textdisplay_printf(sout);
    goto err_out_auinit;
@@ -349,17 +349,20 @@ auinit_retry:
    error_code = MPXERROR_UNDEFINED;
    goto err_out_auinit;
   }
-  if(!aui->card_handler){
+  if(!aui->card_handler && !(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_SILENT)){
    pds_textdisplay_printf("No soundcard found!");
    goto err_out_auinit;
   }
  }
 
 #ifdef SBEMU
- if(aui->card_select_index)
-  printf("Selected sound card %d: %s\n", aui->card_select_index, aui->card_handler->shortname);
- else
-  printf("Found sound card: %s\n", aui->card_handler->shortname);
+ if(!(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_SILENT))
+ {
+  if(aui->card_select_index)
+   printf("Selected sound card %d: %s\n", aui->card_select_index, aui->card_handler->shortname);
+  else
+   printf("Found sound card: %s\n", aui->card_handler->shortname);
+ }
 #endif
 
  if(intsoundconfig&INTSOUND_NOINT08)

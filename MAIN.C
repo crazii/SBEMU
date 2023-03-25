@@ -17,6 +17,8 @@
 #include <MPXPLAY.H>
 #include <AU_MIXER/MIX_FUNC.H>
 
+#define MAIN_SBEMU_VER "1.0 beta2c"
+
 //TEST
 extern void TestSound(BOOL play);
 extern int16_t* TEST_Sample;
@@ -210,6 +212,9 @@ QEMM_IOPT MAIN_VIRQ_IOPT_PM1;
 QEMM_IOPT MAIN_VIRQ_IOPT_PM2;
 QEMM_IOPT MAIN_SB_IOPT_PM;
 
+#define MAIN_SETCMD_SET 0x01 //set in command line
+#define MAIN_SETCMD_HIDDEN 0x02 //hidden flag on report
+
 struct MAIN_OPT
 {
     const char* option;
@@ -230,8 +235,9 @@ struct MAIN_OPT
     "/O", "Select output. 0: headphone, 1: speaker. Intel HDA only", 1, 0,
     "/VOL", "Set master volume (0-9)", 7, 0,
     "/K", "Set internal sample rate, valid value: 22050,44100", 0x22050, 0,
-    "/SCL", "List installed sound cards", 0, 0,
-    "/SC", "Select sound card index in list (/SCL)", 0, 0,
+    "/SCL", "List installed sound cards", 0, MAIN_SETCMD_HIDDEN,
+    "/SC", "Select sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN,
+    "/R", "Reset sound card driver", 0, MAIN_SETCMD_HIDDEN,
 
 #if DEBUG
     "/test", "Test sound and exit", FALSE, 0,
@@ -254,6 +260,7 @@ enum EOption
     OPT_RATE,
     OPT_SCLIST,
     OPT_SC,
+    OPT_RESET,
 
 #if DEBUG
     OPT_TEST,
@@ -307,20 +314,22 @@ static void MAIN_InvokeIRQ(uint8_t irq)
 
 int main(int argc, char* argv[])
 {
+    printf("SBEMU: Sound Blaster emulation on AC97. Version: %s", MAIN_SBEMU_VER);
     if((argc == 2 && stricmp(argv[1],"/?") == 0))
     {
-        printf("SBEMU: Sound Blaster emulation on AC97. Usage:\n");
+        printf("Usage:\n");
         int i = 0;
         while(MAIN_Options[i].option)
         {
             printf(" %-8s: %s. Default: %x\n", MAIN_Options[i].option, MAIN_Options[i].desc, MAIN_Options[i].value);
             ++i;
         }
-        printf("\nNote: SBEMU will read BLASTER environment variable and use it, "
+        printf("Note: SBEMU will read BLASTER environment variable and use it, "
         "\n if /A /I /D /T /H set, they will override the BLASTER values.\n");
-        printf("\nSource code used from:\n    MPXPlay (https://mpxplay.sourceforge.net/)\n    DOSBox (https://www.dosbox.com/)\n");
+        printf("Source code used from:\n    MPXPlay (https://mpxplay.sourceforge.net/)\n    DOSBox (https://www.dosbox.com/)\n");
         return 0;
     }
+    printf("\n");
     //parse BLASTER env first.
     {
         char* blaster = getenv("BLASTER");
@@ -352,7 +361,7 @@ int main(int argc, char* argv[])
             {
                 int arglen = strlen(argv[i]);
                 MAIN_Options[j].value = arglen == len ? 1 : strtol(&argv[i][len], NULL, 16);
-                MAIN_Options[j].setcmd = TRUE;
+                MAIN_Options[j].setcmd |= MAIN_SETCMD_SET;
                 break;
             }
         }
@@ -471,14 +480,17 @@ int main(int argc, char* argv[])
     if(aui.card_irq == MAIN_Options[OPT_IRQ].value)
     {
         printf("Sound card IRQ conflict, abort.\n");
+        printf("Please try use /i5 or /i7 switch, or disable some onboard devices in the BIOS settings to release IRQs.\n");
         return 1;
     }
+    PIC_MaskIRQ(aui.card_irq);
+    
     AU_ini_interrupts(&aui);
-    AU_setmixer_init(&aui);
-    AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 100);
     int samplerate = (MAIN_Options[OPT_RATE].value == 0x22050) ? 22050 : 44100;
     mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, samplerate, SBEMU_CHANNELS, SBEMU_CHANNELS, NULL, SBEMU_BITS, SBEMU_BITS/8, 0};
     AU_setrate(&aui, &adi);
+    AU_setmixer_init(&aui);
+    AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 100);
     //set volume
     MAIN_GLB_VOL = MAIN_Options[OPT_VOL].value;
     MAIN_SB_VOL = 256*MAIN_GLB_VOL/9;
@@ -890,7 +902,7 @@ void MAIN_TSR_InstallationCheck()
         //printf("DOSID:%x\n", DPMI_SEGOFF2L(r.w.dx, r.w.di));
         if(DPMI_CompareLinear(DPMI_SEGOFF2L(r.w.dx, r.w.di), DPMI_PTR2L((char*)MAIN_ISR_DOSID_String), 16) == 0)
         {
-            printf("SBEMU is active.\n\n");
+            printf("SBEMU is active.\n");
 
             r.h.ah = i;
             r.h.al = 0x01; //get current settings
@@ -901,12 +913,14 @@ void MAIN_TSR_InstallationCheck()
 
             for(int j = 0; j < OPT_COUNT; ++j)
             {
-                if(MAIN_Options[j].setcmd && MAIN_Options[j].value != opt[j].value)
+                if((MAIN_Options[j].setcmd==MAIN_SETCMD_SET) && MAIN_Options[j].value != opt[j].value)
                 {
                     printf("%s changed from %x to %x\n", MAIN_Options[j].option, opt[j].value, MAIN_Options[j].value);
                     opt[j].value = MAIN_Options[j].value;
                 }
             }
+            if(MAIN_Options[OPT_RESET].value)
+                printf("Resetting sound card driver...\n");
             printf("\n");
 
             r.h.ah = i;
@@ -920,8 +934,10 @@ void MAIN_TSR_InstallationCheck()
             DPMI_CopyLinear(DPMI_PTR2L(opt), r.d.ebx, sizeof(MAIN_Options));
             printf("Current settings:\n");
             for(int i = OPT_Help+1; i < OPT_COUNT; ++i)
-                printf("%-8s: %x\n", MAIN_Options[i].option, opt[i].value);
-
+            {
+                if(!(MAIN_Options[i].setcmd&MAIN_SETCMD_HIDDEN))
+                    printf("%-8s: %x\n", MAIN_Options[i].option, opt[i].value);
+            }
             free(opt);
             exit(0);
         }
@@ -956,48 +972,65 @@ static void MAIN_TSR_Interrupt()
             struct MAIN_OPT* opt = (struct MAIN_OPT*)malloc(sizeof(MAIN_Options));
             DPMI_CopyLinear(DPMI_PTR2L(opt), MAIN_TSRREG.d.ebx, sizeof(MAIN_Options));
 
-            if(MAIN_Options[OPT_OUTPUT].value != opt[OPT_OUTPUT].value || MAIN_Options[OPT_RATE].value != opt[OPT_RATE].value)
+            char* fpustate = (char*)malloc(108);
+            asm("fsave %0\n\t finit":"=m"(*fpustate));
+            int irq = aui.card_irq;
+            PIC_MaskIRQ(irq);
+            if(MAIN_Options[OPT_OUTPUT].value != opt[OPT_OUTPUT].value || MAIN_Options[OPT_RATE].value != opt[OPT_RATE].value || opt[OPT_RESET].value)
             {
-                if(opt[OPT_OUTPUT].value != MAIN_Options[OPT_OUTPUT].value)
+                if(opt[OPT_OUTPUT].value != MAIN_Options[OPT_OUTPUT].value || opt[OPT_RESET].value)
                 {
-                    aui.card_select_config = MAIN_Options[OPT_OUTPUT].value = opt[OPT_OUTPUT].value;
+                    _LOG("Reset\n");
                     AU_close(&aui);
+                    memset(&aui, 0, sizeof(aui));
+                    aui.card_select_config = MAIN_Options[OPT_OUTPUT].value = opt[OPT_OUTPUT].value;
+                    aui.card_select_index =  MAIN_Options[OPT_SC].value;
+                    aui.card_controlbits |= AUINFOS_CARDCNTRLBIT_SILENT; //don't print anything in interrupt
                     AU_init(&aui);
                     AU_ini_interrupts(&aui);
                     AU_setmixer_init(&aui);
                     AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 100);
                     MAIN_Options[OPT_VOL].value = ~opt[OPT_VOL].value; //mark volume dirty
                 }
+                if(MAIN_Options[OPT_RATE].value != opt[OPT_RATE].value)
+                    OPL3EMU_Init(aui.freq_card);
+                MAIN_Options[OPT_RATE].value = opt[OPT_RATE].value;
+                _LOG("Change sample rate\n");
+                _LOG("FLAGS:%x\n",CPU_FLAGS());
 
                 int samplerate = (MAIN_Options[OPT_RATE].value == 0x22050) ? 22050 : 44100;
                 mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, samplerate, SBEMU_CHANNELS, SBEMU_CHANNELS, NULL, SBEMU_BITS, SBEMU_BITS/8, 0};
                 AU_setrate(&aui, &adi);
-                AU_prestart(&aui); //setrate will do stop
+                AU_prestart(&aui); //setsamplerate/reset will do stop
                 AU_start(&aui);
-                if(MAIN_Options[OPT_RATE].value != opt[OPT_RATE].value)
-                    OPL3EMU_Init(aui.freq_card);
-                MAIN_Options[OPT_RATE].value = opt[OPT_RATE].value;                
             }
             if(MAIN_Options[OPT_VOL].value != opt[OPT_VOL].value)
             {
+                _LOG("Reset volume\n");
                 MAIN_Options[OPT_VOL].value = opt[OPT_VOL].value;
                 MAIN_GLB_VOL = MAIN_Options[OPT_VOL].value;
                 MAIN_SB_VOL = 256*MAIN_GLB_VOL/9;
                 AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, MAIN_GLB_VOL*100/9);
             }
+            asm("frstor %0" ::"m"(*fpustate));
+            free(fpustate);
+            PIC_UnmaskIRQ(irq);
 
             if(MAIN_Options[OPT_DMA].value != opt[OPT_DMA].value)
             {
+                _LOG("Change DMA\n");
                 VDMA_Virtualize(MAIN_Options[OPT_DMA].value, FALSE);
                 VDMA_Virtualize(opt[OPT_DMA].value, TRUE);
             }
             if(MAIN_Options[OPT_HDMA].value != opt[OPT_HDMA].value)
             {
+                _LOG("Change HDMA\n");
                 VDMA_Virtualize(MAIN_Options[OPT_HDMA].value, FALSE);
                 VDMA_Virtualize(opt[OPT_HDMA].value, TRUE);
             }
             if(MAIN_Options[OPT_DMA].value != opt[OPT_DMA].value || MAIN_Options[OPT_HDMA].value != opt[OPT_HDMA].value || MAIN_Options[OPT_IRQ].value != opt[OPT_IRQ].value || opt[OPT_TYPE].value != MAIN_Options[OPT_TYPE].value)
             {
+                _LOG("Reinit SBEMU\n");
                 MAIN_Options[OPT_DMA].value = opt[OPT_DMA].value;
                 MAIN_Options[OPT_HDMA].value = opt[OPT_HDMA].value;
                 MAIN_Options[OPT_IRQ].value = opt[OPT_IRQ].value;
@@ -1006,8 +1039,11 @@ static void MAIN_TSR_Interrupt()
             }
 
             if(MAIN_Options[OPT_OPL].value == opt[OPT_OPL].value && MAIN_Options[OPT_ADDR].value == opt[OPT_ADDR].value && MAIN_Options[OPT_PM].value == opt[OPT_PM].value && MAIN_Options[OPT_RM].value == opt[OPT_RM].value)
+            {
+                free(opt);
                 return;
-
+            }
+            
             //re-install all
             if(MAIN_Options[OPT_RM].value)
             {

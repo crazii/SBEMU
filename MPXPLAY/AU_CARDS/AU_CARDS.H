@@ -17,6 +17,7 @@ extern "C" {
 #define AUINFOS_CARDCNTRLBIT_AUTOTAGGING    256 // copy tags (id3infos) from infile to outfile (if possible)
 #define AUINFOS_CARDCNTRLBIT_AUTOTAGLFN     512 // create filename from id3infos (usually "NN. Artist - Title.ext"
 #define AUINFOS_CARDCNTRLBIT_UPDATEFREQ    1024 // change/update soundcard freq
+#define AUINFOS_CARDCNTRLBIT_SILENT        2048 // hide output messages (for TSR interrupt routines)
 
 //au_infos->card_infobits
 #define AUINFOS_CARDINFOBIT_PLAYING          1

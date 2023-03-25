@@ -221,8 +221,8 @@ static void snd_intel_chip_init(struct intel_card_s *card)
  //snd_intel_codec_read(card,0); // clear semaphore flag (removed for ICH0)
  snd_intel_write_8(card,ICH_PO_CR_REG,ICH_PO_CR_RESET); // reset channels
  #ifdef SBEMU
- pds_mdelay(50);
- snd_intel_write_8(card,ICH_PO_CR_REG,/*ICH_PO_CR_LVBIE*/ICH_PO_CR_IOCE);
+ //pds_mdelay(50);
+ //snd_intel_write_8(card,ICH_PO_CR_REG,/*ICH_PO_CR_LVBIE*/ICH_PO_CR_IOCE);
  #endif
 
  mpxplay_debugf(ICH_DEBUG_OUTPUT,"chip init end");
@@ -490,6 +490,11 @@ static void INTELICH_start(struct mpxplay_audioout_info_s *aui)
  unsigned char cmd;
 
  snd_intel_codec_ready(card,ICH_GLOB_STAT_PCR);
+
+ #ifdef SBEMU
+ snd_intel_write_8(card,ICH_PO_CR_REG,/*ICH_PO_CR_LVBIE*/ICH_PO_CR_IOCE);
+ snd_intel_write_8(card,ICH_PO_LVI_REG,(snd_intel_read_8(card, ICH_PO_CIV_REG)-1)%ICH_DMABUF_PERIODS);
+ #endif
 
  cmd=snd_intel_read_8(card,ICH_PO_CR_REG);
  funcbit_enable(cmd,ICH_PO_CR_START);
