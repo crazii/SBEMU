@@ -483,18 +483,6 @@ int main(int argc, char* argv[])
         printf("Please try use /i5 or /i7 switch, or disable some onboard devices in the BIOS settings to release IRQs.\n");
         return 1;
     }
-    PIC_MaskIRQ(aui.card_irq);
-    
-    AU_ini_interrupts(&aui);
-    int samplerate = (MAIN_Options[OPT_RATE].value == 0x22050) ? 22050 : 44100;
-    mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, samplerate, SBEMU_CHANNELS, SBEMU_CHANNELS, NULL, SBEMU_BITS, SBEMU_BITS/8, 0};
-    AU_setrate(&aui, &adi);
-    AU_setmixer_init(&aui);
-    AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 100);
-    //set volume
-    MAIN_GLB_VOL = MAIN_Options[OPT_VOL].value;
-    MAIN_SB_VOL = 256*MAIN_GLB_VOL/9;
-    AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, MAIN_GLB_VOL*100/9);
     
     printf("Real mode support: %s.\n", enableRM ? "enabled" : "disabled");
     printf("Protected mode support: %s.\n", enablePM ? "enabled" : "disabled");
@@ -523,7 +511,7 @@ int main(int argc, char* argv[])
             return 1;          
         }
 
-        OPL3EMU_Init(aui.freq_card);
+        //OPL3EMU_Init(aui.freq_card);
         printf("OPL3 emulation enabled at port 388h.\n");
     }
     //TestSound(FALSE);
@@ -561,25 +549,6 @@ int main(int argc, char* argv[])
     #endif
     BOOL HDPMIInstalledSB = !enablePM || HDPMIPT_Install_IOPortTrap(MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_ADDR].value+0x0F, SB_Iodt, SB_IodtCount, &MAIN_SB_IOPT_PM);
 
-    _LOG("sound card IRQ: %d\n", aui.card_irq);
-    BOOL PM_ISR = DPMI_InstallISR(PIC_IRQ2VEC(aui.card_irq), MAIN_InterruptPM, &MAIN_IntHandlePM) == 0;
-    //set default ACK, to skip recursion of DOS/4GW
-    {
-        DPMI_ISR_HANDLE h;
-        for(int i = 0; i < 15; ++i)
-        {
-            DPMI_GetISR(PIC_IRQ2VEC(i), &h);
-            HDPMIPT_InstallIRQACKHandler(i, h.old_cs, h.old_offset);
-        }
-    }
-    HDPMIPT_InstallIRQACKHandler(aui.card_irq, MAIN_IntHandlePM.wrapper_cs, MAIN_IntHandlePM.wrapper_offset);
-    #if MAIN_INSTALL_RM_ISR
-    BOOL RM_ISR = DPMI_InstallRealModeISR(PIC_IRQ2VEC(aui.card_irq), MAIN_InterruptRM, &MAIN_IntREG, &MAIN_IntHandleRM) == 0;
-    #else
-    BOOL RM_ISR = TRUE;
-    #endif
-    PIC_UnmaskIRQ(aui.card_irq);
-
     BOOL TSR_ISR = FALSE;
     for(int i = MAIN_TSR_INTSTART_ID; i <= 0xFF; ++i)
     {
@@ -598,6 +567,39 @@ int main(int argc, char* argv[])
         DPMI_CopyLinear(DPMI_SEGOFF2L(MAIN_ISR_DOSID,0), DPMI_PTR2L((char*)MAIN_ISR_DOSID_String), sizeof(MAIN_ISR_DOSID_String));
         break;
     }
+
+    _LOG("sound card IRQ: %d\n", aui.card_irq);
+    PIC_MaskIRQ(aui.card_irq);
+    AU_ini_interrupts(&aui);
+    int samplerate = (MAIN_Options[OPT_RATE].value == 0x22050) ? 22050 : 44100;
+    mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, samplerate, SBEMU_CHANNELS, SBEMU_CHANNELS, NULL, SBEMU_BITS, SBEMU_BITS/8, 0};
+    AU_setrate(&aui, &adi);
+    AU_setmixer_init(&aui);
+    AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 100);
+    //set volume
+    MAIN_GLB_VOL = MAIN_Options[OPT_VOL].value;
+    MAIN_SB_VOL = 256*MAIN_GLB_VOL/9;
+    AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, MAIN_GLB_VOL*100/9);
+    if(MAIN_Options[OPT_OPL].value)
+        OPL3EMU_Init(aui.freq_card); //aui.freq_card available after AU_setrate
+
+    BOOL PM_ISR = DPMI_InstallISR(PIC_IRQ2VEC(aui.card_irq), MAIN_InterruptPM, &MAIN_IntHandlePM) == 0;
+    //set default ACK, to skip recursion of DOS/4GW
+    {
+        DPMI_ISR_HANDLE h;
+        for(int i = 0; i < 15; ++i)
+        {
+            DPMI_GetISR(PIC_IRQ2VEC(i), &h);
+            HDPMIPT_InstallIRQACKHandler(i, h.old_cs, h.old_offset);
+        }
+    }
+    HDPMIPT_InstallIRQACKHandler(aui.card_irq, MAIN_IntHandlePM.wrapper_cs, MAIN_IntHandlePM.wrapper_offset);
+    #if MAIN_INSTALL_RM_ISR
+    BOOL RM_ISR = DPMI_InstallRealModeISR(PIC_IRQ2VEC(aui.card_irq), MAIN_InterruptRM, &MAIN_IntREG, &MAIN_IntHandleRM) == 0;
+    #else
+    BOOL RM_ISR = TRUE;
+    #endif
+    PIC_UnmaskIRQ(aui.card_irq);
 
     AU_prestart(&aui);
     AU_start(&aui);
@@ -711,7 +713,9 @@ static void MAIN_Interrupt()
     cur += aui.samplenum;
     cur -= AU_writedata(&aui);
     #else
-
+    if(!(aui.card_infobits&AUINFOS_CARDINFOBIT_PLAYING))
+        return;
+        
     if(SBEMU_IRQTriggered())
     {
         MAIN_InvokeIRQ(SBEMU_GetIRQ());
@@ -973,7 +977,9 @@ static void MAIN_TSR_Interrupt()
             DPMI_CopyLinear(DPMI_PTR2L(opt), MAIN_TSRREG.d.ebx, sizeof(MAIN_Options));
 
             char* fpustate = (char*)malloc(108);
+            #ifdef DJGPP //make vscode happy
             asm("fsave %0\n\t finit":"=m"(*fpustate));
+            #endif
             int irq = aui.card_irq;
             PIC_MaskIRQ(irq);
             if(MAIN_Options[OPT_OUTPUT].value != opt[OPT_OUTPUT].value || MAIN_Options[OPT_RATE].value != opt[OPT_RATE].value || opt[OPT_RESET].value)
@@ -1012,7 +1018,9 @@ static void MAIN_TSR_Interrupt()
                 MAIN_SB_VOL = 256*MAIN_GLB_VOL/9;
                 AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, MAIN_GLB_VOL*100/9);
             }
+            #ifdef DJGPP //make vscode happy
             asm("frstor %0" ::"m"(*fpustate));
+            #endif
             free(fpustate);
             PIC_UnmaskIRQ(irq);
 
