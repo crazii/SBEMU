@@ -346,8 +346,10 @@ static void VIA82XX_setrate(struct mpxplay_audioout_info_s *aui)
  }
 
  // ac97 config
- via82xx_ac97_write(card->iobase,AC97_EXTENDED_STATUS,AC97_EA_VRA); //this is a bug so SBEMU macro not added
- via82xx_ac97_write(card->iobase,AC97_PCM_FRONT_DAC_RATE, aui->freq_card);
+  if(card->pci_dev->device_id==PCI_DEVICE_ID_VT82C686) { //VT8233 set in rbits
+   via82xx_ac97_write(card->iobase,AC97_EXTENDED_STATUS,AC97_EA_VRA); //this is a bug so SBEMU macro not added
+   via82xx_ac97_write(card->iobase,AC97_PCM_FRONT_DAC_RATE, aui->freq_card);
+  }
 
  switch(aui->freq_card){
   case 32000:spdif_rate=AC97_SC_SPSR_32K;break;
@@ -562,7 +564,7 @@ static int VIA82XX_IRQRoutine(mpxplay_audioout_info_s* aui)
   int status = inb(card->iobase + VIA_REG_OFFSET_STATUS)&(VIA_REG_STATUS_FLAG|VIA_REG_STATUS_EOL|VIA_REG_STATUS_STOP_IDX);
   if(status)
     outb(card->iobase+VIA_REG_OFFSET_STATUS, status);
-  return status != 0;
+  return status;
 }
 #endif
 
