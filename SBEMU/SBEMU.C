@@ -11,6 +11,9 @@ typedef struct
     uint8_t useRef;
 }ADPCM_STATE;
 
+#define SBEMU_DSPCMD_SKIP1 -2
+#define SBEMU_DSPCMD_SKIP2 -3
+
 #define SBEMU_RESET_START 0
 #define SBEMU_RESET_END 1
 #define SBEMU_RESET_POLL 2
@@ -213,6 +216,7 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                 SBEMU_Bits = (SBEMU_DSPCMD<=SBEMU_CMD_2BIT_OUT_1_NREF) ? 2 : (SBEMU_DSPCMD>=SBEMU_CMD_3BIT_OUT_1_NREF) ? 3 : 4;
                 SBEMU_MixerRegs[SBEMU_MIXERREG_MODEFILTER] &= ~0x2;
                 SBEMU_Started = TRUE; //start transfer here
+                SBEMU_DSPCMD = -1;
                 SBEMU_Pos = 0;
             }
             break;
@@ -225,6 +229,11 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                     SBEMU_Started = FALSE;
                 }
                 SBEMU_DSPCMD = -1;
+            }
+            break;
+            case SBEMU_CMD_8BIT_DIRECT: //unsupported
+            {
+                SBEMU_DSPCMD = SBEMU_DSPCMD_SKIP1;
             }
             break;
             case 0x2A: //unknown commands
@@ -344,6 +353,16 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
             case SBEMU_CMD_DSP_ID:
             {
                 SBEMU_idbyte = value;
+            }
+            break;
+            case SBEMU_DSPCMD_SKIP1:
+            {
+                SBEMU_DSPCMD_Subindex = 2;
+            }
+            break;
+            case SBEMU_DSPCMD_SKIP2:
+            {
+                ++SBEMU_DSPCMD_Subindex;
             }
             break;
         }
