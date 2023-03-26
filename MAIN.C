@@ -278,7 +278,7 @@ static int MAIN_SB_DSPVersion[] =
     0x0400,
 };
 
-static void MAIN_InvokeIRQ(uint8_t irq)
+static void MAIN_InvokeIRQ(uint8_t irq) //generate virtual IRQ
 {
     #if MAIN_TRAP_PIC_ONDEMAND
     if(MAIN_Options[OPT_RM].value) QEMM_Install_IOPortTrap(MAIN_VIRQ_IODT, countof(MAIN_VIRQ_IODT), &MAIN_VIRQ_IOPT);
@@ -299,6 +299,17 @@ static void MAIN_InvokeIRQ(uint8_t irq)
     #endif
 }
 
+static void MAIN_SetBlasterEnv(MAIN_OPT* opt) //alter BLASTER env.
+{
+    char buf[256];
+    if(opt[OPT_TYPE].value != 6)
+        sprintf(buf, "A%x I%x D%x", opt[OPT_ADDR].value, opt[OPT_IRQ].value, opt[OPT_DMA].value);
+    else
+        sprintf(buf, "A%x I%x D%x T%x H%x", opt[OPT_ADDR].value, opt[OPT_IRQ].value, opt[OPT_DMA].value, opt[OPT_TYPE].value, opt[OPT_HDMA].value);
+    #ifdef DJGPP //makes vscode happy
+    setenv("BLASTER", buf, TRUE);
+    #endif
+}
 
 int main(int argc, char* argv[])
 {
@@ -394,18 +405,6 @@ int main(int argc, char* argv[])
         MAIN_Options[OPT_HDMA].value = MAIN_Options[OPT_DMA].value; //16 bit transfer through 8 bit dma
 
     DPMI_Init();
- 
-    //alter BLASTER env.
-    {
-        char buf[256];
-        if(MAIN_Options[OPT_TYPE].value != 6)
-            sprintf(buf, "A%x I%x D%x", MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value);
-        else
-            sprintf(buf, "A%x I%x D%x T%x H%x", MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value, MAIN_Options[OPT_TYPE].value, MAIN_Options[OPT_HDMA].value);
-        #ifdef DJGPP //makes vscode happy
-        setenv("BLASTER", buf, TRUE);
-        #endif
-    }
 
     MAIN_QEMM_Present = TRUE;
     if(MAIN_Options[OPT_RM].value)
@@ -434,6 +433,8 @@ int main(int argc, char* argv[])
 
     //TSR installation check: update parameter & exit if already installed
     MAIN_TSR_InstallationCheck();
+
+    MAIN_SetBlasterEnv(MAIN_Options);
 
     BOOL enablePM = MAIN_Options[OPT_PM].value;
     BOOL enableRM = MAIN_Options[OPT_RM].value;
@@ -900,6 +901,9 @@ void MAIN_TSR_InstallationCheck()
             if(MAIN_Options[OPT_RESET].value)
                 printf("Resetting sound card driver...\n");
             printf("\n");
+
+            if((MAIN_Options[OPT_ADDR].setcmd&MAIN_SETCMD_SET) || (MAIN_Options[OPT_IRQ].setcmd&MAIN_SETCMD_SET) || (MAIN_Options[OPT_DMA].setcmd&MAIN_SETCMD_SET) || (MAIN_Options[OPT_TYPE].setcmd&MAIN_SETCMD_SET) || (MAIN_Options[OPT_HDMA].setcmd&MAIN_SETCMD_SET))
+                MAIN_SetBlasterEnv(opt);
 
             r.h.ah = i;
             r.h.al = 0x02; //set new settings
