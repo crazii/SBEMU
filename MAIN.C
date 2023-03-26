@@ -299,7 +299,7 @@ static void MAIN_InvokeIRQ(uint8_t irq) //generate virtual IRQ
     #endif
 }
 
-static void MAIN_SetBlasterEnv(MAIN_OPT* opt) //alter BLASTER env.
+static void MAIN_SetBlasterEnv(struct MAIN_OPT* opt) //alter BLASTER env.
 {
     char buf[256];
     if(opt[OPT_TYPE].value != 6)
