@@ -19,12 +19,6 @@
 
 #define MAIN_SBEMU_VER "1.0 beta2c"
 
-//TEST
-extern void TestSound(BOOL play);
-extern int16_t* TEST_Sample;
-extern unsigned long TEST_SampleLen;
-//-TEST
-
 #define MAIN_TRAP_PIC_ONDEMAND 1
 #define MAIN_INSTALL_RM_ISR 1 //not needed. but to workaround some rm games' problem. need RAW_HOOk in dpmi_dj2.c
 
@@ -239,9 +233,6 @@ struct MAIN_OPT
     "/SC", "Select sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN,
     "/R", "Reset sound card driver", 0, MAIN_SETCMD_HIDDEN,
 
-#if DEBUG
-    "/test", "Test sound and exit", FALSE, 0,
-#endif
     NULL, NULL, 0,
 };
 enum EOption
@@ -262,9 +253,6 @@ enum EOption
     OPT_SC,
     OPT_RESET,
 
-#if DEBUG
-    OPT_TEST,
-#endif
     OPT_COUNT,
 };
 
@@ -418,20 +406,6 @@ int main(int argc, char* argv[])
         setenv("BLASTER", buf, TRUE);
         #endif
     }
-#if DEBUG
-    if(MAIN_Options[OPT_TEST].value) //test
-    {
-        AU_init(&aui);
-        if(!aui.card_handler)
-            return 0;
-        AU_ini_interrupts(&aui);
-        AU_setmixer_init(&aui);
-        AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 100);
-        TestSound(TRUE);
-        AU_del_interrupts(&aui);
-        return 0;
-    }
-#endif
 
     MAIN_QEMM_Present = TRUE;
     if(MAIN_Options[OPT_RM].value)
