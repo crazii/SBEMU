@@ -379,7 +379,11 @@ static void VIA82XX_setrate(struct mpxplay_audioout_info_s *aui)
   if(aui->freq_card==48000)
    rbits = 0xfffff;
   else
+  #ifndef SBEMU
    rbits = (0x100000 / 48000) * aui->freq_card + ((0x100000 % 48000) * aui->freq_card) / 48000;
+  #else
+   rbits = (0x100000 / 48000) * aui->freq_card; //according to datasheet
+  #endif
   outl(card->iobase+VIA_REG_OFFSET_STOP_IDX, VIA8233_REG_TYPE_16BIT | VIA8233_REG_TYPE_STEREO | rbits | 0xFF000000);
  }
  pds_delay_10us(2);
