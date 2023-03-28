@@ -383,7 +383,7 @@ static int INTELICH_adetect(struct mpxplay_audioout_info_s *aui)
   goto err_adetect;
 
 #ifdef SBEMU
- if(card->pci_dev->device_type == DEVICE_INTEL_ICH4)
+ if(card->pci_dev->device_type >= DEVICE_INTEL_ICH4)
  { //enable leagcy IO space, must be set before setting PCI CMD's IO space bit.
   mpxplay_debugf(ICH_DEBUG_OUTPUT,"Eanble legacy io space for ICH4.\n");
   pcibios_WriteConfig_Byte(card->pci_dev, 0x41, 1); //IOSE:enable IO space
