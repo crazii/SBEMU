@@ -8,7 +8,7 @@ int setenv(const char *name, const char *value, int rewrite)
 {
     int namelen;
     int vallen;
-    if(name == NULL || value == NULL || (namelen=strlen(name)) == 0 || (vallen=strlen(value) == 0))
+    if(name == NULL || value == NULL || (namelen=strlen(name)) == 0 || (vallen=strlen(value)) == 0)
         return -1;
 
     //find PSP of COMMAND.COM
@@ -45,7 +45,7 @@ int setenv(const char *name, const char *value, int rewrite)
 #endif        
     }while(*s);
     
-    if((s-buf+1) + namelen+1+vallen+1 > size) //not enought space. TODO: allocate new
+    if((s-buf+1) + (namelen+1)+1+(vallen+1) > size) //not enough space. TODO: allocate new
     {
         free(buf);
         return -1;
@@ -72,7 +72,7 @@ int setenv(const char *name, const char *value, int rewrite)
     }while(*s);
     
     *(s + sprintf(s, "%s=%s", name, value)+1)='\0';
-    //size = namelen + vallen + 2;
+    //size = namelen + vallen + 3;
 
     #if DEBUG && 0
     s = buf;
@@ -85,4 +85,6 @@ int setenv(const char *name, const char *value, int rewrite)
     //DPMI_StoreW((mcb<<4), (size+15)>>4);
     DPMI_CopyLinear(env<<4, DPMI_PTR2L(buf), size);
     free(buf);
+    
+    return 0;
 }
