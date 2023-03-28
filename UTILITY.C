@@ -60,6 +60,7 @@ int setenv(const char *name, const char *value, int rewrite)
             if(rewrite)
             {
                 memmove(s, s+len+1, size-(s-buf+len+1));
+                if(!*s) break; //bugfix (exposed in FreeDOS)
                 len = strlen(s);
             }
             else
