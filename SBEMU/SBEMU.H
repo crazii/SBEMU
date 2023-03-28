@@ -132,7 +132,13 @@ int SBEMU_IRQTriggered();
 void SBEMU_SetIRQTriggered(int triggered);
 uint8_t SBEMU_GetMixerReg(uint8_t index);
 
+//for 4/3/2bit
 int SBEMU_DecodeADPCM(uint8_t* adpcm, int bytes); //decode in place
+
+//for SBEMU_CMD_8BIT_DIRECT
+int SBEMU_GetDirectCount();
+void SBEMU_ResetDirect();
+const uint8_t* SBEMU_GetDirectPCM8();
 
 //hacks/workarounds
 int SBEMU_GetDetectionCounter();

@@ -11,8 +11,11 @@ typedef struct
     uint8_t useRef;
 }ADPCM_STATE;
 
+//internal cmds
+#define SBEMU_DSPCMD_INVALID -1
 #define SBEMU_DSPCMD_SKIP1 -2
 #define SBEMU_DSPCMD_SKIP2 -3
+#define SBEMU_DSPCMD_DIRECT -4 //to resolve conflict of SBEMU_CMD_8BIT_DIRECT / SBEMU_CMD_MODE_PCM16_MONO
 
 #define SBEMU_RESET_START 0
 #define SBEMU_RESET_END 1
@@ -29,12 +32,13 @@ static int SBEMU_SampleRate = 22050;
 static int SBEMU_Samples = 0;
 static int SBEMU_Auto = 0;
 static int SBEMU_HighSpeed = 0;
-static int SBEMU_DSPCMD = -1;
+static int SBEMU_DSPCMD = SBEMU_DSPCMD_INVALID;
 static int SBEMU_DSPCMD_Subindex = 0;
 static int SBEMU_DSPDATA_Subindex = 0;
 static int SBEMU_TriggerIRQ = 0;
 static int SBEMU_Pos = 0;
 static int SBEMU_DetectionCounter = 0;
+static int SBEMU_DirectCount = 0;
 static uint8_t SBEMU_IRQMap[4] = {2,5,7,10};
 static uint8_t SBEMU_MixerRegIndex = 0;
 static uint8_t SBEMU_idbyte;
@@ -52,6 +56,8 @@ static int SBEMU_TimeConstantMapMono[][2] =
 static uint8_t SBEMU_Copyright[] = "COPYRIGHT (C) CREATIVE TECHNOLOGY LTD, 1992.";
 
 static uint8_t SBEMU_MixerRegs[256];
+#define SBEMU_DIRECT_BUFFER_SIZE 1024
+static uint8_t SBEMU_DirectBuffer[SBEMU_DIRECT_BUFFER_SIZE];
 
 static int SBEMU_Indexof(uint8_t* array, int count, uint8_t  val)
 {
@@ -137,7 +143,7 @@ void SBEMU_DSP_Reset(uint16_t port, uint8_t value)
         SBEMU_MixerRegs[SBEMU_MIXERREG_DMA_SETUP] = ((1<<SBEMU_DMA)|(SBEMU_HDMA?(1<<SBEMU_HDMA):0))&0xEB;
         SBEMU_MixerRegs[SBEMU_MIXERREG_MODEFILTER] = 0xFD; //mask out stereo
         SBEMU_MixerRegIndex = 0;
-        SBEMU_DSPCMD = -1;
+        SBEMU_DSPCMD = SBEMU_DSPCMD_INVALID;
         SBEMU_DSPCMD_Subindex = 0;
         SBEMU_DSPDATA_Subindex = 0;
         SBEMU_Started = 0;
@@ -148,6 +154,8 @@ void SBEMU_DSP_Reset(uint16_t port, uint8_t value)
         SBEMU_HighSpeed = 0;
         SBEMU_TriggerIRQ = 0;
         SBEMU_DetectionCounter = 0;
+        SBEMU_DirectCount = 0;
+        SBEMU_DirectBuffer[0] = 0;
 
         SBEMU_Mixer_WriteAddr(0, SBEMU_MIXERREG_RESET);
         SBEMU_Mixer_Write(0, 1);
@@ -173,26 +181,26 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
             {
                 SBEMU_MixerRegs[SBEMU_MIXERREG_INT_STS] |= SBEMU_DSPCMD == SBEMU_CMD_TRIGGER_IRQ ? 0x1 : 0x2;
                 SBEMU_TriggerIRQ = 1;
-                SBEMU_DSPCMD = -1;
+                SBEMU_DSPCMD = SBEMU_DSPCMD_INVALID;
                 //VIRQ_Invoke(SBEMU_GetIRQ()); //not working
             }
             break;
             case SBEMU_CMD_DAC_SPEAKER_ON:
             case SBEMU_CMD_DAC_SPEAKER_OFF:
-                SBEMU_DSPCMD = -1;
+                SBEMU_DSPCMD = SBEMU_DSPCMD_INVALID;
                 break;
             case SBEMU_CMD_HALT_DMA:
             case SBEMU_CMD_CONTINUE_DMA:
             {
                 SBEMU_Started = SBEMU_DSPCMD == SBEMU_CMD_CONTINUE_DMA;
-                SBEMU_DSPCMD = -1;
+                SBEMU_DSPCMD = SBEMU_DSPCMD_INVALID;
             }
             break;
             case SBEMU_CMD_CONTINUE_DMA16:
             case SBEMU_CMD_HALT_DMA16:
             {
                 SBEMU_Started = SBEMU_DSPCMD == SBEMU_CMD_CONTINUE_DMA16;
-                SBEMU_DSPCMD = -1; 
+                SBEMU_DSPCMD = SBEMU_DSPCMD_INVALID; 
             }
             break;
             case SBEMU_CMD_8BIT_OUT_AUTO_HS:
@@ -202,7 +210,7 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                 SBEMU_Bits = 8;
                 SBEMU_HighSpeed = (SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_AUTO_HS);
                 SBEMU_Started = TRUE; //start transfer
-                SBEMU_DSPCMD = -1;
+                SBEMU_DSPCMD = SBEMU_DSPCMD_INVALID;
                 SBEMU_Pos = 0;
             }
             break;
@@ -216,7 +224,7 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                 SBEMU_Bits = (SBEMU_DSPCMD<=SBEMU_CMD_2BIT_OUT_1_NREF) ? 2 : (SBEMU_DSPCMD>=SBEMU_CMD_3BIT_OUT_1_NREF) ? 3 : 4;
                 SBEMU_MixerRegs[SBEMU_MIXERREG_MODEFILTER] &= ~0x2;
                 SBEMU_Started = TRUE; //start transfer here
-                SBEMU_DSPCMD = -1;
+                SBEMU_DSPCMD = SBEMU_DSPCMD_INVALID;
                 SBEMU_Pos = 0;
             }
             break;
@@ -228,17 +236,17 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                     SBEMU_Auto = FALSE;
                     SBEMU_Started = FALSE;
                 }
-                SBEMU_DSPCMD = -1;
+                SBEMU_DSPCMD = SBEMU_DSPCMD_INVALID;
             }
             break;
             case SBEMU_CMD_8BIT_DIRECT: //unsupported
             {
-                SBEMU_DSPCMD = SBEMU_DSPCMD_SKIP1;
+                SBEMU_DSPCMD = SBEMU_DSPCMD_DIRECT;
             }
             break;
             case 0x2A: //unknown commands
             {
-                SBEMU_DSPCMD = -1;
+                SBEMU_DSPCMD = SBEMU_DSPCMD_INVALID;
             }
             break;
         }
@@ -355,6 +363,12 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                 SBEMU_idbyte = value;
             }
             break;
+            case SBEMU_DSPCMD_DIRECT:
+            {
+                SBEMU_DirectBuffer[(SBEMU_DirectCount++)%SBEMU_DIRECT_BUFFER_SIZE] = value;
+                SBEMU_DSPCMD_Subindex = 2;
+            }
+            break;
             case SBEMU_DSPCMD_SKIP1:
             {
                 SBEMU_DSPCMD_Subindex = 2;
@@ -367,7 +381,7 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
             break;
         }
         if(SBEMU_DSPCMD_Subindex >= 2)
-            SBEMU_DSPCMD = -1;
+            SBEMU_DSPCMD = SBEMU_DSPCMD_INVALID;
     }
     if(SBEMU_Started && !OldStarted)//handle driver detection
     {
@@ -397,14 +411,14 @@ uint8_t SBEMU_DSP_Read(uint16_t port)
         else
         {
             SBEMU_DSPDATA_Subindex = 0;
-            SBEMU_DSPCMD = -1;
+            SBEMU_DSPCMD = SBEMU_DSPCMD_INVALID;
             //_LOG("SBEMU: DSP get version.\n");
             return SBEMU_DSPVER&0xFF;
         }
     }
     else if(SBEMU_DSPCMD == SBEMU_CMD_DSP_ID)
     {
-        SBEMU_DSPCMD = -1;
+        SBEMU_DSPCMD = SBEMU_DSPCMD_INVALID;
         SBEMU_DSPDATA_Subindex = 0;
         return SBEMU_idbyte^0xFF;
     }
@@ -412,7 +426,7 @@ uint8_t SBEMU_DSP_Read(uint16_t port)
     {
         if(SBEMU_DSPDATA_Subindex == sizeof(SBEMU_Copyright)-1)
         {
-            SBEMU_DSPCMD = -1;
+            SBEMU_DSPCMD = SBEMU_DSPCMD_INVALID;
             SBEMU_DSPDATA_Subindex = 0;
             return 0xFF;
         }
@@ -598,6 +612,23 @@ int SBEMU_DecodeADPCM(uint8_t* adpcm, int bytes)
     memcpy(adpcm, pcm, outcount);
     free(pcm);
     return outcount;
+}
+
+int SBEMU_GetDirectCount()
+{
+    return SBEMU_DirectCount;
+}
+
+void SBEMU_ResetDirect()
+{
+    //SBEMU_DirectBuffer[0] = SBEMU_DirectCount > 1 ? SBEMU_DirectBuffer[SBEMU_DirectCount-1] : 0;
+    //SBEMU_DirectCount = 1;
+    SBEMU_DirectCount = 0;
+}
+
+const uint8_t* SBEMU_GetDirectPCM8()
+{
+    return SBEMU_DirectBuffer;
 }
 
 int SBEMU_GetDetectionCounter()

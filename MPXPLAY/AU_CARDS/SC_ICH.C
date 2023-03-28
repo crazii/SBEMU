@@ -325,6 +325,9 @@ static void snd_intel_prepare_playback(struct intel_card_s *card,struct mpxplay_
  snd_intel_write_8(card,ICH_PO_CIV_REG,0); // reset current index
 
  mpxplay_debugf(ICH_DEBUG_OUTPUT,"prepare playback end");
+ #ifdef SBEMU
+ aui->card_samples_per_int = period_size_samples / 2;
+ #endif
 }
 
 //-------------------------------------------------------------------------
@@ -383,7 +386,7 @@ static int INTELICH_adetect(struct mpxplay_audioout_info_s *aui)
   goto err_adetect;
 
 #ifdef SBEMU
- if(card->pci_dev->device_type >= DEVICE_INTEL_ICH4)
+ if(card->pci_dev->device_type == DEVICE_INTEL_ICH4)
  { //enable leagcy IO space, must be set before setting PCI CMD's IO space bit.
   mpxplay_debugf(ICH_DEBUG_OUTPUT,"Eanble legacy io space for ICH4.\n");
   pcibios_WriteConfig_Byte(card->pci_dev, 0x41, 1); //IOSE:enable IO space
@@ -421,12 +424,12 @@ static int INTELICH_adetect(struct mpxplay_audioout_info_s *aui)
   goto err_adetect;
  aui->card_irq = card->irq = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
  #ifdef SBEMU
- if(aui->card_irq == 0xFF)
+ if(aui->card_irq == 0xFF || aui->card_irq == 0)
  {
      pcibios_WriteConfig_Byte(card->pci_dev, PCIR_INTR_LN, 11);
      aui->card_irq = card->irq = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
  }
- #endif
+  #endif
  
  card->device_type=card->pci_dev->device_type;
 

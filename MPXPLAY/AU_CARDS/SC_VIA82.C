@@ -285,6 +285,7 @@ static int VIA82XX_adetect(struct mpxplay_audioout_info_s *aui)
      aui->card_irq = card->irq = 10;
      //pcibios_WriteConfig_Byte(card->pci_dev, PCIR_INTR_LN, aui->card_irq); //RW //delayed in VIA82XX_start
  }
+ aui->card_samples_per_int = PCMBUFFERPAGESIZE / 4;
  #endif
 
  return 1;

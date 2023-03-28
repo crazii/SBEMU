@@ -710,13 +710,14 @@ static void MAIN_Interrupt()
         vol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MASTERSTEREO)>>4)*256/15; //4:4
         voicevol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_VOICESTEREO)>>4)*256/15; //4:4
         midivol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MIDISTEREO)>>4)*256/15; //4:4
-        //_LOG("vol: %d, voicevol: %d, midivol: %d\n", vol, voicevol, midivol);        
+        //_LOG("vol: %d, voicevol: %d, midivol: %d\n", vol, voicevol, midivol);
     }
     else //SBPro
     {
         vol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MASTERSTEREO)>>5)*256/7; //3:1:3:1 stereo usually the same for both channel for games?;
         voicevol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_VOICESTEREO)>>5)*256/7; //3:1:3:1
         midivol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MIDISTEREO)>>5)*256/7;
+        //_LOG("vol: %d, voicevol: %d, midivol: %d\n", vol, voicevol, midivol);
     }
     if(MAIN_SB_VOL != vol*MAIN_GLB_VOL/9)
     {
@@ -829,6 +830,34 @@ static void MAIN_Interrupt()
         //for(int i = pos; i < samples; ++i)
         //    MAIN_PCM[i*2+1] = MAIN_PCM[i*2] = 0;
         samples = min(samples, pos);
+    }
+    else if(SBEMU_GetDirectCount()>=2)
+    {
+        samples = SBEMU_GetDirectCount();
+        _LOG("direct out:%d %d\n",samples,aui.card_samples_per_int);
+        memcpy(MAIN_PCM, SBEMU_GetDirectPCM8(), samples);
+        SBEMU_ResetDirect();
+        #if 1 //fix noise for some games
+        int zeros = TRUE;
+        for(int i = 0; i < samples && zeros; ++i)
+        {
+            if(((uint8_t*)MAIN_PCM)[i] != 0)
+                zeros = FALSE;
+        }
+        if(zeros)
+        {
+            for(int i = 0; i < samples; ++i)
+                ((uint8_t*)MAIN_PCM)[i] = 128;
+        }
+        #endif
+        for(int i = 0; i < samples; ++i) _LOG("%d ",((uint8_t*)MAIN_PCM)[i]); _LOG("\n");
+        cv_bits_n_to_m(MAIN_PCM, samples, 1, 2);
+        //for(int i = 0; i < samples; ++i) _LOG("%d ",MAIN_PCM[i]); _LOG("\n");
+		const int interrupt_frequency = aui.freq_card/aui.card_samples_per_int;
+        samples = mixer_speed_lq(MAIN_PCM, samples, 1, (samples)*interrupt_frequency, aui.freq_card);
+        //for(int i = 0; i < samples; ++i) _LOG("%d ",MAIN_PCM[i]); _LOG("\n");
+        cv_channels_1_to_n(MAIN_PCM, samples, 2, 2);
+        digital = TRUE;
     }
     else if(!MAIN_Options[OPT_OPL].value)
         memset(MAIN_PCM, 0, samples*sizeof(int16_t)*2); //output muted samples.

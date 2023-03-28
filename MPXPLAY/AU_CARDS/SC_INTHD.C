@@ -1225,9 +1225,10 @@ static int INTELHD_adetect(struct mpxplay_audioout_info_s *aui)
   goto err_adetect;
 
  aui->card_DMABUFF=card->pcmout_buffer;
- #ifdef SBEMU
+#ifdef SBEMU
  aui->card_irq = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
- #endif
+ aui->card_samples_per_int = AZX_PERIOD_SIZE / 4;
+#endif
 
  mpxplay_debugf(IHD_DEBUG_OUTPUT,"IHD board type: %s (%4.4X%4.4X) ",card->pci_dev->device_name,(long)card->pci_dev->vendor_id,(long)card->pci_dev->device_id);
 

@@ -16,7 +16,7 @@
 //based on the Creative (http://sourceforge.net/projects/emu10k1)
 //         and ALSA (http://www.alsa-project.org) drivers
 
-#define MPXPLAY_USE_DEBUGF 1
+//#define MPXPLAY_USE_DEBUGF 1
 #define SBL_DEBUG_OUTPUT stdout
 
 #include "mpxplay.h"
@@ -820,6 +820,10 @@ static unsigned int snd_emu10kx_buffer_init(struct emu10k1_card *card,struct mpx
  for( ; pagecount<MAXPAGES; pagecount++)
   card->virtualpagetable[pagecount] = ((uint32_t)pds_cardmem_physicalptr(card->dm,card->silentpage))<<1;
 
+#ifdef SBEMU
+aui->card_samples_per_int = EMUPAGESIZE / 4;
+#endif
+
  return 1;
 }
 
@@ -1022,6 +1026,10 @@ static void snd_p16v_setrate(struct emu10k1_card *card,struct mpxplay_audioout_i
  dmabufsize=MDma_init_pcmoutbuf(aui,card->pcmout_bufsize,AUDIGY2_P16V_DMABUF_ALIGN,0);
  card->period_size=(dmabufsize/AUDIGY2_P16V_PERIODS);
  mpxplay_debugf(SBL_DEBUG_OUTPUT,"buffer config: bufsize:%d period_size:%d",dmabufsize,card->period_size);
+
+#ifdef SBEMU
+ aui->card_samples_per_int = card->period_size / 4;
+#endif
 
  snd_p16v_pcm_prepare_playback(card,aui->freq_card);
 }

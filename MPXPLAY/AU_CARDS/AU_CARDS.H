@@ -226,8 +226,9 @@ typedef struct mpxplay_audioout_info_s{
 
  char *card_selectname;          // select card by name - NOT used by SBEMU
  #ifdef SBEMU
- int card_test_index;
- int card_select_index;
+ int card_test_index;       //tmp curret test index
+ int card_select_index;     //user selection via cmd line
+ int card_samples_per_int;  //samples per interrupt
  #endif
  struct one_sndcard_info *card_handler; // function structure of the card
  void *card_private_data;        // extra private datas can be pointed here (with malloc)
