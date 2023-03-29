@@ -831,7 +831,7 @@ static void MAIN_Interrupt()
         //    MAIN_PCM[i*2+1] = MAIN_PCM[i*2] = 0;
         samples = min(samples, pos);
     }
-    else if(SBEMU_GetDirectCount()>=2)
+    else if(SBEMU_GetDirectCount()>=3)
     {
         samples = SBEMU_GetDirectCount();
         _LOG("direct out:%d %d\n",samples,aui.card_samples_per_int);
@@ -850,10 +850,10 @@ static void MAIN_Interrupt()
                 ((uint8_t*)MAIN_PCM)[i] = 128;
         }
         #endif
-        for(int i = 0; i < samples; ++i) _LOG("%d ",((uint8_t*)MAIN_PCM)[i]); _LOG("\n");
+        //for(int i = 0; i < samples; ++i) _LOG("%d ",((uint8_t*)MAIN_PCM)[i]); _LOG("\n");
         cv_bits_n_to_m(MAIN_PCM, samples, 1, 2);
         //for(int i = 0; i < samples; ++i) _LOG("%d ",MAIN_PCM[i]); _LOG("\n");
-		const int interrupt_frequency = aui.freq_card/aui.card_samples_per_int;
+        const int interrupt_frequency = aui.freq_card/aui.card_samples_per_int;
         samples = mixer_speed_lq(MAIN_PCM, samples, 1, (samples)*interrupt_frequency, aui.freq_card);
         //for(int i = 0; i < samples; ++i) _LOG("%d ",MAIN_PCM[i]); _LOG("\n");
         cv_channels_1_to_n(MAIN_PCM, samples, 2, 2);

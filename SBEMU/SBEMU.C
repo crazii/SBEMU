@@ -621,9 +621,9 @@ int SBEMU_GetDirectCount()
 
 void SBEMU_ResetDirect()
 {
-    //SBEMU_DirectBuffer[0] = SBEMU_DirectCount > 1 ? SBEMU_DirectBuffer[SBEMU_DirectCount-1] : 0;
-    //SBEMU_DirectCount = 1;
-    SBEMU_DirectCount = 0;
+    SBEMU_DirectBuffer[0] = SBEMU_DirectCount > 1 ? SBEMU_DirectBuffer[SBEMU_DirectCount-1] : 0; //leave one sample for next interpolation
+    SBEMU_DirectCount = 1;
+    //SBEMU_DirectCount = 0;
 }
 
 const uint8_t* SBEMU_GetDirectPCM8()
