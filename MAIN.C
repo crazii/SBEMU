@@ -995,7 +995,6 @@ static void MAIN_TSR_Interrupt()
                     AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 100);
                     MAIN_Options[OPT_VOL].value = ~opt[OPT_VOL].value; //mark volume dirty
                 }
-                MAIN_Options[OPT_RATE].value = opt[OPT_RATE].value;
                 _LOG("Change sample rate\n");
                 _LOG("FLAGS:%x\n",CPU_FLAGS());
 
@@ -1006,6 +1005,7 @@ static void MAIN_TSR_Interrupt()
                     OPL3EMU_Init(aui.freq_card);
                 AU_prestart(&aui); //setsamplerate/reset will do stop
                 AU_start(&aui);
+                MAIN_Options[OPT_RATE].value = opt[OPT_RATE].value;
             }
             if(MAIN_Options[OPT_VOL].value != opt[OPT_VOL].value)
             {
