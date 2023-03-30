@@ -21,6 +21,7 @@
 
 #define MAIN_TRAP_PIC_ONDEMAND 1
 #define MAIN_INSTALL_RM_ISR 1 //not needed. but to workaround some rm games' problem. need RAW_HOOk in dpmi_dj2.c
+#define MAIN_DOUBLE_OPL_VOLUME 1 //hack: double the amplitude of OPL PCM. should be 1 or 0
 
 #define MAIN_TSR_INT 0x2D   //AMIS multiplex. TODO: 0x2F?
 #define MAIN_TSR_INTSTART_ID 0x01 //start id
@@ -865,14 +866,14 @@ static void MAIN_Interrupt()
         {
             for(int i = 0; i < samples*2; ++i)
             {
-                #if 0
+                #if 1
                 // https://stackoverflow.com/questions/12089662/mixing-16-bit-linear-pcm-streams-and-avoiding-clipping-overflow
                 int a = (int)(MAIN_PCM[i] * voicevol/256) + 32768;
-                int b = (int)(MAIN_OPLPCM[i] * midivol/256) + 32768;
+                int b = (int)(MAIN_OPLPCM[i] * midivol/256 * (MAIN_DOUBLE_OPL_VOLUME+1)) + 32768;
                 int mixed = (a < 32768 || b < 32768) ? (a*b/32768) : ((a+b)*2 - a*b/32768 - 65536);
                 if(mixed == 65536) mixed = 65535;
                 MAIN_PCM[i] = (mixed - 32768) * vol/256;
-                #else //simple average: sound the same as DOSBox
+                #else //simple average: sounds the same as DOSBox
                 int a = (int)(MAIN_PCM[i] * voicevol/256);
                 int b = (int)(MAIN_OPLPCM[i] * midivol/256);
                 MAIN_PCM[i] = (a+b)/2 * vol/256;
