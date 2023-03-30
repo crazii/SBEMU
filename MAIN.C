@@ -844,7 +844,7 @@ static void MAIN_Interrupt()
         cv_bits_n_to_m(MAIN_PCM, samples, 1, 2);
         //for(int i = 0; i < samples; ++i) _LOG("%d ",MAIN_PCM[i]); _LOG("\n");
         const int interrupt_frequency = aui.freq_card/aui.card_samples_per_int;
-        samples = mixer_speed_lq(MAIN_PCM, samples, 1, (samples)*interrupt_frequency, aui.freq_card);
+        samples = mixer_speed_lq(MAIN_PCM, samples, 1, (samples-1)*interrupt_frequency, aui.freq_card);
         //for(int i = 0; i < samples; ++i) _LOG("%d ",MAIN_PCM[i]); _LOG("\n");
         cv_channels_1_to_n(MAIN_PCM, samples, 2, 2);
         digital = TRUE;
@@ -863,6 +863,7 @@ static void MAIN_Interrupt()
 
         if(digital)
         {
+            // https://stackoverflow.com/questions/12089662/mixing-16-bit-linear-pcm-streams-and-avoiding-clipping-overflow
             for(int i = 0; i < samples*2; ++i)
             {
                 int a = (int)(MAIN_PCM[i] * voicevol/256) + 32768;
