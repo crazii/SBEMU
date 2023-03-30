@@ -863,14 +863,20 @@ static void MAIN_Interrupt()
 
         if(digital)
         {
-            // https://stackoverflow.com/questions/12089662/mixing-16-bit-linear-pcm-streams-and-avoiding-clipping-overflow
             for(int i = 0; i < samples*2; ++i)
             {
+                #if 0
+                // https://stackoverflow.com/questions/12089662/mixing-16-bit-linear-pcm-streams-and-avoiding-clipping-overflow
                 int a = (int)(MAIN_PCM[i] * voicevol/256) + 32768;
                 int b = (int)(MAIN_OPLPCM[i] * midivol/256) + 32768;
                 int mixed = (a < 32768 || b < 32768) ? (a*b/32768) : ((a+b)*2 - a*b/32768 - 65536);
                 if(mixed == 65536) mixed = 65535;
                 MAIN_PCM[i] = (mixed - 32768) * vol/256;
+                #else //simple average: sound the same as DOSBox
+                int a = (int)(MAIN_PCM[i] * voicevol/256);
+                int b = (int)(MAIN_OPLPCM[i] * midivol/256);
+                MAIN_PCM[i] = (a+b)/2 * vol/256;
+                #endif
             }
         }
         else for(int i = 0; i < samples*2; ++i)
