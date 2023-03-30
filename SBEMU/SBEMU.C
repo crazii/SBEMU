@@ -88,7 +88,7 @@ void SBEMU_Mixer_Write(uint16_t port, uint8_t value)
 
         if(SBEMU_DSPVER < 0x0400) //before SB16
         {
-            SBEMU_MixerRegs[SBEMU_MIXERREG_VOICESTEREO] = 0xEE;
+            SBEMU_MixerRegs[SBEMU_MIXERREG_VOICESTEREO] = 0xEE; //3:(1). default 4
             SBEMU_MixerRegs[SBEMU_MIXERREG_MASTERSTEREO] = 0xEE;
             SBEMU_MixerRegs[SBEMU_MIXERREG_MIDISTEREO] = 0xEE;
         }
@@ -97,7 +97,6 @@ void SBEMU_Mixer_Write(uint16_t port, uint8_t value)
             SBEMU_MixerRegs[SBEMU_MIXERREG_VOICESTEREO] = 0xFF;
             SBEMU_MixerRegs[SBEMU_MIXERREG_MASTERSTEREO] = 0xFF;
             SBEMU_MixerRegs[SBEMU_MIXERREG_MIDISTEREO] = 0xFF;
-
             //5bits (5:3)
             SBEMU_MixerRegs[SBEMU_MIXRREG_MASTERL] = 0xF8;
             SBEMU_MixerRegs[SBEMU_MIXRREG_MASTERR] = 0xF8;
@@ -157,8 +156,8 @@ void SBEMU_DSP_Reset(uint16_t port, uint8_t value)
         SBEMU_DirectCount = 0;
         SBEMU_DirectBuffer[0] = 0;
 
-        SBEMU_Mixer_WriteAddr(0, SBEMU_MIXERREG_RESET);
-        SBEMU_Mixer_Write(0, 1);
+        //SBEMU_Mixer_WriteAddr(0, SBEMU_MIXERREG_RESET);
+        //SBEMU_Mixer_Write(0, 1);
     }
     if(value == 0 && SBEMU_ResetState == SBEMU_RESET_START)
         SBEMU_ResetState = SBEMU_RESET_POLL;

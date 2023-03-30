@@ -39,8 +39,6 @@ static INTCONTEXT MAIN_IntContext;
 static uint32_t MAIN_DMA_Addr = 0;
 static uint32_t MAIN_DMA_Size = 0;
 static uint32_t MAIN_DMA_MappedAddr = 0;
-static uint16_t MAIN_SB_VOL = 0; //intial set volume will cause interrupt missing?
-static uint16_t MAIN_GLB_VOL = 0; //TODO: add hotkey
 static uint8_t MAIN_QEMM_Present = 0;
 static uint8_t MAIN_HDPMI_Present = 0;
 static uint8_t MAIN_InINT;
@@ -552,9 +550,7 @@ int main(int argc, char* argv[])
     AU_setmixer_init(&aui);
     AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 100);
     //set volume
-    MAIN_GLB_VOL = MAIN_Options[OPT_VOL].value;
-    MAIN_SB_VOL = 256*MAIN_GLB_VOL/9;
-    AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, MAIN_GLB_VOL*100/9);
+    AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, MAIN_Options[OPT_VOL].value*100/9);
     if(MAIN_Options[OPT_OPL].value)
         OPL3EMU_Init(aui.freq_card); //aui.freq_card available after AU_setrate
 
@@ -719,12 +715,6 @@ static void MAIN_Interrupt()
         midivol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MIDISTEREO)>>5)*256/7;
         //_LOG("vol: %d, voicevol: %d, midivol: %d\n", vol, voicevol, midivol);
     }
-    if(MAIN_SB_VOL != vol*MAIN_GLB_VOL/9)
-    {
-        _LOG("set sb volume:%d %d\n", MAIN_SB_VOL, vol*MAIN_GLB_VOL/9);
-        MAIN_SB_VOL = vol*MAIN_GLB_VOL/9;
-        AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, vol*100/256);
-    }
 
     aui.card_outbytes = aui.card_dmasize;
     int samples = AU_cardbuf_space(&aui) / sizeof(int16_t) / 2; //16 bit, 2 channels
@@ -875,19 +865,19 @@ static void MAIN_Interrupt()
         {
             for(int i = 0; i < samples*2; ++i)
             {
-                int a = (int)(MAIN_PCM[i]*voicevol/256) + 32768;
-                int b = (int)(MAIN_OPLPCM[i]*midivol/256) + 32768;
+                int a = (int)(MAIN_PCM[i] * voicevol/256) + 32768;
+                int b = (int)(MAIN_OPLPCM[i] * midivol/256) + 32768;
                 int mixed = (a < 32768 || b < 32768) ? (a*b/32768) : ((a+b)*2 - a*b/32768 - 65536);
                 if(mixed == 65536) mixed = 65535;
-                MAIN_PCM[i] = mixed - 32768;
+                MAIN_PCM[i] = (mixed - 32768) * vol/256;
             }
         }
         else for(int i = 0; i < samples*2; ++i)
-            MAIN_PCM[i] = MAIN_PCM[i]*midivol/256;
+            MAIN_PCM[i] = MAIN_PCM[i] * midivol/256 * vol/256;
     }
     else if(digital)
         for(int i = 0; i < samples*2; ++i)
-            MAIN_PCM[i] = MAIN_PCM[i]*voicevol/256;
+            MAIN_PCM[i] = MAIN_PCM[i] * voicevol/256 * vol/256;
     samples *= 2; //to stereo
 
     aui.samplenum = samples;
@@ -1021,9 +1011,7 @@ static void MAIN_TSR_Interrupt()
             {
                 _LOG("Reset volume\n");
                 MAIN_Options[OPT_VOL].value = opt[OPT_VOL].value;
-                MAIN_GLB_VOL = MAIN_Options[OPT_VOL].value;
-                MAIN_SB_VOL = 256*MAIN_GLB_VOL/9;
-                AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, MAIN_GLB_VOL*100/9);
+                AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, MAIN_Options[OPT_VOL].value*100/9);
             }
             #ifdef DJGPP //make vscode happy
             asm("frstor %0" ::"m"(*fpustate));
