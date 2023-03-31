@@ -226,8 +226,31 @@ int VDMA_GetAuto(int channel)
     return VDMA_Modes[channel]&(1<<4);
 }
 
+int VDMA_GetWriteMode(int channel)
+{
+    return (VDMA_Modes[channel]&0x0C) == 0x04;
+}
+
 void VDMA_ToggleComplete(int channel)
 {
     VDMA_Complete[channel] = 1;
 }
 
+void VDMA_WriteData(int channel, uint8_t data)
+{
+    if(VDMA_GetWriteMode(channel))
+    {
+        uint32_t addr = VDMA_GetAddress(channel);
+        int32_t index = VDMA_GetIndex(channel);
+        
+        if(addr>1024*1024)
+            addr = DPMI_MapMemory(addr, 65536);
+
+        _LOG("dmaw: %x, %d\n", addr+index, data);
+        DPMI_CopyLinear(addr+index, DPMI_PTR2L(&data), 1);
+
+        if(addr>1024*1024)
+            DPMI_UnmappMemory(addr);
+        VDMA_SetIndexCounter(channel, index+1, VDMA_GetCounter(channel)-1);
+    }
+}

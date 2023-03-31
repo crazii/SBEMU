@@ -21,6 +21,7 @@ typedef struct
 #define SBEMU_RESET_END 1
 #define SBEMU_RESET_POLL 2
 void(*SBEMU_StartCB)(void);
+void(*SBEMU_DMAWrite)(int,uint8_t);
 static int SBEMU_ResetState = SBEMU_RESET_END;
 static int SBEMU_Started = 0;
 static int SBEMU_IRQ = 5;
@@ -44,6 +45,9 @@ static uint8_t SBEMU_MixerRegIndex = 0;
 static uint8_t SBEMU_idbyte;
 static uint8_t SBEMU_WS;
 static uint8_t SBEMU_RS = 0x2A;
+static uint8_t SBEMU_TestReg;
+static uint8_t SBEMU_DMAID_A;
+static uint8_t SBEMU_DMAID_X;
 static uint16_t SBEMU_DSPVER = 0x0302;
 static ADPCM_STATE SBEMU_ADPCM;
 
@@ -155,6 +159,8 @@ void SBEMU_DSP_Reset(uint16_t port, uint8_t value)
         SBEMU_DetectionCounter = 0;
         SBEMU_DirectCount = 0;
         SBEMU_DirectBuffer[0] = 0;
+        SBEMU_DMAID_A = 0xAA;
+        SBEMU_DMAID_X = 0x96;
 
         //SBEMU_Mixer_WriteAddr(0, SBEMU_MIXERREG_RESET);
         //SBEMU_Mixer_Write(0, 1);
@@ -368,6 +374,21 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                 SBEMU_DSPCMD_Subindex = 2;
             }
             break;
+            case SBEMU_CMD_DSP_WRITE_TESTREG:
+            {
+                SBEMU_TestReg = value;
+                SBEMU_DSPCMD_Subindex = 2;
+            }
+            break;
+            case SBEMU_CMD_DSP_DMA_ID:
+            {
+                SBEMU_DMAID_A += value ^ SBEMU_DMAID_X;
+                SBEMU_DMAID_X = (SBEMU_DMAID_X >> 2u) | (SBEMU_DMAID_X << 6u);
+                SBEMU_DSPCMD_Subindex = 2;
+
+                SBEMU_DMAWrite(SBEMU_DMA, SBEMU_DMAID_A);
+            }
+            break;
             case SBEMU_DSPCMD_SKIP1:
             {
                 SBEMU_DSPCMD_Subindex = 2;
@@ -414,6 +435,12 @@ uint8_t SBEMU_DSP_Read(uint16_t port)
             //_LOG("SBEMU: DSP get version.\n");
             return SBEMU_DSPVER&0xFF;
         }
+    }
+    else if(SBEMU_DSPCMD == SBEMU_CMD_DSP_READ_TESTREG)
+    {
+        SBEMU_DSPDATA_Subindex = 0;
+        SBEMU_DSPCMD = SBEMU_DSPCMD_INVALID;
+        return SBEMU_TestReg;
     }
     else if(SBEMU_DSPCMD == SBEMU_CMD_DSP_ID)
     {
@@ -464,13 +491,14 @@ uint8_t SBEMU_DSP_INT16ACK(uint16_t port)
     return 0xFF;
 }
 
-void SBEMU_Init(int irq, int dma, int hdma, int DSPVer,void(*startCB)(void))
+void SBEMU_Init(int irq, int dma, int hdma, int DSPVer,void(*startCB)(void), void(*DMAWrite)(int,uint8_t))
 {
     SBEMU_IRQ = irq;
     SBEMU_DMA = dma;
     SBEMU_HDMA = hdma;
     SBEMU_DSPVER = DSPVer;
     SBEMU_StartCB = startCB;
+    SBEMU_DMAWrite = DMAWrite;
 
     SBEMU_Mixer_WriteAddr(0, SBEMU_MIXERREG_RESET);
     SBEMU_Mixer_Write(0, 1);
@@ -629,6 +657,7 @@ const uint8_t* SBEMU_GetDirectPCM8()
 {
     return SBEMU_DirectBuffer;
 }
+
 
 int SBEMU_GetDetectionCounter()
 {

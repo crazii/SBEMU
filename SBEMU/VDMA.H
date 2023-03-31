@@ -51,8 +51,11 @@ uint32_t VDMA_GetAddress(int channel);
 uint32_t VDMA_GetCounter(int channel);
 int32_t VDMA_GetIndex(int channel);
 int32_t VDMA_SetIndexCounter(int channel, int32_t index, int32_t counter);
-int VDMA_GetAuto(int channel);
+int VDMA_GetAuto(int channel); //auto init mode
+int VDMA_GetWriteMode(int channel); //DMA write mode (device is writing to DMA)
 void VDMA_ToggleComplete(int channel);
+
+void VDMA_WriteData(int channel, uint8_t data);
 
 #ifdef __cplusplus
 }

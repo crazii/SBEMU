@@ -53,7 +53,10 @@
 #define SBEMU_CMD_CONTINUE_DMA16    0xD6
 #define SBEMU_CMD_DSP_ID            0xE0
 #define SBEMU_CMD_DSP_GETVER        0xE1 //1st byte major, 2nd byte minor
+#define SBEMU_CMD_DSP_DMA_ID        0xE2
 #define SBEMU_CMD_DSP_COPYRIGHT     0xE3
+#define SBEMU_CMD_DSP_WRITE_TESTREG 0xE4
+#define SBEMU_CMD_DSP_READ_TESTREG  0xE8
 #define SBEMU_CMD_TRIGGER_IRQ       0xF2
 #define SBEMU_CMD_TRIGGER_IRQ16     0xF3
 
@@ -113,7 +116,7 @@ uint8_t SBEMU_DSP_ReadStatus(uint16_t port); //read buffer status.
 uint8_t SBEMU_DSP_INT16ACK(uint16_t port);
 
 //used by emulations
-void SBEMU_Init(int irq, int dma, int hdma, int DSPVer, void(*startCB)(void));
+void SBEMU_Init(int irq, int dma, int hdma, int DSPVer, void(*startCB)(void), void(*DMAWrite)(int,uint8_t));
 uint8_t SBEMU_GetIRQ();
 uint8_t SBEMU_GetDMA();
 uint8_t SBEMU_GetHDMA();

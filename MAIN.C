@@ -489,7 +489,7 @@ int main(int argc, char* argv[])
         printf("OPL3 emulation enabled at port 388h.\n");
     }
     //TestSound(FALSE);
-    SBEMU_Init(MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value, MAIN_Options[OPT_HDMA].value, MAIN_SB_DSPVersion[MAIN_Options[OPT_TYPE].value], &MAIN_Interrupt);
+    SBEMU_Init(MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value, MAIN_Options[OPT_HDMA].value, MAIN_SB_DSPVersion[MAIN_Options[OPT_TYPE].value], &MAIN_Interrupt, &VDMA_WriteData);
     VDMA_Virtualize(MAIN_Options[OPT_DMA].value, TRUE);
     if(MAIN_Options[OPT_TYPE].value == 6)
         VDMA_Virtualize(MAIN_Options[OPT_HDMA].value, TRUE);
@@ -1046,7 +1046,7 @@ static void MAIN_TSR_Interrupt()
                 MAIN_Options[OPT_HDMA].value = opt[OPT_HDMA].value;
                 MAIN_Options[OPT_IRQ].value = opt[OPT_IRQ].value;
                 MAIN_Options[OPT_TYPE].value = opt[OPT_TYPE].value;
-                SBEMU_Init(MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value, MAIN_Options[OPT_HDMA].value, MAIN_SB_DSPVersion[MAIN_Options[OPT_TYPE].value], &MAIN_Interrupt);
+                SBEMU_Init(MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value, MAIN_Options[OPT_HDMA].value, MAIN_SB_DSPVersion[MAIN_Options[OPT_TYPE].value], &MAIN_Interrupt, & VDMA_WriteData);
             }
 
             if(MAIN_Options[OPT_OPL].value == opt[OPT_OPL].value && MAIN_Options[OPT_ADDR].value == opt[OPT_ADDR].value && MAIN_Options[OPT_PM].value == opt[OPT_PM].value && MAIN_Options[OPT_RM].value == opt[OPT_RM].value)
