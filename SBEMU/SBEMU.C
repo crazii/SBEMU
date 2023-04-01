@@ -40,6 +40,7 @@ static int SBEMU_TriggerIRQ = 0;
 static int SBEMU_Pos = 0;
 static int SBEMU_DetectionCounter = 0;
 static int SBEMU_DirectCount = 0;
+static int SBEMU_UseTimeConst = 0;
 static uint8_t SBEMU_IRQMap[4] = {2,5,7,10};
 static uint8_t SBEMU_MixerRegIndex = 0;
 static uint8_t SBEMU_idbyte;
@@ -128,6 +129,12 @@ void SBEMU_Mixer_Write(uint16_t port, uint8_t value)
             }
         }
     }
+    if(SBEMU_MixerRegIndex == SBEMU_MIXERREG_MODEFILTER && SBEMU_UseTimeConst)
+    {
+        //divide channels: channels might be set later than time const, order opposite to the SB programming guide. (Game: Epic Pinball)
+        SBEMU_SampleRate = SBEMU_SampleRate * SBEMU_UseTimeConst / SBEMU_GetChannels();
+        SBEMU_UseTimeConst = SBEMU_GetChannels();
+    }
 }
 
 uint8_t SBEMU_Mixer_Read(uint16_t port)
@@ -161,6 +168,7 @@ void SBEMU_DSP_Reset(uint16_t port, uint8_t value)
         SBEMU_DirectBuffer[0] = 0;
         SBEMU_DMAID_A = 0xAA;
         SBEMU_DMAID_X = 0x96;
+        SBEMU_UseTimeConst = 0;
 
         //SBEMU_Mixer_WriteAddr(0, SBEMU_MIXERREG_RESET);
         //SBEMU_Mixer_Write(0, 1);
@@ -196,8 +204,9 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                 break;
             case SBEMU_CMD_HALT_DMA:
             case SBEMU_CMD_CONTINUE_DMA:
+            case SBEMU_CMD_CONTINUE_AUTO:
             {
-                SBEMU_Started = SBEMU_DSPCMD == SBEMU_CMD_CONTINUE_DMA;
+                SBEMU_Started = SBEMU_DSPCMD == SBEMU_CMD_CONTINUE_DMA || SBEMU_DSPCMD == SBEMU_CMD_CONTINUE_AUTO;
                 SBEMU_DSPCMD = SBEMU_DSPCMD_INVALID;
             }
             break;
@@ -210,10 +219,11 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
             break;
             case SBEMU_CMD_8BIT_OUT_AUTO_HS:
             case SBEMU_CMD_8BIT_OUT_AUTO:
+            case SBEMU_CMD_8BIT_OUT_1_HS:
             {
-                SBEMU_Auto = TRUE;
+                SBEMU_Auto = SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_AUTO_HS || SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_AUTO;
                 SBEMU_Bits = 8;
-                SBEMU_HighSpeed = (SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_AUTO_HS);
+                SBEMU_HighSpeed = (SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_AUTO_HS || SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_1_HS);
                 SBEMU_Started = TRUE; //start transfer
                 SBEMU_DSPCMD = SBEMU_DSPCMD_INVALID;
                 SBEMU_Pos = 0;
@@ -274,11 +284,11 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                 if(SBEMU_SampleRate == 0)
                     SBEMU_SampleRate = 256000000/(65536-(value<<8)) / SBEMU_GetChannels();
                 SBEMU_DSPCMD_Subindex = 2; //only 1byte
+                SBEMU_UseTimeConst = SBEMU_GetChannels(); // 1 or 2
                 //_LOG("SBEMU: set sampling rate: %d", SBEMU_SampleRate);
             }
             break;
             case SBEMU_CMD_SET_SIZE: //used for auto command
-            case SBEMU_CMD_8BIT_OUT_1_HS:
             case SBEMU_CMD_8BIT_OUT_1:
             {
               if(SBEMU_DSPCMD_Subindex++ == 0)
@@ -286,8 +296,8 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                 else
                 {
                     SBEMU_Samples |= value<<8;
-                    SBEMU_Started = (SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_1 || SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_1_HS); //start transfer
-                    SBEMU_HighSpeed = (SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_AUTO_HS);
+                    SBEMU_Started = SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_1; //start transfer
+                    SBEMU_HighSpeed = FALSE;
                     SBEMU_Auto = FALSE;
                     if(SBEMU_Started)
                     {
@@ -330,6 +340,7 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                 {
                     SBEMU_SampleRate &= ~0xFF;
                     SBEMU_SampleRate |= value;
+                    SBEMU_UseTimeConst = 0;
                 }
             }
             break;
