@@ -1006,7 +1006,7 @@ static void MAIN_TSR_Interrupt()
                 _LOG("Change sample rate\n");
                 _LOG("FLAGS:%x\n",CPU_FLAGS());
 
-                int samplerate = (MAIN_Options[OPT_RATE].value == 0x22050) ? 22050 : 44100;
+                int samplerate = (opt[OPT_RATE].value == 0x22050) ? 22050 : 44100;
                 mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, samplerate, SBEMU_CHANNELS, SBEMU_CHANNELS, NULL, SBEMU_BITS, SBEMU_BITS/8, 0};
                 AU_setrate(&aui, &adi);
                 if(MAIN_Options[OPT_RATE].value != opt[OPT_RATE].value)
