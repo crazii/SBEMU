@@ -1,11 +1,15 @@
 #ifndef _EMM_H_
 #define _EMM_H_ 1
 #include <PLATFORM.H>
+#include <DPMI/DPMI.H>
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
+
+#define QEMM_TF_PM 0x01 //set if in pm, otherwise in rm(v86)
+extern int QEMM_TrapFlags;
 
 typedef uint32_t (*QEMM_IOTRAP_HANDLER)(uint32_t port, uint32_t val, uint32_t out);
 
@@ -34,6 +38,8 @@ typedef struct QEMM_IODT_LINK
 
 //get QEMM version
 uint16_t QEMM_GetVersion(void);
+
+BOOL QEMM_GetIOPrtTrap_Context(DPMI_REG* regs); //get trap context, must be in port trap handler to be called, and QEMM_TF_PM must be cleared in QEMM_TrapFlags
 
 //I/O virtualize
 BOOL QEMM_Install_IOPortTrap(QEMM_IODT* inputp iodt, uint16_t count, QEMM_IOPT* outputp iopt);

@@ -99,6 +99,14 @@
 #define SBEMU_CMD_CONTINUE_16BIT    0xD6
 #define SBEMU_CMD_PAUSE_DAC         0x80 //pause by samples
 
+typedef struct //external functions
+{
+    void(*StartPlayback)(void);     //start playing real hardware sound - not used.
+    void (*RaiseIRQ)(uint8_t);      //raise virtual IRQ - not used (not working)
+    void(*DMA_Write)(int,uint8_t);  //write DMA, (channel, value)
+    uint32_t (*DMA_Size)(int);      //Get DMA size (channel)
+}SBEMU_EXTFUNS;
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -117,7 +125,7 @@ uint8_t SBEMU_DSP_ReadStatus(uint16_t port); //read buffer status.
 uint8_t SBEMU_DSP_INT16ACK(uint16_t port);
 
 //used by emulations
-void SBEMU_Init(int irq, int dma, int hdma, int DSPVer, void(*startCB)(void), void(*DMAWrite)(int,uint8_t));
+void SBEMU_Init(int irq, int dma, int hdma, int DSPVer, SBEMU_EXTFUNS* extfuns); //extfuns must be persistent
 uint8_t SBEMU_GetIRQ();
 uint8_t SBEMU_GetDMA();
 uint8_t SBEMU_GetHDMA();

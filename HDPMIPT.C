@@ -50,6 +50,7 @@ static uint32_t __attribute__((noinline)) HDPMIPT_TrapHandler()
     :"memory"
     );
 
+    QEMM_TrapFlags |= QEMM_TF_PM;
     //if(port >= 0 && port <= 0xF)
         //_LOG("Trapped PM: %s %x\n", out ? "out" : "in", port);
     QEMM_IODT_LINK* link = HDPMIPT_IODT_header.next;

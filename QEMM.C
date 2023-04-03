@@ -14,6 +14,8 @@
 
 #define HANDLE_IN_388H_DIRECTLY 1
 
+int QEMM_TrapFlags;
+
 static QEMM_IODT_LINK QEMM_IODT_header;
 static QEMM_IODT_LINK* QEMM_IODT_Link = &QEMM_IODT_header;
 static uint16_t QEMM_EntryIP;
@@ -80,6 +82,7 @@ static void QEMM_TrapHandler()
     QEMM_IODT_LINK* link = QEMM_IODT_header.next;
 
     //_LOG("Port trap: %s %x\n", out ? "out" : "in", port);
+    QEMM_TrapFlags &= ~QEMM_TF_PM;
     QEMM_InCallback = TRUE;
     while(link)
     {
@@ -161,6 +164,15 @@ uint16_t QEMM_GetVersion(void)
     return 0;
 }
 
+BOOL QEMM_GetIOPrtTrap_Context(DPMI_REG* regs)
+{
+    if(!QEMM_InCallback)
+        return FALSE;
+    if(QEMM_TrapFlags&QEMM_TF_PM)
+        return FALSE;
+    *regs = QEMM_TrapHandlerREG;
+    return TRUE;
+}
 
 BOOL QEMM_Install_IOPortTrap(QEMM_IODT* inputp iodt, uint16_t count, QEMM_IOPT* outputp iopt)
 {

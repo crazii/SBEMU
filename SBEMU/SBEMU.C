@@ -20,8 +20,10 @@ typedef struct
 #define SBEMU_RESET_START 0
 #define SBEMU_RESET_END 1
 #define SBEMU_RESET_POLL 2
-void(*SBEMU_StartCB)(void);
-void(*SBEMU_DMAWrite)(int,uint8_t);
+
+#define SBEMU_DELAY_FOR_IRQ for(volatile int i = 0; i < 0xFFFFFFF; ++i) NOP()
+
+SBEMU_EXTFUNS* SBEMU_ExtFuns;
 static int SBEMU_ResetState = SBEMU_RESET_END;
 static int SBEMU_Started = 0;
 static int SBEMU_IRQ = 5;
@@ -195,7 +197,8 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                 SBEMU_MixerRegs[SBEMU_MIXERREG_INT_STS] |= SBEMU_DSPCMD == SBEMU_CMD_TRIGGER_IRQ ? 0x1 : 0x2;
                 SBEMU_TriggerIRQ = 1;
                 SBEMU_DSPCMD = SBEMU_DSPCMD_INVALID;
-                //VIRQ_Invoke(SBEMU_GetIRQ()); //not working
+                //SBEMU_ExtFuns->RaiseIRQ(SBEMU_GetIRQ());
+                SBEMU_DELAY_FOR_IRQ; //hack: add CPU delay so that sound interrupt raises virtual IRQ when games handler is installed (timing issue)
             }
             break;
             case SBEMU_CMD_DAC_SPEAKER_ON:
@@ -397,7 +400,7 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                 SBEMU_DMAID_X = (SBEMU_DMAID_X >> 2u) | (SBEMU_DMAID_X << 6u);
                 SBEMU_DSPCMD_Subindex = 2;
 
-                SBEMU_DMAWrite(SBEMU_DMA, SBEMU_DMAID_A);
+                SBEMU_ExtFuns->DMA_Write(SBEMU_DMA, SBEMU_DMAID_A);
             }
             break;
             case SBEMU_DSPCMD_SKIP1:
@@ -422,6 +425,13 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
             SBEMU_StartCB(); //if don't do this, need always output 0 PCM to keep interrupt alive for now
             STIL();
         }*/
+
+        if(SBEMU_GetSampleBytes() <= 32 && SBEMU_ExtFuns->DMA_Size(SBEMU_GetDMA()) <= 32) //small buffer, probably a detection routine
+        {
+            //SBEMU_ExtFuns->RaiseIRQ(SBEMU_GetIRQ());
+            //SBEMU_Started = FALSE;
+            SBEMU_DELAY_FOR_IRQ; //hack: add CPU delay so that sound interrupt raises virtual IRQ when games handler is installed (timing issue)
+        }
     }
 }
 
@@ -483,16 +493,8 @@ uint8_t SBEMU_DSP_WriteStatus(uint16_t port)
 uint8_t SBEMU_DSP_ReadStatus(uint16_t port)
 {
     _LOG("SBEMU: DSP RS\n");
-    /*
-    if(SBEMU_ResetState == SBEMU_RESET_POLL || SBEMU_ResetState == SBEMU_RESET_START
-    || SBEMU_DSPCMD == SBEMU_CMD_DSP_GETVER
-    || SBEMU_DSPCMD == SBEMU_CMD_DSP_ID
-    || SBEMU_DSPCMD == SBEMU_CMD_DSP_COPYRIGHT)
-        return 0xFF; //ready for read (bit7 set)
-    */
     SBEMU_RS += 0x80;
     SBEMU_MixerRegs[SBEMU_MIXERREG_INT_STS] &= ~0x1;
-    //SBEMU_TriggerIRQ = 0;
     return SBEMU_RS;
 }
 
@@ -502,14 +504,13 @@ uint8_t SBEMU_DSP_INT16ACK(uint16_t port)
     return 0xFF;
 }
 
-void SBEMU_Init(int irq, int dma, int hdma, int DSPVer,void(*startCB)(void), void(*DMAWrite)(int,uint8_t))
+void SBEMU_Init(int irq, int dma, int hdma, int DSPVer, SBEMU_EXTFUNS* extfuns)
 {
     SBEMU_IRQ = irq;
     SBEMU_DMA = dma;
     SBEMU_HDMA = hdma;
     SBEMU_DSPVER = DSPVer;
-    SBEMU_StartCB = startCB;
-    SBEMU_DMAWrite = DMAWrite;
+    SBEMU_ExtFuns = extfuns;
 
     SBEMU_Mixer_WriteAddr(0, SBEMU_MIXERREG_RESET);
     SBEMU_Mixer_Write(0, 1);

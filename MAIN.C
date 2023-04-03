@@ -44,6 +44,8 @@ static uint8_t MAIN_QEMM_Present = 0;
 static uint8_t MAIN_HDPMI_Present = 0;
 static uint8_t MAIN_InINT;
 
+SBEMU_EXTFUNS MAIN_SbemuExtFun;
+
 static void MAIN_Interrupt();
 static void MAIN_InterruptPM();
 static void MAIN_InterruptRM();
@@ -488,8 +490,13 @@ int main(int argc, char* argv[])
         //OPL3EMU_Init(aui.freq_card);
         printf("OPL3 emulation enabled at port 388h.\n");
     }
-    //TestSound(FALSE);
-    SBEMU_Init(MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value, MAIN_Options[OPT_HDMA].value, MAIN_SB_DSPVersion[MAIN_Options[OPT_TYPE].value], &MAIN_Interrupt, &VDMA_WriteData);
+    
+    MAIN_SbemuExtFun.StartPlayback = NULL; //not used
+    MAIN_SbemuExtFun.RaiseIRQ = NULL;
+    MAIN_SbemuExtFun.DMA_Size = &VDMA_GetCounter;
+    MAIN_SbemuExtFun.DMA_Write = &VDMA_WriteData;
+
+    SBEMU_Init(MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value, MAIN_Options[OPT_HDMA].value, MAIN_SB_DSPVersion[MAIN_Options[OPT_TYPE].value], &MAIN_SbemuExtFun);
     VDMA_Virtualize(MAIN_Options[OPT_DMA].value, TRUE);
     if(MAIN_Options[OPT_TYPE].value == 6)
         VDMA_Virtualize(MAIN_Options[OPT_HDMA].value, TRUE);
@@ -1046,7 +1053,7 @@ static void MAIN_TSR_Interrupt()
                 MAIN_Options[OPT_HDMA].value = opt[OPT_HDMA].value;
                 MAIN_Options[OPT_IRQ].value = opt[OPT_IRQ].value;
                 MAIN_Options[OPT_TYPE].value = opt[OPT_TYPE].value;
-                SBEMU_Init(MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value, MAIN_Options[OPT_HDMA].value, MAIN_SB_DSPVersion[MAIN_Options[OPT_TYPE].value], &MAIN_Interrupt, & VDMA_WriteData);
+                SBEMU_Init(MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value, MAIN_Options[OPT_HDMA].value, MAIN_SB_DSPVersion[MAIN_Options[OPT_TYPE].value], &MAIN_SbemuExtFun);
             }
 
             if(MAIN_Options[OPT_OPL].value == opt[OPT_OPL].value && MAIN_Options[OPT_ADDR].value == opt[OPT_ADDR].value && MAIN_Options[OPT_PM].value == opt[OPT_PM].value && MAIN_Options[OPT_RM].value == opt[OPT_RM].value)
