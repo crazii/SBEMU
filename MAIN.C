@@ -261,8 +261,8 @@ enum EOption
 static const char* MAIN_SBTypeString[] =
 {
     "0",
-    "1.0",
-    "1.5",
+    "1.0/1.5",
+    "Pro (old)",
     "2.0",
     "Pro",
     "Pro",
@@ -272,7 +272,7 @@ static int MAIN_SB_DSPVersion[] =
 {
     0,
     0x0100,
-    0x0105,
+    0x0300,
     0x0202,
     0x0302,
     0x0302,
@@ -703,7 +703,7 @@ static void MAIN_Interrupt()
     int32_t vol;
     int32_t voicevol;
     int32_t midivol;
-    if(MAIN_Options[OPT_TYPE].value < 4) //SB2.0 and before
+    if(MAIN_Options[OPT_TYPE].value == 1 || MAIN_Options[OPT_TYPE].value == 3) //SB2.0 and before
     {
         vol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MASTERVOL) >> 1)*256/7;
         voicevol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_VOICEVOL) >> 1)*256/3;
