@@ -74,7 +74,7 @@
 #define VIA_REG_OFS_PLAYBACK_VOLUME_R 0x03
 #define VIA_TBL_BIT_EOL        0x80000000
 #define VIA_TBL_BIT_FLAG       0x40000000
-#define VIA_TBL_BIT_STOP       0x20000000
+#define VIA_TBL_BIT_STOP       0x20000000 //VT8231 only. for FM channel
 
 #define VIA_ACLINK_STAT        0x40
 #define  VIA_ACLINK_C11_READY    0x20
@@ -442,7 +442,11 @@ static long VIA82XX_getbufpos(struct mpxplay_audioout_info_s *aui)
  }
  count &= 0xffffff;
 
- if(count && (count<=PCMBUFFERPAGESIZE)){
+#ifdef SBEMU
+ if(card->pci_dev->device_id!=PCI_DEVICE_ID_VT82C686 || (count && (count<=PCMBUFFERPAGESIZE))) { //VT8233/8235/8237 's count can be 0 on interrupt
+#else
+ if(count && (count<=PCMBUFFERPAGESIZE)) {
+#endif
 
   bufpos = (idx * PCMBUFFERPAGESIZE) + PCMBUFFERPAGESIZE - count;
 
