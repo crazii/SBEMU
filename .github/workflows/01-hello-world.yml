@@ -5,5 +5,13 @@ jobs:
   my-job:
     runs-on: ubuntu-latest
     steps:
-      - name: my-step
-        run: echo "Hello World!"
+      - name: test-case-insensitive-fs
+        run: |
+          uname -r
+          cat /etc/lsb-release
+          cat /sys/fs/ext4/features/casefold
+          cat /sys/fs/unicode/version
+          mkdir /tmp/case_insensitive_src
+          chattr +F /tmp/case_insensitive_src
+          echo "Hello" > /tmp/case_insensitive_src/TeSt.TxT
+          -cat /tmp/case_insensitive_src/test.txt
