@@ -10,7 +10,7 @@ jobs:
           uname -r
           cat /etc/lsb-release
           cat /sys/fs/ext4/features/casefold
-          cat /sys/fs/unicode/version
+          echo "Skipping \"cat /sys/fs/unicode/version\""
           mkdir /tmp/case_insensitive_src
           chattr +F /tmp/case_insensitive_src
           echo "Hello" > /tmp/case_insensitive_src/TeSt.TxT
