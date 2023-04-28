@@ -1,0 +1,9 @@
+# With thanks to https://gist.github.com/weibeld/f136048d0a82aacc063f42e684e3c494
+name: hello-world
+on: push
+jobs:
+  my-job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: my-step
+        run: echo "Hello World!"
