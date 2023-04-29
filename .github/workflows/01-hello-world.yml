@@ -8,11 +8,11 @@ jobs:
       - name: test-case-insensitive-fs
         run: |
           uname -r
-          sudo echo "Sudo command successful."
-          cat /etc/lsb-release
-          cat /sys/fs/ext4/features/casefold
-          echo "Skipping \"cat /sys/fs/unicode/version\""
-          mkdir /tmp/case_insensitive_src
-          chattr +F /tmp/case_insensitive_src
-          echo "Hello" > /tmp/case_insensitive_src/TeSt.TxT
-          -cat /tmp/case_insensitive_src/test.txt
+          dd if=/dev/zero of=/tmp/VirtBlock.img bs=5M count=1
+          mkfs.vfat -n FAT_SRC /tmp/VirtBlock.img
+          sudo mkdir /mnt/src
+          sudo mount /tmp/VirtBlock.img /mnt/src
+          sudo touch /mnt/src/TeSt.TxT
+          whoami
+          sudo sh -c 'echo "Hello" > /mnt/src/TeSt.TxT'
+          cat /mnt/src/test.txt
