@@ -8,6 +8,7 @@ jobs:
       - name: test-case-insensitive-fs
         run: |
           uname -r
+          sudo echo "Sudo command successful."
           cat /etc/lsb-release
           cat /sys/fs/ext4/features/casefold
           echo "Skipping \"cat /sys/fs/unicode/version\""
