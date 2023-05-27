@@ -28,4 +28,4 @@ jobs:
           cd $GITHUB_WORKSPACE/src
           ls -lh MAIN.C
           ls -lh main.c
-          docker run --rm -t --volume=$PWD:/workspace anibali/djgpp gcc -I ./SBEMU -I ./MPXPLAY -o sbemu.exe main.c
+          docker run --rm -t --volume=$PWD:/workspace anibali/djgpp gcc -D SBEMU -I ./SBEMU -I ./MPXPLAY -o sbemu.exe main.c
