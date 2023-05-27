@@ -5,12 +5,12 @@ jobs:
   my-job:
     runs-on: ubuntu-latest
     steps:
-      - name: test-case-insensitive-fs
+      - name: mount-case-insensitive-fs
         run: |
           uname -r
           dd if=/dev/zero of=/tmp/VirtBlock.img bs=5M count=1
           mkfs.vfat -n FAT_SRC /tmp/VirtBlock.img
-          sudo mkdir /mnt/src
-          sudo mount /tmp/VirtBlock.img /mnt/src -o rw,uid=$(id -u),gid=$(id -g)
-          sudo sh -c 'echo "Hello" > /mnt/src/TeSt.TxT'
-          cat /mnt/src/test.txt
+          mkdir $GITHUB_WORKSPACE/src
+          sudo mount /tmp/VirtBlock.img $GITHUB_WORKSPACE/src -o rw,uid=$(id -u),gid=$(id -g)
+          sh -c 'echo "Hello" > $GITHUB_WORKSPACE/src/TeSt.TxT'
+          cat $GITHUB_WORKSPACE/src/test.txt
