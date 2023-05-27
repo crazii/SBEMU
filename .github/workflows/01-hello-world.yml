@@ -31,4 +31,5 @@ jobs:
           cd $GITHUB_WORKSPACE/src
           ls -lh MAIN.C
           ls -lh main.c
-          wcc386 main.c
+          wcl386 -zq -d+ ${{ env.WATCOM }}/h -w3 -bt=dos -d2 -fomain.c.obj -c -cc main.c
+          wlink option quiet name sbemu.exe opt map system dos4g debug all file main.c.obj
