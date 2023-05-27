@@ -23,9 +23,17 @@ jobs:
           ls -lh $GITHUB_WORKSPACE/src/test.txt
           ls -lh $GITHUB_WORKSPACE/src/MAIN.C
           ls -lh $GITHUB_WORKSPACE/src/main.c
+      - name: Install DJGPP
+        run: |
+          pushd /opt
+          wget https://github.com/andrewwutw/build-djgpp/releases/download/v3.3/djgpp-linux64-gcc1210.tar.bz2
+          tar -jxvf djgpp-linux64-gcc1210.tar.bz2
+          rm djgpp-linux64-gcc1210.tar.bz2
+          popd
       - name: Build project
         run: |
           cd $GITHUB_WORKSPACE/src
           ls -lh MAIN.C
           ls -lh main.c
-          docker run --rm -t --volume=$PWD:/workspace anibali/djgpp gcc -D SBEMU -I ./SBEMU -I ./MPXPLAY -o sbemu.exe main.c
+          . /opt/djgpp/setenv
+          i586-pc-msdosdjgpp-gcc -D SBEMU -I ./SBEMU -I ./MPXPLAY -o sbemu.exe main.c
