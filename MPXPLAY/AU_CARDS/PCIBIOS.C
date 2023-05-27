@@ -21,7 +21,7 @@
 #include <io.h>
 #include <dos.h>
 
-#include "newfunc\newfunc.h"
+#include "newfunc/newfunc.h"
 #include "pcibios.h"
 
 #define PCIDEVNUM(bParam)      (bParam >> 3)

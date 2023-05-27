@@ -23,9 +23,9 @@
 #include "mpxplay.h"
 #include "dmairq.h"
 #ifndef SBEMU
-#include "newfunc\dll_load.h"
-#include "au_mixer\au_mixer.h"
-#include "display\display.h"
+#include "newfunc/dll_load.h"
+#include "au_mixer/au_mixer.h"
+#include "display/display.h"
 #endif
 
 typedef int (*aucards_writedata_t)(struct mpxplay_audioout_info_s *aui,unsigned long);

@@ -20,7 +20,7 @@
 #ifdef AU_CARDS_LINK_WINDSOUND
 
 #include "dmairq.h"
-#include "au_mixer\mix_func.h"
+#include "au_mixer/mix_func.h"
 
 //#define DIRECTSOUND_VERSION 0x0600
 #define WIN32_LEAN_AND_MEAN 1

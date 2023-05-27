@@ -20,7 +20,7 @@
 
 #include <midasdll.h>
 #include "mpxplay.h"
-#include "control\control.h"
+#include "control/control.h"
 
 static void MIDAS_setvol(void);
 

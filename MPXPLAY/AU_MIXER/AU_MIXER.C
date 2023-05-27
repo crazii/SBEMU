@@ -24,7 +24,7 @@
 
 #include "mpxplay.h"
 #include "mix_func.h"
-#include "display\display.h"
+#include "display/display.h"
 #include <float.h>
 
 extern unsigned int displaymode,crossfadepart;

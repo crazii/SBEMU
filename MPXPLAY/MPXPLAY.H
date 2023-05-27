@@ -317,10 +317,10 @@ typedef struct crossfade_info{
 }crossfade_info;
 
 #include "in_file.h"
-#include "au_cards\au_cards.h"
+#include "au_cards/au_cards.h"
 #ifdef MPXPLAY_GUI_CONSOLE
-#include "display\visualpi.h"
-#include "videoout\videoout.h"
+#include "display/visualpi.h"
+#include "videoout/videoout.h"
 #endif
 
 #define MPXPLAY_MPXPFRAME_FLAG_OWN_SRVFFMV_CALLBACK  (1 << 0)  // parser has own dispqt_worker callback function (in_ffmpeg.c)
@@ -389,8 +389,8 @@ struct mpxpframe_s {
  struct mpxpframe_s *fro; // crosslink (fr[0]->fr[1],fr[1]->fr[0])
 };
 
-#include "playlist\playlist.h"
-#include "au_mixer\au_mixer.h"
+#include "playlist/playlist.h"
+#include "au_mixer/au_mixer.h"
 
 struct mainvars{
  struct mpxpframe_s *fr_base;    // pointed to fr[0]

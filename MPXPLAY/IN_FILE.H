@@ -17,7 +17,7 @@
 #ifndef mpxplay_in_file_h
 #define mpxplay_in_file_h
 
-#include "newfunc\newfunc.h"
+#include "newfunc/newfunc.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -233,7 +233,7 @@ typedef struct mpxplay_filehand_low_data_s{
 
 //low level file handling (normal-file, cdw, ftp-file-source)
 typedef struct mpxplay_filehand_low_func_s{
- int   (*check) (char *filename);     // true (1) or false (0) (check filename (ie:filename begins with "http:\\"), use these functions if 'true')
+ int   (*check) (char *filename);     // true (1) or false (0) (check filename (ie:filename begins with "http://"), use these functions if 'true')
  void *(*open_read) (char *filename); // returns filehand_data
  void *(*open_write)(char *filename); // returns filehand_data
  void *(*open_create)(char *filename);// returns filehand_data

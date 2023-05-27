@@ -188,7 +188,7 @@ typedef struct au_cardconfig_v0154_s{
  #endif
 #endif
 
-#include <newfunc\newfunc.h>
+#include <newfunc/newfunc.h>
 
 typedef struct mpxplay_audioout_info_s{
  short *pcm_sample;

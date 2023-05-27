@@ -360,7 +360,7 @@ one_mixerfunc_info MIXER_FUNCINFO_seekspeed;
 static int seekspeed_base,seekspeed_extra,seekspeed_counter;
 extern unsigned int refdisp;
 #ifndef SBEMU
-#include "display\display.h"
+#include "display/display.h"
 #endif
 
 static void mixer_speed_seekspeed_process(struct mpxp_aumixer_passinfo_s *mpi)
