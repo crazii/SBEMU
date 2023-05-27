@@ -5,21 +5,20 @@ jobs:
   my-job:
     runs-on: ubuntu-latest
     steps:
-      - name: mount-case-insensitive-fs
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          path: tmp_src
+      - name: checkout-in-case-insensitive-fs
         run: |
-          uname -r
           dd if=/dev/zero of=/tmp/VirtBlock.img bs=5M count=1
           mkfs.vfat -n FAT_SRC /tmp/VirtBlock.img
           mkdir $GITHUB_WORKSPACE/src
           sudo mount /tmp/VirtBlock.img $GITHUB_WORKSPACE/src -o rw,uid=$(id -u),gid=$(id -g)
           sh -c 'echo "Hello" > $GITHUB_WORKSPACE/src/TeSt.TxT'
           cat $GITHUB_WORKSPACE/src/test.txt
-      - name: Checkout
-        uses: actions/checkout@v3
-        with:
-          path: src
-      - name: test-steps-so-far
-        run: |
+          echo "Test file stored in path $GITHUB_WORKSPACE/src/test.txt"
+          mv $GITHUB_WORKSPACE/tmp_src/* $GITHUB_WORKSPACE/src/
           ls -lh
           ls -lh $GITHUB_WORKSPACE/src/test.txt
           ls -lh $GITHUB_WORKSPACE/src/MAIN.C
