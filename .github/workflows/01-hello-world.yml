@@ -23,3 +23,6 @@ jobs:
           ls -lh $GITHUB_WORKSPACE/src/test.txt
           ls -lh $GITHUB_WORKSPACE/src/MAIN.C
           ls -lh $GITHUB_WORKSPACE/src/main.c
+      - name: build-project
+        run: |
+          ls -lh $GITHUB_WORKSPACE/src/MAIN.C
