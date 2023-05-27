@@ -23,6 +23,9 @@ jobs:
           ls -lh $GITHUB_WORKSPACE/src/test.txt
           ls -lh $GITHUB_WORKSPACE/src/MAIN.C
           ls -lh $GITHUB_WORKSPACE/src/main.c
-      - name: build-project
+      - uses: open-watcom/setup-watcom@v0
+        with:
+          version: "2.0"
+      - name: Build project
         run: |
           ls -lh $GITHUB_WORKSPACE/src/MAIN.C
