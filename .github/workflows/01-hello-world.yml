@@ -14,3 +14,13 @@ jobs:
           sudo mount /tmp/VirtBlock.img $GITHUB_WORKSPACE/src -o rw,uid=$(id -u),gid=$(id -g)
           sh -c 'echo "Hello" > $GITHUB_WORKSPACE/src/TeSt.TxT'
           cat $GITHUB_WORKSPACE/src/test.txt
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          path: src
+      - name: test-steps-so-far
+        run: |
+          ls -lh
+          ls -lh $GITHUB_WORKSPACE/src/test.txt
+          ls -lh $GITHUB_WORKSPACE/src/MAIN.C
+          ls -lh $GITHUB_WORKSPACE/src/main.c
