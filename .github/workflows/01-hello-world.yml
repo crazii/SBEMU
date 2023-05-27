@@ -23,13 +23,9 @@ jobs:
           ls -lh $GITHUB_WORKSPACE/src/test.txt
           ls -lh $GITHUB_WORKSPACE/src/MAIN.C
           ls -lh $GITHUB_WORKSPACE/src/main.c
-      - uses: open-watcom/setup-watcom@v0
-        with:
-          version: "2.0"
       - name: Build project
         run: |
           cd $GITHUB_WORKSPACE/src
           ls -lh MAIN.C
           ls -lh main.c
-          wcl386 -zq -d+ ${{ env.WATCOM }}/h -w3 -bt=dos -d2 -fomain.c.obj -c -cc main.c
-          wlink option quiet name sbemu.exe opt map system dos4g debug all file main.c.obj
+          docker run --rm -t --volume=$PWD:/workspace anibali/djgpp gcc -I ./SBEMU -I ./MPXPLAY -o sbemu.exe main.c
