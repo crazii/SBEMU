@@ -36,4 +36,4 @@ jobs:
           ls -lh MAIN.C
           ls -lh main.c
           . /opt/djgpp/setenv
-          i586-pc-msdosdjgpp-gcc -D SBEMU -I ./SBEMU -I ./MPXPLAY -o sbemu.exe main.c
+          i586-pc-msdosdjgpp-gcc -D SBEMU -D __stdcall="" -I ./SBEMU -I ./MPXPLAY -o sbemu.exe main.c
