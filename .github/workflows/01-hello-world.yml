@@ -28,4 +28,7 @@ jobs:
           version: "2.0"
       - name: Build project
         run: |
-          ls -lh $GITHUB_WORKSPACE/src/MAIN.C
+          cd $GITHUB_WORKSPACE/src
+          ls -lh MAIN.C
+          ls -lh main.c
+          wcc386 main.c
