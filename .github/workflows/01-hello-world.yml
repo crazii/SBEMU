@@ -36,7 +36,4 @@ jobs:
           ls -lh MAIN.C
           ls -lh main.c
           . /opt/djgpp/setenv
-          apt-cache search gpr
-          sudo apt install -y gprbuild
-          gprbuild --help
-          gprbuild sbemu.gpr
+          make -f SBEMU.MAK
