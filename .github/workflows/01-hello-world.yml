@@ -36,24 +36,7 @@ jobs:
           ls -lh MAIN.C
           ls -lh main.c
           . /opt/djgpp/setenv
-          i586-pc-msdosdjgpp-gcc -D SBEMU -D __stdcall="" -I ./SBEMU -I ./MPXPLAY -o sbemu.exe \
-          main.c \
-          sbemu/opl3emu.cpp \
-          sbemu/vdma.c \
-          sbemu/virq.c \
-          sbemu/sbemu.c \
-          qemm.c \
-          hdpmipt.c \
-          sbemu/dpmi/dpmi.c \
-          sbemu/pic.c \
-          mpxplay/au_cards/au_cards.c \
-          sbemu/dpmi/dpmi_dj2.c \
-          sbemu/dpmi/dpmi_tsr.c \
-          mpxplay/au_mixer/cv_bits.c \
-          mpxplay/au_mixer/cv_chan.c \
-          sbemu/untrapio.c \
-          sbemu/dpmi/xms.c \
-          mpxplay/newfunc/string.c \
-          mpxplay/newfunc/timer.c \
-          mpxplay/au_mixer/cv_freq.c \
-          sbemu/dbopl.cpp
+          apt-cache search gpr
+          sudo apt install -y gprbuild
+          gprbuild --help
+          gprbuild sbemu.gpr
