@@ -55,7 +55,8 @@ jobs:
           ls -lh /tmp/mnt
           sudo umount /tmp/mnt
           mv FD13LITE.img SBEMU-FD13-USB.img
-          7z a $GITHUB_WORKSPACE/SBEMU-FD13-USB.7z SBEMU-FD13-USB.img -mx9
+          xz -k -9e SBEMU-FD13-USB.img
+          mv SBEMU-FD13-USB.img.xz $GITHUB_WORKSPACE/
       - name: Generate release tag
         id: tag
         run: |
@@ -67,5 +68,10 @@ jobs:
         with:
           tag_name: ${{ steps.tag.outputs.release_tag }}
           files: |
-            ${{ github.workspace }}/SBEMU-FD13-USB.7z
+            ${{ github.workspace }}/SBEMU-FD13-USB.img.xz
+          body: |
+            The USB image can be written to a USB drive or SD card using a tool like
+            [balenaEtcher](https://etcher.balena.io/).
 
+            The advantage of using Etcher is that you don't have to decompress the `.xz` archive first. It will
+            decompress such files automatically, before writing the image to the target drive.
