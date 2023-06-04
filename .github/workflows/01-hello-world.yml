@@ -67,5 +67,5 @@ jobs:
         with:
           tag_name: ${{ steps.tag.outputs.release_tag }}
           files: |
-            $GITHUB_WORKSPACE/SBEMU-FD13-USB.7z
-            /tmp/doesnotexist.txte2
+            ${{ github.workspace }}/SBEMU-FD13-USB.7z
+
