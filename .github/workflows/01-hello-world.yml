@@ -52,3 +52,9 @@ jobs:
           cp $GITHUB_WORKSPACE/src/output/sbemu.exe /tmp/mnt/
           ls -lh /tmp/mnt
           sudo umount /tmp/mnt
+          mv FD13LITE.img SBEMU-FD13-USB.img
+          7z a $GITHUB_WORKSPACE/SBEMU-FD13-USB.7z SBEMU-FD13-USB.img -mx9
+      - name: Release FreeDOS SBEMU USB image
+        uses: softprops/action-gh-release@v1
+        with:
+          files: $GITHUB_WORKSPACE/SBEMU-FD13-USB.7z
