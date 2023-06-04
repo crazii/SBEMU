@@ -54,7 +54,14 @@ jobs:
           sudo umount /tmp/mnt
           mv FD13LITE.img SBEMU-FD13-USB.img
           7z a $GITHUB_WORKSPACE/SBEMU-FD13-USB.7z SBEMU-FD13-USB.img -mx9
+      - name: Generate release tag
+        id: tag
+        run: |
+          echo "::set-output name=release_tag::UserBuild_$(date +"%Y.%m.%d_%H-%M")"
       - name: Release FreeDOS SBEMU USB image
         uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          tag_name: ${{ steps.tag.outputs.release_tag }}
           files: $GITHUB_WORKSPACE/SBEMU-FD13-USB.7z
