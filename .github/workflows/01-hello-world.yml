@@ -1,8 +1,10 @@
 # With thanks to https://gist.github.com/weibeld/f136048d0a82aacc063f42e684e3c494
-name: hello-world
+name: build-and-release
 on: push
+permissions:
+  contents: write
 jobs:
-  my-job:
+  release-job:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
