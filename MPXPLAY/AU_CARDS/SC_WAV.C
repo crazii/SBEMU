@@ -15,7 +15,7 @@
 //function: WAV-file and bitstream output
 
 #include "mpxplay.h"
-#include "control\control.h"
+#include "control/control.h"
 #include <fcntl.h>
 
 extern unsigned int outmode;

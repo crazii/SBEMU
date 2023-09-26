@@ -17,7 +17,7 @@
 #ifndef mpxplay_in_file_h
 #define mpxplay_in_file_h
 
-#include "newfunc\newfunc.h"
+#include "newfunc/newfunc.h"
 
 #ifdef __cplusplus
 extern "C" {
