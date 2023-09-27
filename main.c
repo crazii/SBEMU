@@ -3,19 +3,19 @@
 #include <string.h>
 #include <ctype.h>
 #include <dos.h>
-#include <DPMI/DBGUTIL.H>
-#include <SBEMUCFG.H>
-#include <PIC.H>
-#include <OPL3EMU.H>
-#include <VDMA.H>
-#include <VIRQ.H>
-#include <SBEMU.H>
-#include <UNTRAPIO.H>
-#include "QEMM.H"
-#include "HDPMIPT.H"
+#include <dpmi/dbgutil.h>
+#include <sbemucfg.h>
+#include <pic.h>
+#include <opl3emu.h>
+#include <vdma.h>
+#include <virq.h>
+#include <sbemu.h>
+#include <untrapio.h>
+#include "qemm.h"
+#include "hdpmipt.h"
 
-#include <MPXPLAY.H>
-#include <AU_MIXER/MIX_FUNC.H>
+#include <mpxplay.h>
+#include <au_mixer/mix_func.h>
 
 #define MAIN_SBEMU_VER "1.0 beta3"
 

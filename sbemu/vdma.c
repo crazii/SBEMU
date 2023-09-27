@@ -1,6 +1,6 @@
-#include "VDMA.H"
-#include "UNTRAPIO.H"
-#include "DPMI/DBGUTIL.H"
+#include "vdma.h"
+#include "untrapio.h"
+#include "dpmi/dbgutil.h"
 
 //registers
 static uint16_t VDMA_Regs[32];

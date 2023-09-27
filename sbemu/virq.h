@@ -3,7 +3,7 @@
 //IRQ virtualization
 //https://wiki.osdev.org/8259_PIC
 #include <stdint.h>
-#include <DPMI/DPMI.H>
+#include <dpmi/dpmi.h>
 
 #ifdef __cplusplus
 extern "C"

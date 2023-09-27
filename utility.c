@@ -1,4 +1,4 @@
-#include <DPMI/DPMI.H>
+#include <dpmi/dpmi.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>

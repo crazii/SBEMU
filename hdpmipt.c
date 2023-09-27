@@ -5,10 +5,10 @@
 #ifndef __GNUC__ //make vscode happy
 #define __attribute__(x)
 #endif
-#include <DPMI/DBGUTIL.H>
-#include <UNTRAPIO.H>
+#include <dpmi/dbgutil.h>
+#include <untrapio.h>
 
-#include "HDPMIPT.H"
+#include "hdpmipt.h"
 
 #define HDPMIPT_SWITCH_STACK 1 //TODO: debug
 #define HDPMIPT_STACKSIZE 16384

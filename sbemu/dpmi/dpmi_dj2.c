@@ -1,4 +1,4 @@
-#include "DPMI.H"
+#include "dpmi.h"
 #if defined(__DJ2__)
 #include <conio.h>
 #include <stdlib.h>
@@ -10,8 +10,8 @@
 #include <assert.h>
 #include <signal.h>
 #include <stdio.h>
-#include "XMS.H"
-#include "DBGUTIL.H"
+#include "xms.h"
+#include "dbgutil.h"
 
 extern DPMI_ADDRESSING DPMI_Addressing;
 

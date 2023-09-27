@@ -2,10 +2,10 @@
 #include <stdlib.h>
 #include <dos.h>
 #include <assert.h>
-#include <PLATFORM.H>
-#include <SBEMUCFG.H>
-#include <MPXPLAY.H>
-#include <AU_MIXER/MIX_FUNC.H>
+#include <platform.h>
+#include <sbemucfg.h>
+#include <mpxplay.h>
+#include <au_mixer/mix_func.h>
 
 typedef struct WAVHEADER {
     unsigned char riff[4];                          // RIFF string

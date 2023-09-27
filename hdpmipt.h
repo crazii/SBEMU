@@ -2,7 +2,7 @@
 #define _HDPMIPT_H_
 //HDPMI port trap utility
 
-#include "QEMM.H" //QEMM compatible interface
+#include "qemm.h" //QEMM compatible interface
 
 BOOL HDPMIPT_Detect();
 

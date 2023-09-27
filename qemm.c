@@ -7,10 +7,10 @@
 #ifdef DJGPP
 #include <sys/ioctl.h>
 #endif
-#include "QEMM.h"
-#include <DPMI/DPMI.H>
-#include <DPMI/DBGUTIL.H>
-#include <UNTRAPIO.H>
+#include "qemm.h"
+#include <dpmi/dpmi.h>
+#include <dpmi/dbgutil.h>
+#include <untrapio.h>
 
 #define HANDLE_IN_388H_DIRECTLY 1
 

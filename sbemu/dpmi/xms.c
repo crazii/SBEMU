@@ -2,8 +2,8 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
-#include "XMS.H"
-#include "DPMI.H"
+#include "xms.h"
+#include "dpmi.h"
 
 static DPMI_REG XMSReg = {0};
 

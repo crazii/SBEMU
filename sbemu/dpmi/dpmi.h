@@ -1,6 +1,6 @@
 #ifndef _DPMI_H_
 #define _DPMI_H_
-#include <PLATFORM.H>
+#include <platform.h>
 
 //configs
 #define DPMI_USE_XMS_HEAP 0

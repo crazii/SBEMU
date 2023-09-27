@@ -1,4 +1,4 @@
-#include "OPL3EMU.H"
+#include "opl3emu.h"
 #include "dbopl.h"
 
 #define OPL3EMU_PRIMARY 0

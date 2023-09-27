@@ -1,4 +1,4 @@
-#include "DPMI.H"
+#include "dpmi.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -21,7 +21,7 @@
 #include <go32.h>
 #include <stubinfo.h>
 #include "coff.h"
-#include "DBGUTIL.H"
+#include "dbgutil.h"
 
 #pragma GCC diagnostic ignored "-Wpedantic"
 #define NEW_BASE_ALIGNMENT (64*1024UL)

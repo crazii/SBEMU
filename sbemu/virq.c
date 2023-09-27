@@ -1,8 +1,8 @@
-#include "VIRQ.H"
-#include "PIC.H"
-#include "DPMI/DPMI.H"
-#include "UNTRAPIO.H"
-#include "DPMI/DBGUTIL.H"
+#include "virq.h"
+#include "pic.h"
+#include "dpmi/dpmi.h"
+#include "untrapio.h"
+#include "dpmi/dbgutil.h"
 #include <dos.h>
 #include <string.h>
 

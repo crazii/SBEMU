@@ -1,7 +1,7 @@
 #ifndef _EMM_H_
 #define _EMM_H_ 1
-#include <PLATFORM.H>
-#include <DPMI/DPMI.H>
+#include <platform.h>
+#include <dpmi/dpmi.h>
 
 #ifdef __cplusplus
 extern "C"

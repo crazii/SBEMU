@@ -1,7 +1,7 @@
-#include "PLATFORM.H"
-#include "DPMI/DBGUTIL.H"
-#include "SBEMU.H"
-#include "CTADPCM.H"
+#include "platform.h"
+#include "dpmi/dbgutil.h"
+#include "sbemu.h"
+#include "ctadpcm.h"
 #include <string.h>
 
 typedef struct 

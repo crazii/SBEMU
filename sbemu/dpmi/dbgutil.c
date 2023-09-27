@@ -7,8 +7,8 @@
 #include <stdarg.h>
 #include <dos.h>
 #include <conio.h>
-#include "DPMI.H"
-#include "DBGUTIL.H"
+#include "dpmi.h"
+#include "dbgutil.h"
 
 #if defined(__BC__)
 extern BOOL DPMI_IsInProtectedMode();

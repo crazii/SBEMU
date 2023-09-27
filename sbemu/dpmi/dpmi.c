@@ -1,5 +1,5 @@
-#include "DPMI.H"
-#include "XMS.H"
+#include "dpmi.h"
+#include "xms.h"
 #include <conio.h>
 #include <stdlib.h>
 

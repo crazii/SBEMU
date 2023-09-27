@@ -1,6 +1,6 @@
 #ifndef _DPMI_XMS_H_
 #define _DPMI_XMS_H_
-#include <PLATFORM.H>
+#include <platform.h>
 
 #ifdef __cplusplus
 extern "C"

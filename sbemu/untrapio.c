@@ -1,5 +1,5 @@
 #include <dos.h>
-#include "UNTRAPIO.H"
+#include "untrapio.h"
 
 
 static void UntrappedIO_OUT_Default(uint16_t port, uint8_t value)

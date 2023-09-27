@@ -2,7 +2,7 @@
 #define _DBGUTIL_H_
 #include <stdlib.h>
 #include <stdarg.h>
-#include "DPMI.H"
+#include "dpmi.h"
 
 #define DUMP_BUFF_SIZE 1024U
 
