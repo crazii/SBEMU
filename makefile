@@ -3,8 +3,10 @@ CC := i586-pc-msdosdjgpp-gcc
 CXX := i586-pc-msdosdjgpp-g++
 DEBUG ?= 0
 
+VERSION ?= $(shell git describe --tags)
+
 INCLUDES := -I./mpxplay -I./sbemu
-DEFINES := -D__DOS__ -DSBEMU -DDEBUG=$(DEBUG)
+DEFINES := -D__DOS__ -DSBEMU -DDEBUG=$(DEBUG) -DMAIN_SBEMU_VER=\"$(VERSION)\"
 CFLAGS := -fcommon -march=i386 -Os $(INCLUDES) $(DEFINES)
 LDFLAGS := -lstdc++ -lm
 

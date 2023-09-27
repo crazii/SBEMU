@@ -17,7 +17,9 @@
 #include <mpxplay.h>
 #include <au_mixer/mix_func.h>
 
+#ifndef MAIN_SBEMU_VER
 #define MAIN_SBEMU_VER "1.0 beta3"
+#endif
 
 #define MAIN_TRAP_PIC_ONDEMAND 1
 #define MAIN_INSTALL_RM_ISR 1 //not needed. but to workaround some rm games' problem. need RAW_HOOk in dpmi_dj2.c
