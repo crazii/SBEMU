@@ -34,6 +34,7 @@ CARDS_SRC := mpxplay/au_cards/ac97_def.c \
 	     mpxplay/au_cards/pcibios.c \
 	     mpxplay/au_cards/sc_e1371.c \
 	     mpxplay/au_cards/sc_ich.c \
+	     mpxplay/au_cards/sc_cmi.c \
 	     mpxplay/au_cards/sc_inthd.c \
 	     mpxplay/au_cards/sc_sbl24.c \
 	     mpxplay/au_cards/sc_sbliv.c \
