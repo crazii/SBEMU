@@ -9,6 +9,7 @@
 #include <conio.h>
 #include "dpmi.h"
 #include "dbgutil.h"
+#include "serial.h"
 
 #if defined(__BC__)
 extern BOOL DPMI_IsInProtectedMode();
@@ -129,16 +130,10 @@ void DBG_Logv(const char* fmt, va_list aptr)
     len = min(len, SIZE-1);
     buf[len] = '\0';
 
-    #if 0
-    outp(0x3F8+3, 0x03);
-    for(int i = 0; i < len; ++i)
-    {
-        while((inp(0x3F8+5)&0x20)==0);
-        outp(0x3F8, buf[i]);
+    if (ser_puts(buf)) {
+        return;
     }
-    return;
-    #endif
-    
+
     if(!(CPU_FLAGS()&CPU_IFLAG))
     { //use VGA when in interrupt
         VGA_Print(buf);
