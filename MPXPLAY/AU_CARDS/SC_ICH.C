@@ -240,6 +240,7 @@ static void snd_intel_ac97_init(struct intel_card_s *card,unsigned int freq_set)
  snd_intel_codec_write(card, AC97_MASTER_VOL_STEREO, 0x0202);
  snd_intel_codec_write(card, AC97_PCMOUT_VOL,        0x0202);
  snd_intel_codec_write(card, AC97_HEADPHONE_VOL,     0x0202);
+ snd_intel_codec_write(card, AC97_CD_VOL,            0x0202);
  snd_intel_codec_write(card, AC97_EXTENDED_STATUS,AC97_EA_SPDIF);
 
  // set/check variable bit rate bit
