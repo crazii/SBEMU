@@ -43,6 +43,7 @@ static int SBEMU_Pos = 0;
 static int SBEMU_DetectionCounter = 0;
 static int SBEMU_DirectCount = 0;
 static int SBEMU_UseTimeConst = 0;
+static int SBEMU_FixTC = 0;
 static uint8_t SBEMU_IRQMap[4] = {2,5,7,10};
 static uint8_t SBEMU_MixerRegIndex = 0;
 static uint8_t SBEMU_idbyte;
@@ -301,7 +302,7 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
             case SBEMU_CMD_SET_TIMECONST:
             {
                 SBEMU_SampleRate = 0;
-                for(int i = 0; i < 3; ++i)
+                if (SBEMU_FixTC != 0) for(int i = 0; i < 3; ++i)
                 {
                     if(value >= SBEMU_TimeConstantMapMono[i][0]-3 && value <= SBEMU_TimeConstantMapMono[i][0]+3)
                     {
@@ -529,13 +530,14 @@ uint8_t SBEMU_DSP_INT16ACK(uint16_t port)
     return 0xFF;
 }
 
-void SBEMU_Init(int irq, int dma, int hdma, int DSPVer, SBEMU_EXTFUNS* extfuns)
+void SBEMU_Init(int irq, int dma, int hdma, int DSPVer, int FixTC, SBEMU_EXTFUNS* extfuns)
 {
     SBEMU_IRQ = irq;
     SBEMU_DMA = dma;
     SBEMU_HDMA = hdma;
     SBEMU_DSPVER = DSPVer;
     SBEMU_ExtFuns = extfuns;
+    SBEMU_FixTC = FixTC;
 
     SBEMU_Mixer_WriteAddr(0, SBEMU_MIXERREG_RESET);
     SBEMU_Mixer_Write(0, 1);
