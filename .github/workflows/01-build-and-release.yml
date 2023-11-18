@@ -34,10 +34,20 @@ jobs:
           echo "64a934585087ccd91a18c55e20ee01f5f6762be712eeaa5f456be543778f9f7e  FD13-LiteUSB.zip" | shasum -a 256 --check
           unzip FD13-LiteUSB.zip
           rm FD13-LiteUSB.zip
+          wget https://github.com/Baron-von-Riedesel/Jemm/releases/download/v5.84pre2/JemmB_v584.zip
+          echo "719dfea1fdc609c5256fee4b8ad6db6880ff7a29f0ddc5dcaaa609a87771d218  JemmB_v584.zip" | shasum -a 256 --check
           mkdir /tmp/mnt
           sudo mount FD13LITE.img /tmp/mnt -t vfat -o loop,offset=$((63*512)),rw,uid=$(id -u),gid=$(id -g)
           cp $GITHUB_WORKSPACE/src/output/sbemu.exe /tmp/mnt/
-          ls -lh /tmp/mnt
+          cd /tmp/mnt
+          mkdir jemm
+          cd jemm
+          unzip /tmp/JemmB_v584.zip
+          ls -lh JEMMEX.EXE
+          ls -lh JLOAD.EXE
+          ls -lh QPIEMU.DLL
+          cd /tmp
+          rm JemmB_v584.zip
           sudo umount /tmp/mnt
           mv FD13LITE.img SBEMU-FD13-USB.img
           xz -k -9e SBEMU-FD13-USB.img
