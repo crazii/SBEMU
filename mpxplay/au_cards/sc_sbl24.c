@@ -58,6 +58,7 @@ static void snd_emu_ac97_init(struct emu10k1_card *card)
  snd_emu_ac97_write(card, AC97_MASTER_VOL_STEREO, 0x0202);
  snd_emu_ac97_write(card, AC97_PCMOUT_VOL,        0x0202);
  snd_emu_ac97_write(card, AC97_HEADPHONE_VOL,     0x0202);
+ snd_emu_ac97_write(card, AC97_CD_VOL,            0x0202);
  snd_emu_ac97_write(card, AC97_EXTENDED_STATUS,AC97_EA_SPDIF);
 }
 
