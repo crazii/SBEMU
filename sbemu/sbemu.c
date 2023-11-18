@@ -89,34 +89,57 @@ void SBEMU_Mixer_Write(uint16_t port, uint8_t value)
     SBEMU_MixerRegs[SBEMU_MixerRegIndex] = value;
     if(SBEMU_MixerRegIndex == SBEMU_MIXERREG_RESET)
     {
-        SBEMU_MixerRegs[SBEMU_MIXERREG_MASTERVOL] = 0xE; //3:(1). default 4
-        SBEMU_MixerRegs[SBEMU_MIXERREG_MIDIVOL] = 0xE;
-        SBEMU_MixerRegs[SBEMU_MIXERREG_VOICEVOL] = 0x6; //(1):2:(1) deault 0
+        // Mixer Registers are documented here:
+        // https://pdos.csail.mit.edu/6.828/2018/readings/hardware/SoundBlaster.pdf
+
+        // bits: 0000VVV0 (3 bits volume, LSB is zero)
+        static const uint8_t MONO_3BIT_FULL = (7 << 1);
+
+        SBEMU_MixerRegs[SBEMU_MIXERREG_MASTERVOL] = MONO_3BIT_FULL; // default 4
+        SBEMU_MixerRegs[SBEMU_MIXERREG_MIDIVOL] = MONO_3BIT_FULL; // default 4
+        SBEMU_MixerRegs[SBEMU_MIXERREG_CDVOL] = MONO_3BIT_FULL; // default 0
+
+        // bits: 00000VV0 (2 bits volume, LSB is zero)
+        static const uint8_t MONO_2BIT_FULL = (3 << 1);
+
+        SBEMU_MixerRegs[SBEMU_MIXERREG_VOICEVOL] = MONO_2BIT_FULL; // default 0
 
         if(SBEMU_DSPVER < 0x0400) //before SB16
         {
-            SBEMU_MixerRegs[SBEMU_MIXERREG_VOICESTEREO] = 0xEE; //3:(1). default 4
-            SBEMU_MixerRegs[SBEMU_MIXERREG_MASTERSTEREO] = 0xEE;
-            SBEMU_MixerRegs[SBEMU_MIXERREG_MIDISTEREO] = 0xEE;
+            // bits: LLL0RRR0 (3 bits per channel, LSB in each nibble is zero)
+            static const uint8_t STEREO_3BIT_FULL = ((7 << 1) << 4) | (7 << 1);
+
+            SBEMU_MixerRegs[SBEMU_MIXERREG_VOICESTEREO] = STEREO_3BIT_FULL;
+            SBEMU_MixerRegs[SBEMU_MIXERREG_MASTERSTEREO] = STEREO_3BIT_FULL;
+            SBEMU_MixerRegs[SBEMU_MIXERREG_MIDISTEREO] = STEREO_3BIT_FULL;
+            SBEMU_MixerRegs[SBEMU_MIXERREG_CDSTEREO] = STEREO_3BIT_FULL;
         }
         else //SB16
         {
-            SBEMU_MixerRegs[SBEMU_MIXERREG_VOICESTEREO] = 0xFF;
-            SBEMU_MixerRegs[SBEMU_MIXERREG_MASTERSTEREO] = 0xFF;
-            SBEMU_MixerRegs[SBEMU_MIXERREG_MIDISTEREO] = 0xFF;
-            //5bits (5:3)
-            SBEMU_MixerRegs[SBEMU_MIXRREG_MASTERL] = 0xF8;
-            SBEMU_MixerRegs[SBEMU_MIXRREG_MASTERR] = 0xF8;
-            SBEMU_MixerRegs[SBEMU_MIXRREG_VOICEL] = 0xF8;
-            SBEMU_MixerRegs[SBEMU_MIXRREG_VOICER] = 0xF8;
-            SBEMU_MixerRegs[SBEMU_MIXRREG_MIDIL] = 0xF8;
-            SBEMU_MixerRegs[SBEMU_MIXRREG_MIDIR] = 0xF8;
+            // bits: LLLLRRRR (4 bits per channel)
+            static const uint8_t STEREO_4BIT_FULL = (0xF << 4) | 0xF;
 
+            SBEMU_MixerRegs[SBEMU_MIXERREG_VOICESTEREO] = STEREO_4BIT_FULL;
+            SBEMU_MixerRegs[SBEMU_MIXERREG_MASTERSTEREO] = STEREO_4BIT_FULL;
+            SBEMU_MixerRegs[SBEMU_MIXERREG_MIDISTEREO] = STEREO_4BIT_FULL;
+            SBEMU_MixerRegs[SBEMU_MIXERREG_CDSTEREO] = STEREO_4BIT_FULL;
+
+            // bits: VVVVV000 (5 MSB volume, 3 LSB are zero)
+            static const uint8_t SINGLE_5BIT_FULL = 0x1F << 3;
+
+            SBEMU_MixerRegs[SBEMU_MIXRREG_MASTERL] = SINGLE_5BIT_FULL;
+            SBEMU_MixerRegs[SBEMU_MIXRREG_MASTERR] = SINGLE_5BIT_FULL;
+            SBEMU_MixerRegs[SBEMU_MIXRREG_VOICEL] = SINGLE_5BIT_FULL;
+            SBEMU_MixerRegs[SBEMU_MIXRREG_VOICER] = SINGLE_5BIT_FULL;
+            SBEMU_MixerRegs[SBEMU_MIXRREG_MIDIL] = SINGLE_5BIT_FULL;
+            SBEMU_MixerRegs[SBEMU_MIXRREG_MIDIR] = SINGLE_5BIT_FULL;
+            SBEMU_MixerRegs[SBEMU_MIXRREG_CDL] = SINGLE_5BIT_FULL;
+            SBEMU_MixerRegs[SBEMU_MIXRREG_CDR] = SINGLE_5BIT_FULL;
         }
     }
     if(SBEMU_DSPVER >= 0x0400) //SB16
     {
-        if(SBEMU_MixerRegIndex >= SBEMU_MIXRREG_MASTERL && SBEMU_MixerRegIndex <= SBEMU_MIXRREG_MIDIR)
+        if(SBEMU_MixerRegIndex >= SBEMU_MIXRREG_MASTERL && SBEMU_MixerRegIndex <= SBEMU_MIXRREG_CDR)
         {
             //5bits, drop 1 bit
             value = (value >> 4)&0xF;
@@ -128,6 +151,8 @@ void SBEMU_Mixer_Write(uint16_t port, uint8_t value)
                 case SBEMU_MIXRREG_VOICER: SBEMU_MixerRegs[SBEMU_MIXERREG_VOICESTEREO] &= 0xF0; SBEMU_MixerRegs[SBEMU_MIXERREG_VOICESTEREO] |= value; break;
                 case SBEMU_MIXRREG_MIDIL: SBEMU_MixerRegs[SBEMU_MIXERREG_MIDISTEREO] &= 0x0F; SBEMU_MixerRegs[SBEMU_MIXERREG_MIDISTEREO] |= (value<<4); break;
                 case SBEMU_MIXRREG_MIDIR: SBEMU_MixerRegs[SBEMU_MIXERREG_MIDISTEREO] &= 0xF0; SBEMU_MixerRegs[SBEMU_MIXERREG_MIDISTEREO] |= value; break;
+                case SBEMU_MIXRREG_CDL: SBEMU_MixerRegs[SBEMU_MIXERREG_CDSTEREO] &= 0x0F; SBEMU_MixerRegs[SBEMU_MIXERREG_CDSTEREO] |= (value<<4); break;
+                case SBEMU_MIXRREG_CDR: SBEMU_MixerRegs[SBEMU_MIXERREG_CDSTEREO] &= 0xF0; SBEMU_MixerRegs[SBEMU_MIXERREG_CDSTEREO] |= value; break;
             }
         }
     }

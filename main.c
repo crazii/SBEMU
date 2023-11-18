@@ -705,25 +705,39 @@ static void MAIN_Interrupt()
     int32_t vol;
     int32_t voicevol;
     int32_t midivol;
+    int32_t cdvol; // 0-100 (percentage)
+    static int32_t last_cdvol = -1;
     if(MAIN_Options[OPT_TYPE].value == 1 || MAIN_Options[OPT_TYPE].value == 3) //SB2.0 and before
     {
         vol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MASTERVOL) >> 1)*256/7;
         voicevol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_VOICEVOL) >> 1)*256/3;
         midivol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MIDIVOL) >> 1)*256/7;
+        cdvol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_CDVOL) >> 1)*100/7;
     }
     else if(MAIN_Options[OPT_TYPE].value == 6) //SB16
     {
+        // TODO: This only uses the left channel volume as volume for both left and right
         vol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MASTERSTEREO)>>4)*256/15; //4:4
         voicevol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_VOICESTEREO)>>4)*256/15; //4:4
         midivol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MIDISTEREO)>>4)*256/15; //4:4
+        cdvol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_CDSTEREO)>>4)*100/15; //4:4
         //_LOG("vol: %d, voicevol: %d, midivol: %d\n", vol, voicevol, midivol);
     }
     else //SBPro
     {
+        // TODO: This only uses the left channel volume as volume for both left and right
         vol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MASTERSTEREO)>>5)*256/7; //3:1:3:1 stereo usually the same for both channel for games?;
         voicevol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_VOICESTEREO)>>5)*256/7; //3:1:3:1
         midivol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_MIDISTEREO)>>5)*256/7;
+        cdvol = (SBEMU_GetMixerReg(SBEMU_MIXERREG_CDSTEREO)>>5)*100/7;
         //_LOG("vol: %d, voicevol: %d, midivol: %d\n", vol, voicevol, midivol);
+    }
+
+    if (cdvol != last_cdvol) {
+        // Apply CD-Audio volume to device mixer (CDDA mixing is handled purely on soundcard,
+        // so plug in your 4-pin audio cable from the CD-ROM drive to the soundcard CD-IN)
+        AU_setmixer_one(&aui, AU_MIXCHAN_CDIN, MIXER_SETMODE_ABSOLUTE, cdvol);
+        last_cdvol = cdvol;
     }
 
     aui.card_outbytes = aui.card_dmasize;

@@ -21,21 +21,31 @@
 
 //register index trhough mixer port
 #define SBEMU_MIXERREG_RESET        0x00
-#define SBEMU_MIXERREG_MASTERVOL    0x02    //SB2.0
-#define SBEMU_MIXERREG_VOICESTEREO  0x04    //SBPro.
-#define SBEMU_MIXERREG_MIDIVOL      0x06    //SB2.0
-#define SBEMU_MIXERREG_VOICEVOL     0x0A    //SB2.0
-#define SBEMU_MIXERREG_MASTERSTEREO 0x22    //SBPro
-#define SBEMU_MIXERREG_MIDISTEREO   0x26    //SBPro 
-//SB16
+
+// CT1335 mixer (SB 2.0)
+#define SBEMU_MIXERREG_MASTERVOL    0x02
+#define SBEMU_MIXERREG_MIDIVOL      0x06
+#define SBEMU_MIXERREG_CDVOL        0x08
+#define SBEMU_MIXERREG_VOICEVOL     0x0A
+
+// CT1345 mixer (SB Pro)
+#define SBEMU_MIXERREG_VOICESTEREO  0x04
+#define SBEMU_MIXERREG_MODEFILTER   0x0E
+#define SBEMU_MIXERREG_MASTERSTEREO 0x22
+#define SBEMU_MIXERREG_MIDISTEREO   0x26
+#define SBEMU_MIXERREG_CDSTEREO     0x28
+
+// CT1745 mixer (SB 16)
 #define SBEMU_MIXRREG_MASTERL       0x30
 #define SBEMU_MIXRREG_MASTERR       0x31
 #define SBEMU_MIXRREG_VOICEL        0x32
 #define SBEMU_MIXRREG_VOICER        0x33
 #define SBEMU_MIXRREG_MIDIL         0x34
 #define SBEMU_MIXRREG_MIDIR         0x35
-//-SB16
-#define SBEMU_MIXERREG_MODEFILTER   0x0E
+#define SBEMU_MIXRREG_CDL           0x36
+#define SBEMU_MIXRREG_CDR           0x37
+
+// Special mixer registers (dynamic reconfiguration of INT/DMA)
 #define SBEMU_MIXERREG_INT_SETUP    0x80
 #define SBEMU_MIXERREG_DMA_SETUP    0x81
 #define SBEMU_MIXERREG_INT_STS      0x82
