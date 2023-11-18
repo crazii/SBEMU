@@ -23,7 +23,7 @@ jobs:
           cd $GITHUB_WORKSPACE/src
           ls -lh main.c
           . /opt/djgpp/setenv
-          ./build.sh
+          make
           ls -lh output/sbemu.exe
       - name: Build FreeDOS SBEMU USB image
         run: |
