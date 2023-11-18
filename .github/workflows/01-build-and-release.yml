@@ -48,6 +48,7 @@ jobs:
           ls -lh QPIEMU.DLL
           cd ..
           sed -i 's/DEVICE=\\FREEDOS\\BIN\\HIMEMX.EXE/DEVICE=\\JEMM\\JEMMEX.EXE\nDEVICE=\\JEMM\\JLOAD.EXE \\JEMM\\QPIEMU.DLL/g' fdconfig.sys
+          mv setup.bat setup.bak
           cd /tmp
           rm JemmB_v584.zip
           sudo umount /tmp/mnt
