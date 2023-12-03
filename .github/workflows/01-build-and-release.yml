@@ -75,8 +75,8 @@ jobs:
           files: |
             ${{ github.workspace }}/SBEMU-FD13-USB.img.xz
           body: |
-            The USB image can be written to a USB drive or SD card using a tool like
+            The USB image can be written to a USB drive or SD card using a tool like \
             [balenaEtcher](https://etcher.balena.io/).
 
-            The advantage of using Etcher is that you don't have to decompress the `.xz` archive first. It will
+            The advantage of using Etcher is that you don't have to decompress the `.xz` archive first. It will \
             decompress such files automatically, before writing the image to the target drive.
