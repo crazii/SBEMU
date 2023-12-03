@@ -40,7 +40,8 @@ jobs:
           echo "4b7fc576d6c5dfd3fe7290fd1d0c0229118d01a55c8325d487452c2d6e0c3bbd  HDPMI32i.zip" | shasum -a 256 --check
           mkdir /tmp/mnt
           sudo mount FD13LITE.img /tmp/mnt -t vfat -o loop,offset=$((63*512)),rw,uid=$(id -u),gid=$(id -g)
-          cp $GITHUB_WORKSPACE/src/output/sbemu.exe /tmp/mnt/
+          mkdir /tmp/mnt/sbemu
+          cp $GITHUB_WORKSPACE/src/output/sbemu.exe /tmp/mnt/sbemu
           cd /tmp/mnt
           mkdir jemm
           cd jemm
@@ -56,8 +57,11 @@ jobs:
           cd ..
           sed -i 's/DEVICE=\\FREEDOS\\BIN\\HIMEMX.EXE/DEVICE=\\JEMM\\JEMMEX.EXE\nDEVICE=\\JEMM\\JLOAD.EXE \\JEMM\\QPIEMU.DLL/g' fdconfig.sys
           mv setup.bat setup.bak
+          echo 'LH \\HDPMI\\HDPMI32I.EXE' > setup.bat
+          echo 'LH \\SBEMU\\SBEMU.EXE' >> setup.bat
           cd /tmp
           rm JemmB_v584.zip
+          rm HDPMI32i.zip
           sudo umount /tmp/mnt
           mv FD13LITE.img SBEMU-FD13-USB.img
           xz -k -9e SBEMU-FD13-USB.img
