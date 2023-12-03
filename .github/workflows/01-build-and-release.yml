@@ -58,7 +58,7 @@ jobs:
           ls -lh HDPMI32i.EXE
           cd ..
           mkdir ctmouse
-          unzip /tmp/ctmouse.zip BIN/CTMOUSE.EXE > ctmouse/ctmouse.exe
+          unzip -j "/tmp/ctmouse.zip" "BIN/CTMOUSE.EXE" -d "ctmouse"
           sed -i 's/DEVICE=\\FREEDOS\\BIN\\HIMEMX.EXE/DEVICE=\\JEMM\\JEMMEX.EXE\nDEVICE=\\JEMM\\JLOAD.EXE \\JEMM\\QPIEMU.DLL/g' fdconfig.sys
           mv setup.bat setup.bak
           echo 'LH \HDPMI\HDPMI32I.EXE' > setup.bat
