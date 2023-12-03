@@ -1,6 +1,9 @@
 # With thanks to https://gist.github.com/weibeld/f136048d0a82aacc063f42e684e3c494
 name: build-and-release
-on: push
+on:
+  push:
+    branches:
+      - main
 permissions:
   contents: write
 jobs:
