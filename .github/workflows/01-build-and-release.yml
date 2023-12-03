@@ -85,15 +85,15 @@ jobs:
           files: |
             ${{ github.workspace }}/SBEMU-FD13-USB.img.xz
           body: |
-            ## Preparing a bootable USB drive
-
+            <details>
+            <summary>Preparing a bootable USB drive</summary>
             The USB image can be written to a USB drive or SD card using a tool like [balenaEtcher](https://etcher.balena.io/).
 
             The advantage of using Etcher is that you don't have to decompress the `.xz` archive first.
             It will decompress such files automatically, before writing the image to the target drive.
-
-            ## Booting the USB image in a virtual machine
-
+            </details>
+            <details>
+            <summary>Booting the USB image in a virtual machine</summary>
             You can run the image in a VM with QEMU as follows:
 
             ```shell
@@ -113,9 +113,9 @@ jobs:
 
             **NOTE**: Although VMs can sometimes be useful during development, testing and debugging, you should not rely on those for actual hardware compatibility testing, since the sound cards that the hypervisors emulate are themselves merely approximations of actual hardware, and will not behave like the real thing in every single corner case.
             Basically, you shouldn't test emulators on other emulators.
-
-            ## Where can I get some DOS games to test with?
-
+            </details>
+            <details>
+            <summary>Where can I get some DOS games to test with?</summary>
             There are multiple convenient distributions out there that contain DOS games that can be distributed freely and legally.
             Specifically freeware, shareware, open source and free demo versions.
 
@@ -123,3 +123,4 @@ jobs:
 
             - [The PC/DOS Mini](http://vieju.net/pcdosmini/), a compilation of 100+ DOS games ready to play for free
             - [GAFFA DOS Shareware/Freeware Pack](https://archive.org/details/gaffa-dos-shareware-pack)
+            </details>
