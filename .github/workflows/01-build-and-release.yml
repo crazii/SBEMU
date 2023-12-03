@@ -24,10 +24,10 @@ jobs:
       - name: Build project
         run: |
           cd $GITHUB_WORKSPACE/src
-          ls -lh main.c
+          test -f main.c
           . /opt/djgpp/setenv
           make
-          ls -lh output/sbemu.exe
+          test -f output/sbemu.exe
       - name: Build FreeDOS SBEMU USB image
         run: |
           cd /tmp
@@ -51,14 +51,14 @@ jobs:
           mkdir jemm
           cd jemm
           unzip /tmp/JemmB_v584.zip
-          ls -lh JEMMEX.EXE
-          ls -lh JLOAD.EXE
-          ls -lh QPIEMU.DLL
+          test -f JEMMEX.EXE
+          test -f JLOAD.EXE
+          test -f QPIEMU.DLL
           cd ..
           mkdir hdpmi
           cd hdpmi
           unzip /tmp/HDPMI32i.zip
-          ls -lh HDPMI32i.EXE
+          test -f HDPMI32i.EXE
           cd ..
           mkdir ctmouse
           unzip -j "/tmp/ctmouse.zip" "BIN/CTMOUSE.EXE" -d "ctmouse"
