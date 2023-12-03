@@ -79,3 +79,13 @@ jobs:
 
             The advantage of using Etcher is that you don't have to decompress the `.xz` archive first.
             It will decompress such files automatically, before writing the image to the target drive.
+
+            Alternatively, you can test the image in a VM with QEMU as follows:
+
+            ```shell
+            unxz SBEMU-FD13-USB.img.xz
+            qemu-system-i386 -drive file=SBEMU-FD13-USB.img,format=raw -device AC97
+            ```
+
+            If you wish to test Intel HDA compatibility instead of ICHx AC'97 compatibility, replace `AC97` with `intel-hda` in the last command above.
+            On Linux, you can include the parameter `--enable-kvm` to run the VM with hardware-assisted virtualization.
