@@ -22,7 +22,7 @@ echo "4b7fc576d6c5dfd3fe7290fd1d0c0229118d01a55c8325d487452c2d6e0c3bbd  HDPMI32i
 wget https://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/repositories/1.3/base/ctmouse.zip
 echo "a891124cd5b13e8141778fcae718f3b2667b0a49727ce92b782ab11a8c4bb63a  ctmouse.zip" | shasum -a 256 --check
 mkdir -p /tmp/mnt
-sudo mount FD13LITE.img /tmp/mnt -t vfat -o loop,offset=$((63*512)),rw,uid=$(id -u),gid=$(id -g)
+sudo mount FD13LITE.img /tmp/mnt -t vfat -o loop,offset=$((63*512)),rw,uid="$(id -u)",gid="$(id -g)"
 mkdir /tmp/mnt/sbemu
 cp "$FULL_PATH_TO_SBEMU_EXE" /tmp/mnt/sbemu
 pushd /tmp/mnt
