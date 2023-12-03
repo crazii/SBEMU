@@ -3,9 +3,9 @@ set -e
 PATH_TO_SBEMU_EXE=${1?param 1 missing - path to SBEMU.EXE}
 test -f "$PATH_TO_SBEMU_EXE" || (echo "File $PATH_TO_SBEMU_EXE does not exit"; exit 1)
 FULL_PATH_TO_SBEMU_EXE=$(readlink -f "$PATH_TO_SBEMU_EXE")
-PATH_TO_OUTPUT_IMG=${2?param 2 missing - path to output directory}
-test -d "$PATH_TO_OUTPUT_IMG" || (echo "Directory $PATH_TO_OUTPUT_IMG does not exit"; exit 1)
-FULL_PATH_TO_OUTPUT_IMG=$(readlink -f "$PATH_TO_OUTPUT_IMG")
+PATH_TO_OUTPUT_ARTIFACTS=${2?param 2 missing - path to output directory}
+test -d "$PATH_TO_OUTPUT_ARTIFACTS" || (echo "Directory $PATH_TO_OUTPUT_ARTIFACTS does not exit"; exit 1)
+FULL_PATH_TO_OUTPUT_ARTIFACTS=$(readlink -f "$PATH_TO_OUTPUT_ARTIFACTS")
 mkdir -p /tmp/sbemu_usb_img
 rm -rf /tmp/sbemu_usb_img/*
 pushd /tmp/sbemu_usb_img
@@ -21,22 +21,24 @@ wget https://github.com/crazii/HX/releases/download/v0.1-beta3/HDPMI32i.zip
 echo "4b7fc576d6c5dfd3fe7290fd1d0c0229118d01a55c8325d487452c2d6e0c3bbd  HDPMI32i.zip" | shasum -a 256 --check
 wget https://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/repositories/1.3/base/ctmouse.zip
 echo "a891124cd5b13e8141778fcae718f3b2667b0a49727ce92b782ab11a8c4bb63a  ctmouse.zip" | shasum -a 256 --check
+mkdir -p /tmp/SBEMU
 mkdir -p /tmp/mnt
 sudo mount FD13LITE.img /tmp/mnt -t vfat -o loop,offset=$((63*512)),rw,uid="$(id -u)",gid="$(id -g)"
 mkdir /tmp/mnt/sbemu
 cp "$FULL_PATH_TO_SBEMU_EXE" /tmp/mnt/sbemu
+cp "$FULL_PATH_TO_SBEMU_EXE" /tmp/SBEMU
 pushd /tmp/mnt
 mkdir jemm
 cd jemm
 unzip /tmp/sbemu_usb_img/JemmB_v584.zip
-test -f JEMMEX.EXE
-test -f JLOAD.EXE
-test -f QPIEMU.DLL
+cp JEMMEX.EXE /tmp/SBEMU
+cp JLOAD.EXE /tmp/SBEMU
+cp QPIEMU.DLL /tmp/SBEMU
 cd ..
 mkdir hdpmi
 cd hdpmi
 unzip /tmp/sbemu_usb_img/HDPMI32i.zip
-test -f HDPMI32i.EXE
+cp HDPMI32i.EXE /tmp/SBEMU
 cd ..
 mkdir ctmouse
 unzip -j "/tmp/sbemu_usb_img/ctmouse.zip" "BIN/CTMOUSE.EXE" -d "ctmouse"
@@ -50,9 +52,15 @@ rm JemmB_v584.zip
 rm HDPMI32i.zip
 rm ctmouse.zip
 sudo umount /tmp/mnt
+pushd /tmp
+zip -9 SBEMU.zip SBEMU/*
+mv SBEMU.zip "$FULL_PATH_TO_OUTPUT_ARTIFACTS"
+ls -lh SBEMU
+rm -rf SBEMU
+popd
 mv FD13LITE.img SBEMU-FD13-USB.img
 xz -k -9e SBEMU-FD13-USB.img
-mv SBEMU-FD13-USB.img.xz "$FULL_PATH_TO_OUTPUT_IMG"
+mv SBEMU-FD13-USB.img.xz "$FULL_PATH_TO_OUTPUT_ARTIFACTS"
 popd
 rm -rf /tmp/sbemu_usb_img
 rm -rf /tmp/mnt
