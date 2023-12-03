@@ -87,6 +87,9 @@ jobs:
           body: |
             <details>
             <summary>Preparing a bootable USB drive</summary>
+
+            ## Preparing a bootable USB drive
+
             The USB image can be written to a USB drive or SD card using a tool like [balenaEtcher](https://etcher.balena.io/).
 
             The advantage of using Etcher is that you don't have to decompress the `.xz` archive first.
@@ -94,6 +97,9 @@ jobs:
             </details>
             <details>
             <summary>Booting the USB image in a virtual machine</summary>
+
+            ## Booting the USB image in a virtual machine
+
             You can run the image in a VM with QEMU as follows:
 
             ```shell
@@ -116,6 +122,9 @@ jobs:
             </details>
             <details>
             <summary>Where can I get some DOS games to test with?</summary>
+
+            ## Where can I get some DOS games to test with?
+
             There are multiple convenient distributions out there that contain DOS games that can be distributed freely and legally.
             Specifically freeware, shareware, open source and free demo versions.
 
