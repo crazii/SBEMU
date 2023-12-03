@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - set-up-cicd
 permissions:
   contents: write
 jobs:
