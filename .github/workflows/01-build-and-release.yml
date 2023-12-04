@@ -17,11 +17,9 @@ jobs:
           path: src
       - name: Install DJGPP
         run: |
-          pushd /opt
           wget https://github.com/andrewwutw/build-djgpp/releases/download/v3.3/djgpp-linux64-gcc1210.tar.bz2
-          tar -xf djgpp-linux64-gcc1210.tar.bz2
+          tar -xf djgpp-linux64-gcc1210.tar.bz2 -C /opt
           rm djgpp-linux64-gcc1210.tar.bz2
-          popd
       - name: Build project
         run: |
           cd $GITHUB_WORKSPACE/src
