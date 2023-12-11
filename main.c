@@ -13,6 +13,7 @@
 #include <untrapio.h>
 #include "qemm.h"
 #include "hdpmipt.h"
+#include "serial.h"
 
 #include <mpxplay.h>
 #include <au_mixer/mix_func.h>
@@ -221,6 +222,7 @@ struct MAIN_OPT
 }MAIN_Options[] =
 {
     "/?", "Show help", FALSE, 0,
+    "/DBG", "Debug output (0=console, 1=COM1, 2=COM2)", 0, 0,
     "/A", "Specify IO address, valid value: 220,240", 0x220, 0,
     "/I", "Specify IRQ number, valud value: 5,7", 7, 0,
     "/D", "Specify DMA channel, valid value: 0,1,3", 1, 0,
@@ -241,6 +243,8 @@ struct MAIN_OPT
 enum EOption
 {
     OPT_Help,
+    OPT_DEBUG_OUTPUT,
+
     OPT_ADDR,
     OPT_IRQ,
     OPT_DMA,
@@ -314,6 +318,19 @@ static void MAIN_SetBlasterEnv(struct MAIN_OPT* opt) //alter BLASTER env.
     #endif
 }
 
+static void
+update_serial_debug_output()
+{
+    bool enabled = (MAIN_Options[OPT_DEBUG_OUTPUT].value != 0);
+    if (!enabled) {
+        _LOG("Serial port debugging disabled.\n");
+    }
+    ser_setup(MAIN_Options[OPT_DEBUG_OUTPUT].value);
+    if (enabled) {
+        _LOG("Serial port debugging enabled.\n");
+    }
+}
+
 int main(int argc, char* argv[])
 {
     printf("SBEMU: Sound Blaster emulation on AC97. Version: %s", MAIN_SBEMU_VER);
@@ -367,6 +384,10 @@ int main(int argc, char* argv[])
                 break;
             }
         }
+    }
+
+    if (MAIN_Options[OPT_DEBUG_OUTPUT].value) {
+        update_serial_debug_output();
     }
 
     if(MAIN_Options[OPT_ADDR].value != 0x220 && MAIN_Options[OPT_ADDR].value != 0x240)
@@ -1010,6 +1031,13 @@ static void MAIN_TSR_Interrupt()
             #endif
             int irq = aui.card_irq;
             PIC_MaskIRQ(irq);
+
+            if(MAIN_Options[OPT_DEBUG_OUTPUT].value != opt[OPT_DEBUG_OUTPUT].value)
+            {
+                MAIN_Options[OPT_DEBUG_OUTPUT].value = opt[OPT_DEBUG_OUTPUT].value;
+                update_serial_debug_output();
+            }
+
             if(MAIN_Options[OPT_OUTPUT].value != opt[OPT_OUTPUT].value || MAIN_Options[OPT_RATE].value != opt[OPT_RATE].value || opt[OPT_RESET].value)
             {
                 if(opt[OPT_OUTPUT].value != MAIN_Options[OPT_OUTPUT].value || opt[OPT_RESET].value)

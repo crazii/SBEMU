@@ -19,6 +19,7 @@
 
 #include <stdio.h>
 #include <stddef.h> // for offsetof
+#include "serial.h"
 
 #ifdef __WATCOMC__
  #define NEWFUNC_ASM 1
@@ -1066,6 +1067,11 @@ static void mpxplay_debugf(FILE *fp, const char *format, ...)
  va_start(ap,format);
  vsnprintf(sout, 4096, format, ap);
  va_end(ap);
+
+ if (ser_puts(sout)) {
+     ser_puts("\n");
+     return;
+ }
 
  if(fp){
 #ifdef MPXPLAY_EXTENDED_DEBUG
