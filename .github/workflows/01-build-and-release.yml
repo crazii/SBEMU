@@ -5,7 +5,8 @@ on:
   push:
     # TODO: remove branches block below after testing
     branches:
-      - set-up-cicd
+      - use-preinstalled-djgpp-image-in-workflows
+      - run-tests-in-qemu-in-github-action
     tags:
       - '**'
 
