@@ -5,18 +5,11 @@ on:
       - main
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ghcr.io/volkertb/debian-djgpp:v0.2
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - name: Install DJGPP
-        run: |
-          wget -P /tmp https://github.com/andrewwutw/build-djgpp/releases/download/v3.4/djgpp-linux64-gcc1220.tar.bz2
-          echo "8464f17017d6ab1b2bb2df4ed82357b5bf692e6e2b7fee37e315638f3d505f00  /tmp/djgpp-linux64-gcc1220.tar.bz2" | shasum -a 256 --check
-          tar -xf /tmp/djgpp-linux64-gcc1220.tar.bz2 -C /opt
-          rm /tmp/djgpp-linux64-gcc1220.tar.bz2
       - name: Build project
         run: |
-          . /opt/djgpp/setenv
           make
           i586-pc-msdosdjgpp-objdump -x output/sbemu.exe
