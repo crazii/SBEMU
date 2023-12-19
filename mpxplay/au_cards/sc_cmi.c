@@ -331,7 +331,7 @@ typedef struct cmi8x38_card
  unsigned char   device_type;
  struct pci_config_s  *pci_dev;
 
- dosmem_t *dm;
+ cardmem_t *dm;
  char *pcmout_buffer;
  long pcmout_bufsize;
 
@@ -593,7 +593,7 @@ static int CMI8X38_adetect(struct mpxplay_audioout_info_s *aui)
  if(!card->pci_dev)
   goto err_adetect;
 
- if(pcibios_search_devices(&cmi_devices,card->pci_dev)!=PCI_SUCCESSFUL)
+ if(pcibios_search_devices(cmi_devices,card->pci_dev)!=PCI_SUCCESSFUL)
   goto err_adetect;
 
  pcibios_set_master(card->pci_dev);
