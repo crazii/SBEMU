@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <conio.h>
+#include <stdbool.h>
 #include <dos.h>
 #include <dpmi/dbgutil.h>
 #include <sbemucfg.h>
@@ -17,6 +19,9 @@
 
 #include <mpxplay.h>
 #include <au_mixer/mix_func.h>
+
+static const char *
+PROGNAME = "SBEMU";
 
 #ifndef MAIN_SBEMU_VER
 #define MAIN_SBEMU_VER "1.0 beta3"
@@ -221,19 +226,23 @@ struct MAIN_OPT
     int setcmd; //set by command line
 }MAIN_Options[] =
 {
-    "/?", "Show help", FALSE, 0,
+    "/?", "Show this help screen", FALSE, 0,
     "/DBG", "Debug output (0=console, 1=COM1, 2=COM2)", 0, 0,
-    "/A", "Specify IO address, valid value: 220,240", 0x220, 0,
-    "/I", "Specify IRQ number, valud value: 5,7", 7, 0,
-    "/D", "Specify DMA channel, valid value: 0,1,3", 1, 0,
-    "/T", "Specify SB Type, valid value: 1-6", 5, 0,
-    "/H", "Specify High DMA channel, valid value: 5,6,7", 5, 0,
+
+    "/A", "IO address (220 or 240) [*]", 0x220, 0,
+    "/I", "IRQ number (5 or 7) [*]", 7, 0,
+    "/D", "8-bit DMA channel (0, 1 or 3) [*]", 1, 0,
+    "/T", "SB Type (1, 2 or 3=SB; 4 or 5=SBPro; 6=SB16) [*]", 5, 0,
+    "/H", "16-bit (\"high\") DMA channel (5, 6 or 7) [*]", 5, 0,
+
     "/OPL", "Enable OPL3 emulation", TRUE, 0,
-    "/PM", "Support protected mode games", TRUE, 0,
-    "/RM", "Support real mode games", TRUE, 0,
+    "/PM", "Enable protected mode support (requires HDPMI32I)", TRUE, 0,
+    "/RM", "Enable real mode support (requires QEMM or JEMM+QPIEMU)", TRUE, 0,
+
     "/O", "Select output. 0: headphone, 1: speaker. Intel HDA only", 1, 0,
     "/VOL", "Set master volume (0-9)", 7, 0,
-    "/K", "Set internal sample rate, valid value: 22050,44100", 0x22050, 0,
+
+    "/K", "Internal sample rate (22050 or 44100)", 0x22050, 0,
     "/SCL", "List installed sound cards", 0, MAIN_SETCMD_HIDDEN,
     "/SC", "Select sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN,
     "/R", "Reset sound card driver", 0, MAIN_SETCMD_HIDDEN,
@@ -319,6 +328,21 @@ static void MAIN_SetBlasterEnv(struct MAIN_OPT* opt) //alter BLASTER env.
 }
 
 static void
+print_enabled_newline(bool enabled)
+{
+    if (enabled) {
+        textcolor(LIGHTGREEN);
+        cprintf("enabled");
+    } else {
+        textcolor(LIGHTRED);
+        cprintf("disabled");
+    }
+
+    textcolor(LIGHTGRAY);
+    cprintf(".\r\n");
+}
+
+static void
 update_serial_debug_output()
 {
     bool enabled = (MAIN_Options[OPT_DEBUG_OUTPUT].value != 0);
@@ -333,22 +357,46 @@ update_serial_debug_output()
 
 int main(int argc, char* argv[])
 {
-    printf("SBEMU: Sound Blaster emulation on AC97. Version: %s", MAIN_SBEMU_VER);
+    textcolor(CYAN);
+    cprintf("\r\n%s ", PROGNAME);
+    textcolor(LIGHTCYAN);
+    cprintf("%s ", MAIN_SBEMU_VER);
+    textcolor(LIGHTGRAY);
+    cprintf("(");
+    textcolor(WHITE);
+    cprintf("https://github.com/crazii/SBEMU");
+    textcolor(LIGHTGRAY);
+    cprintf(")\r\n");
+
+    textcolor(WHITE);
+    cprintf("Sound Blaster emulation on PCI sound cards for DOS.\r\n");
+    textcolor(LIGHTGRAY);
+    cprintf("Based on MPXPlay (drivers) and DOSBox (OPL-3 emulation).\r\n");
+
+    printf("\n");
+
     if((argc == 2 && stricmp(argv[1],"/?") == 0))
     {
         printf("Usage:\n");
+
         int i = 0;
         while(MAIN_Options[i].option)
         {
-            printf(" %-8s: %s. Default: %x\n", MAIN_Options[i].option, MAIN_Options[i].desc, MAIN_Options[i].value);
+            printf(" %-7s: %s", MAIN_Options[i].option, MAIN_Options[i].desc);
+            if (i != 0) {
+                printf(", default: %x.\n", MAIN_Options[i].value);
+            } else {
+                printf(".\n");
+            }
             ++i;
         }
-        printf("Note: SBEMU will read BLASTER environment variable and use it, "
-        "\n if /A /I /D /T /H set, they will override the BLASTER values.\n");
-        printf("Source code used from:\n    MPXPlay (https://mpxplay.sourceforge.net/)\n    DOSBox (https://www.dosbox.com/)\n");
+
+        printf("\n");
+        printf("  [*] Values will default to the BLASTER variable if not specified.\n");
+
         return 0;
     }
-    printf("\n");
+
     //parse BLASTER env first.
     {
         char* blaster = getenv("BLASTER");
@@ -434,11 +482,19 @@ int main(int argc, char* argv[])
     if(MAIN_Options[OPT_RM].value)
     {
         MAIN_Options[OPT_RM].value = TRUE; //set to known value for compare
-        int bcd = QEMM_GetVersion();
-        _LOG("QEMM version: %x.%02x\n", bcd>>8, bcd&0xFF);
-        if(bcd < 0x703)
-        {
-            printf("QEMM not installed, or version bellow 7.03: %x.%02x, disable real mode support.\n", bcd>>8, bcd&0xFF);
+        int qemm_version = QEMM_GetVersion();
+        int qemm_major = qemm_version >> 8;
+        int qemm_minor = qemm_version & 0xFF;
+
+        _LOG("QEMM version: %x.%02x\n", qemm_major, qemm_minor);
+
+        if (qemm_version < 0x0703) {
+            if (qemm_major == 0) {
+                printf("QEMM or QPIEMU not installed, disabling real mode support.\n");
+            } else {
+                printf("QEMM or QPIEMU version below 7.03: %d.%02d, disabling real mode support.\n", qemm_major, qemm_minor);
+            }
+
             MAIN_Options[OPT_RM].value = FALSE;
             MAIN_QEMM_Present = FALSE;
         }
@@ -449,7 +505,7 @@ int main(int argc, char* argv[])
         MAIN_Options[OPT_PM].value = TRUE; //set to known value for compare
         BOOL hasHDPMI = HDPMIPT_Detect(); //another DPMI host used other than HDPMI
         if(!hasHDPMI)
-            printf("HDPMI not installed, disable protected mode support.\n");
+            printf("HDPMI not installed, disabling protected mode support.\n");
         MAIN_Options[OPT_PM].value = hasHDPMI;
         MAIN_HDPMI_Present = hasHDPMI;
     }
@@ -464,7 +520,9 @@ int main(int argc, char* argv[])
     BOOL enableRM = MAIN_Options[OPT_RM].value;
     if(!enablePM && !enableRM)
     {
-        printf("Both real mode & protected mode supprted are disabled, exiting.\n");
+        textcolor(RED);
+        cprintf("Both real mode & protected mode support are disabled, exiting.\r\n");
+        textcolor(LIGHTGRAY);
         return 1;
     }
 
@@ -482,9 +540,13 @@ int main(int argc, char* argv[])
         printf("Please try use /i5 or /i7 switch, or disable some onboard devices in the BIOS settings to release IRQs.\n");
         return 1;
     }
-    
-    printf("Real mode support: %s.\n", enableRM ? "enabled" : "disabled");
-    printf("Protected mode support: %s.\n", enablePM ? "enabled" : "disabled");
+
+    printf("Real mode support: ");
+    print_enabled_newline(enableRM);
+
+    printf("Protected mode support: ");
+    print_enabled_newline(enablePM);
+
     if(enableRM)
     {
         UntrappedIO_OUT_Handler = &QEMM_UntrappedIO_Write;
@@ -511,7 +573,8 @@ int main(int argc, char* argv[])
         }
 
         //OPL3EMU_Init(aui.freq_card);
-        printf("OPL3 emulation enabled at port 388h.\n");
+        printf("OPL3 emulation at port 388: ");
+        print_enabled_newline(true);
     }
     
     MAIN_SbemuExtFun.StartPlayback = NULL; //not used
@@ -528,7 +591,12 @@ int main(int argc, char* argv[])
     QEMM_IODT* SB_Iodt = MAIN_Options[OPT_OPL].value ? MAIN_SB_IODT : MAIN_SB_IODT+4;
     int SB_IodtCount = MAIN_Options[OPT_OPL].value ? countof(MAIN_SB_IODT) : countof(MAIN_SB_IODT)-4;
 
-    printf("Sound Blaster %s emulation enabled at Adress: %x, IRQ: %x, DMA: %x\n", MAIN_SBTypeString[MAIN_Options[OPT_TYPE].value], MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value);
+    printf("SB %s emulation at address %x, IRQ %x, DMA %x: ",
+            MAIN_SBTypeString[MAIN_Options[OPT_TYPE].value],
+            MAIN_Options[OPT_ADDR].value,
+            MAIN_Options[OPT_IRQ].value,
+            MAIN_Options[OPT_DMA].value);
+    print_enabled_newline(true);
 
     BOOL QEMMInstalledVDMA = !enableRM || QEMM_Install_IOPortTrap(MAIN_VDMA_IODT, countof(MAIN_VDMA_IODT), &MAIN_VDMA_IOPT);
     #if MAIN_TRAP_PIC_ONDEMAND//will crash with VIRQ installed, do it temporarily. TODO: figure out why
@@ -952,7 +1020,7 @@ void MAIN_TSR_InstallationCheck()
         //printf("DOSID:%x\n", DPMI_SEGOFF2L(r.w.dx, r.w.di));
         if(DPMI_CompareLinear(DPMI_SEGOFF2L(r.w.dx, r.w.di), DPMI_PTR2L((char*)MAIN_ISR_DOSID_String), 16) == 0)
         {
-            printf("SBEMU is active.\n");
+            printf("%s is active.\n", PROGNAME);
 
             r.h.ah = i;
             r.h.al = 0x01; //get current settings
