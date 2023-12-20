@@ -206,7 +206,7 @@ auinit_retry:
    }else
 #endif
    {
-    if(!(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_TESTCARD) && !(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_SILENT)){
+    if(strcmp(cardselectname, "NUL")!=0 && !(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_TESTCARD) && !(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_SILENT)){
     sprintf(sout,"Unknown soundcard (output module) name : %s",cardselectname);
     pds_textdisplay_printf(sout);
     }
@@ -349,7 +349,7 @@ auinit_retry:
    goto err_out_auinit;
   }
   if(!aui->card_handler && !(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_SILENT)){
-   pds_textdisplay_printf("No soundcard found!");
+   pds_textdisplay_printf("No supported soundcard found!");
    goto err_out_auinit;
   }
  }
@@ -357,10 +357,17 @@ auinit_retry:
 #ifdef SBEMU
  if(!(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_SILENT))
  {
+  textcolor(LIGHTGRAY);
   if(aui->card_select_index)
-   printf("Selected sound card %d: %s\n", aui->card_select_index, aui->card_handler->shortname);
+   cprintf("Sound card (index %d): ", aui->card_select_index);
   else
-   printf("Found sound card: %s\n", aui->card_handler->shortname);
+   cprintf("Sound card: ");
+
+  textcolor(LIGHTBLUE);
+  cprintf("%s", aui->card_handler->shortname);
+
+  textcolor(LIGHTGRAY);
+  cprintf(".\r\n");
  }
 #endif
 
