@@ -15,7 +15,7 @@
 //function: CMI 8338/8738 (PCI) low level routines
 //based on the ALSA (http://www.alsa-project.org)
 
-#include "mpxplay.h"
+#include "au_cards.h"
 
 #ifdef AU_CARDS_LINK_CMI8X38
 

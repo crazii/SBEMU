@@ -13,10 +13,6 @@
 //*  or modify this source.                                                *
 //**************************************************************************
 //function: common AC97 definitions (for SB Live, ES1371, ICH)
-
-#ifdef SBEMU
-#include <mpxplay.h>
-#endif
 #include "au_cards.h"
 #include "ac97_def.h"
 

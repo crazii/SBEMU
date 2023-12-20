@@ -14,7 +14,7 @@
 //**************************************************************************
 //function: ESS card handling
 
-#include "mpxplay.h"
+#include "au_cards.h"
 
 #ifdef AU_CARDS_LINK_ESS
 

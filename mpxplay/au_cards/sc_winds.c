@@ -15,7 +15,7 @@
 //function: Win32 DirectSound output
 //based on DSound interface of Mplayer
 
-#include "mpxplay.h"
+#include "au_cards.h"
 
 #ifdef AU_CARDS_LINK_WINDSOUND
 

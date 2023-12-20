@@ -18,7 +18,7 @@
 #define MPXPLAY_USE_DEBUGF 1
 #define SBL_DEBUG_OUTPUT stdout
 
-#include "mpxplay.h"
+#include "au_cards.h"
 
 #ifdef AU_CARDS_LINK_SBLIVE
 

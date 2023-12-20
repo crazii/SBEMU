@@ -17,7 +17,7 @@
 //#define MPXPLAY_USE_DEBUGF 1
 //#define WAVOUT_DEBUG_OUTPUT NULL
 
-#include "mpxplay.h"
+#include "au_cards.h"
 
 #ifdef AU_CARDS_LINK_WINWAVOUT
 

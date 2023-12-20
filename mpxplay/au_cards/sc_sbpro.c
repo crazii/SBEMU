@@ -14,7 +14,7 @@
 //**************************************************************************
 //function: SB 1.0,1.5,2.0 & SBpro handling
 
-#include "mpxplay.h"
+#include "au_cards.h"
 
 #ifdef AU_CARDS_LINK_SB
 

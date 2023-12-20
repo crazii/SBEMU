@@ -15,7 +15,7 @@
 //function: GUS low level routines
 //based on the OpenCP player (by Niklas Beisert)
 
-#include "mpxplay.h"
+#include "au_cards.h"
 
 #ifdef AU_CARDS_LINK_GUS
 

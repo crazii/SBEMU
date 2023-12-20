@@ -14,7 +14,7 @@
 //**************************************************************************
 //function: NULL device low level routines
 
-#include "mpxplay.h"
+#include "au_cards.h"
 
 static unsigned long beginhundred;
 extern unsigned int displaymode;

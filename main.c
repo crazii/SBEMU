@@ -17,8 +17,7 @@
 #include "hdpmipt.h"
 #include "serial.h"
 
-#include <mpxplay.h>
-#include <au_mixer/mix_func.h>
+#include <au_cards/au_cards.h>
 
 static const char *
 PROGNAME = "SBEMU";

@@ -1,6 +1,8 @@
 #ifndef au_cards_h
 #define au_cards_h
 
+#include "au_base.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -187,8 +189,6 @@ typedef struct au_cardconfig_v0154_s{
   #define AU_CARDS_LINK_VIA82XX 1
  #endif
 #endif
-
-#include <newfunc/newfunc.h>
 
 typedef struct mpxplay_audioout_info_s{
  short *pcm_sample;

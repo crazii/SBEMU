@@ -24,7 +24,7 @@
 //#define MPXPLAY_USE_DEBUGF 1
 #define ICH_DEBUG_OUTPUT stdout
 
-#include "mpxplay.h"
+#include "au_cards.h"
 #include <time.h>
 
 #ifdef AU_CARDS_LINK_ICH

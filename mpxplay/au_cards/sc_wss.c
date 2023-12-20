@@ -15,7 +15,7 @@
 //function: WSS (Windows Sound System) compatible card handling
 //based on the OpenCP,MIDAS sources and OPL3SA datasheet
 
-#include "mpxplay.h"
+#include "au_cards.h"
 
 #ifdef AU_CARDS_LINK_WSS
 

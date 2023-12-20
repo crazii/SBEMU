@@ -21,9 +21,8 @@
 #include <io.h>
 #include <dos.h>
 #include <string.h>
-
-#include "mpxplay.h"
 #include "dmairq.h"
+#include "au_cards.h"
 
 //declared in control.c
 extern struct mpxplay_audioout_info_s au_infos;

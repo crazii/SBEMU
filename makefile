@@ -12,6 +12,7 @@ LDFLAGS := -lstdc++ -lm
 
 ifeq ($(DEBUG),0)
 LDFLAGS += -s
+CFLAGS += -DNDEBUG
 endif
 
 ifeq ($(V),1)
@@ -29,6 +30,7 @@ VPATH += sbemu/dpmi
 all: $(TARGET)
 
 CARDS_SRC := mpxplay/au_cards/ac97_def.c \
+	     mpxplay/au_cards/au_base.c \
 	     mpxplay/au_cards/au_cards.c \
 	     mpxplay/au_cards/dmairq.c \
 	     mpxplay/au_cards/pcibios.c \
@@ -39,18 +41,6 @@ CARDS_SRC := mpxplay/au_cards/ac97_def.c \
 	     mpxplay/au_cards/sc_sbl24.c \
 	     mpxplay/au_cards/sc_sbliv.c \
 	     mpxplay/au_cards/sc_via82.c \
-
-MIXER_SRC := mpxplay/au_mixer/cv_bits.c \
-	     mpxplay/au_mixer/cv_chan.c \
-	     mpxplay/au_mixer/cv_freq.c \
-
-NEWFUNC_SRC := mpxplay/newfunc/fpu.c \
-	       mpxplay/newfunc/memory.c \
-	       mpxplay/newfunc/nf_dpmi.c \
-	       mpxplay/newfunc/string.c \
-	       mpxplay/newfunc/threads.c \
-	       mpxplay/newfunc/time.c \
-	       mpxplay/newfunc/timer.c \
 
 SBEMU_SRC := sbemu/dbopl.cpp \
 	     sbemu/opl3emu.cpp \
@@ -65,14 +55,14 @@ SBEMU_SRC := sbemu/dbopl.cpp \
 	     sbemu/dpmi/dbgutil.c \
 	     sbemu/dpmi/dpmi_dj2.c \
 	     sbemu/dpmi/dpmi_tsr.c \
-	     sbemu/dpmi/gormcb.c \
+	     sbemu/dpmi/djgpp/gormcb.c \
 	     main.c \
 	     qemm.c \
 	     test.c \
 	     utility.c \
 	     hdpmipt.c \
 
-SRC := $(CARDS_SRC) $(MIXER_SRC) $(NEWFUNC_SRC) $(SBEMU_SRC)
+SRC := $(CARDS_SRC) $(SBEMU_SRC)
 OBJS := $(patsubst %.cpp,output/%.o,$(patsubst %.c,output/%.o,$(SRC)))
 
 $(TARGET): $(OBJS)

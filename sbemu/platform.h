@@ -198,6 +198,77 @@ extern uint16_t _AX;
 extern uint8_t _AH;
 extern uint8_t _AL;
 
+struct DWORDREGS {
+  unsigned long edi;
+  unsigned long esi;
+  unsigned long ebp;
+  unsigned long cflag;
+  unsigned long ebx;
+  unsigned long edx;
+  unsigned long ecx;
+  unsigned long eax;
+  unsigned short eflags;
+};
+
+struct DWORDREGS_W {
+  unsigned long di;
+  unsigned long si;
+  unsigned long bp;
+  unsigned long cflag;
+  unsigned long bx;
+  unsigned long dx;
+  unsigned long cx;
+  unsigned long ax;
+  unsigned short flags;
+};
+
+struct WORDREGS {
+  unsigned short di, _upper_di;
+  unsigned short si, _upper_si;
+  unsigned short bp, _upper_bp;
+  unsigned short cflag, _upper_cflag;
+  unsigned short bx, _upper_bx;
+  unsigned short dx, _upper_dx;
+  unsigned short cx, _upper_cx;
+  unsigned short ax, _upper_ax;
+  unsigned short flags;
+};
+
+struct BYTEREGS {
+  unsigned short di, _upper_di;
+  unsigned short si, _upper_si;
+  unsigned short bp, _upper_bp;
+  unsigned long cflag;
+  unsigned char bl;
+  unsigned char bh;
+  unsigned short _upper_bx;
+  unsigned char dl;
+  unsigned char dh;
+  unsigned short _upper_dx;
+  unsigned char cl;
+  unsigned char ch;
+  unsigned short _upper_cx;
+  unsigned char al;
+  unsigned char ah;
+  unsigned short _upper_ax;
+  unsigned short flags;
+};
+
+union REGS {
+  struct DWORDREGS d;
+#ifdef _NAIVE_DOS_REGS
+  struct WORDREGS x;
+#else
+#ifdef _BORLAND_DOS_REGS
+  struct DWORDREGS x;
+#else
+  struct DWORDREGS_W x;
+#endif
+#endif
+  struct WORDREGS w;
+  struct BYTEREGS h;
+};
+
 #define __far
 #define far
 #define _FAR 
@@ -214,6 +285,13 @@ extern uint8_t _AL;
 #define FP_SEG(x) ((uintptr_t)(x))
 #define FP_OFF(x) ((uintptr_t)(x))
 #define MK_FP(x,y) (NULL)
+
+#define LIGHTGREEN 0
+#define LIGHTRED 0
+#define RED 0
+#define CYAN 0
+#define LIGHTCYAN 0
+#define WHITE 0
 
 #endif //compiler specific preprossor directive
 

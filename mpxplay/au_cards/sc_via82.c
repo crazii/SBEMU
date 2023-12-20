@@ -18,7 +18,7 @@
 //#define MPXPLAY_USE_DEBUGF 1
 #define VIA_DEBUG_OUTPUT stdout
 
-#include "mpxplay.h"
+#include "au_cards.h"
 
 #ifdef AU_CARDS_LINK_VIA82XX
 

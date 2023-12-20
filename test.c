@@ -4,8 +4,7 @@
 #include <assert.h>
 #include <platform.h>
 #include <sbemucfg.h>
-#include <mpxplay.h>
-#include <au_mixer/mix_func.h>
+#include <au_cards/au_cards.h>
 
 typedef struct WAVHEADER {
     unsigned char riff[4];                          // RIFF string

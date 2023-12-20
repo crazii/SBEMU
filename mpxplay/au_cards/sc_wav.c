@@ -14,7 +14,7 @@
 //**************************************************************************
 //function: WAV-file and bitstream output
 
-#include "mpxplay.h"
+#include "au_cards.h"
 #include "control/control.h"
 #include <fcntl.h>
 

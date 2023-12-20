@@ -19,14 +19,8 @@
 #include <conio.h>
 #include <io.h>
 #include <dos.h>
-
-#include "mpxplay.h"
+#include "au_cards.h"
 #include "dmairq.h"
-#ifndef SBEMU
-#include "newfunc/dll_load.h"
-#include "au_mixer/au_mixer.h"
-#include "display/display.h"
-#endif
 
 typedef int (*aucards_writedata_t)(struct mpxplay_audioout_info_s *aui,unsigned long);
 
@@ -151,7 +145,6 @@ extern unsigned int is_lfn_support,uselfn,iswin9x;
 #endif
 
 #ifdef SBEMU
-struct mainvars mvps;
 struct mpxplay_audioout_info_s au_infos;
 unsigned int playcontrol,outmode = OUTMODE_TYPE_AUDIO;
 unsigned int intsoundconfig=INTSOUND_NOINT08|INTSOUND_NOBUSYWAIT,intsoundcontrol;
@@ -451,6 +444,7 @@ jump_back:
 void AU_ini_interrupts(struct mpxplay_audioout_info_s *aui)
 {
  aucards_writedata_func=&aucards_writedata_normal;
+ #ifndef SBEMU
  if(aui->card_handler->infobits&SNDCARD_INT08_ALLOWED){
   newfunc_newhandler08_init();
   if(aui->card_handler->cardbuf_int_monitor)
@@ -462,7 +456,7 @@ void AU_ini_interrupts(struct mpxplay_audioout_info_s *aui)
    aucards_writedata_func=&aucards_writedata_intsound;
   }
  }
-  #ifdef SBEMU
+  #else
   if(intsoundconfig&INTSOUND_NOBUSYWAIT){
     aucards_writedata_func = &aucards_writedata_nowait;
   }
@@ -559,6 +553,7 @@ void AU_wait_and_stop(struct mpxplay_audioout_info_s *aui)
  funcbit_smp_disable(playcontrol,PLAYC_RUNNING);
 }
 
+#ifndef SBEMU
 void AU_suspend_decoding(struct mpxplay_audioout_info_s *aui)
 {
  #ifndef SBEMU
@@ -575,6 +570,7 @@ void AU_resume_decoding(struct mpxplay_audioout_info_s *aui)
  funcbit_smp_int32_put(mvp->idone,MPXPLAY_ERROR_INFILE_OK);
 #endif
 }
+#endif
 
 void AU_close(struct mpxplay_audioout_info_s *aui)
 {
@@ -1173,7 +1169,7 @@ static void aucards_interrupt_decoder(void)
 aid_end:
  aucards_get_cpuusage_int08();
 }
-#endif
+#endif //ifndef SBEMU
 
 #if defined(__DOS__)
 

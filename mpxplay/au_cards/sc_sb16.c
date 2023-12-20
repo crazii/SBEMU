@@ -14,7 +14,7 @@
 //**************************************************************************
 //function: SB16 low level routines
 
-#include "mpxplay.h"
+#include "au_cards.h"
 
 #ifdef AU_CARDS_LINK_SB16
 

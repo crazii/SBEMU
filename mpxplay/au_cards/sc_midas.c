@@ -19,7 +19,7 @@
 #if defined(AU_CARDS_LINK_MIDAS) && defined(__DOS__)
 
 #include <midasdll.h>
-#include "mpxplay.h"
+#include "au_cards.h"
 #include "control/control.h"
 
 static void MIDAS_setvol(void);
