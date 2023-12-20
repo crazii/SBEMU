@@ -243,6 +243,7 @@ struct MAIN_OPT
     "/VOL", "Set master volume (0-9)", 7, 0,
 
     "/K", "Internal sample rate (22050 or 44100)", 0x22050, 0,
+    "/FIXTC", "Fix time constant to match 11/22/44 kHz sample rate", FALSE, 0,
     "/SCL", "List installed sound cards", 0, MAIN_SETCMD_HIDDEN,
     "/SC", "Select sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN,
     "/R", "Reset sound card driver", 0, MAIN_SETCMD_HIDDEN,
@@ -265,6 +266,7 @@ enum EOption
     OPT_OUTPUT,
     OPT_VOL,
     OPT_RATE,
+    OPT_FIX_TC,
     OPT_SCLIST,
     OPT_SC,
     OPT_RESET,
@@ -582,7 +584,13 @@ int main(int argc, char* argv[])
     MAIN_SbemuExtFun.DMA_Size = &VDMA_GetCounter;
     MAIN_SbemuExtFun.DMA_Write = &VDMA_WriteData;
 
-    SBEMU_Init(MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value, MAIN_Options[OPT_HDMA].value, MAIN_SB_DSPVersion[MAIN_Options[OPT_TYPE].value], &MAIN_SbemuExtFun);
+    SBEMU_Init(
+        MAIN_Options[OPT_IRQ].value,
+        MAIN_Options[OPT_DMA].value,
+        MAIN_Options[OPT_HDMA].value,
+        MAIN_SB_DSPVersion[MAIN_Options[OPT_TYPE].value],
+        MAIN_Options[OPT_FIX_TC].value,
+        &MAIN_SbemuExtFun);
     VDMA_Virtualize(MAIN_Options[OPT_DMA].value, TRUE);
     if(MAIN_Options[OPT_TYPE].value == 6)
         VDMA_Virtualize(MAIN_Options[OPT_HDMA].value, TRUE);
@@ -940,7 +948,7 @@ static void MAIN_Interrupt()
         _LOG("direct out:%d %d\n",samples,aui.card_samples_per_int);
         memcpy(MAIN_PCM, SBEMU_GetDirectPCM8(), samples);
         SBEMU_ResetDirect();
-        #if 1 //fix noise for some games
+#if 0   //fix noise for some games - SBEMU-X NOTE: unlikely to be needed
         int zeros = TRUE;
         for(int i = 0; i < samples && zeros; ++i)
         {
@@ -952,12 +960,12 @@ static void MAIN_Interrupt()
             for(int i = 0; i < samples; ++i)
                 ((uint8_t*)MAIN_PCM)[i] = 128;
         }
-        #endif
+#endif
         //for(int i = 0; i < samples; ++i) _LOG("%d ",((uint8_t*)MAIN_PCM)[i]); _LOG("\n");
         cv_bits_n_to_m(MAIN_PCM, samples, 1, 2);
         //for(int i = 0; i < samples; ++i) _LOG("%d ",MAIN_PCM[i]); _LOG("\n");
-        const int interrupt_frequency = aui.freq_card/aui.card_samples_per_int;
-        samples = mixer_speed_lq(MAIN_PCM, samples, 1, (samples-1)*interrupt_frequency, aui.freq_card);
+        // the actual sample rate is derived from current count of samples in direct output buffer
+        samples = mixer_speed_lq(MAIN_PCM, samples, 1, (samples * aui.freq_card) / aui.card_samples_per_int, aui.freq_card);
         //for(int i = 0; i < samples; ++i) _LOG("%d ",MAIN_PCM[i]); _LOG("\n");
         cv_channels_1_to_n(MAIN_PCM, samples, 2, 2);
         digital = TRUE;
@@ -1158,17 +1166,27 @@ static void MAIN_TSR_Interrupt()
                 VDMA_Virtualize(MAIN_Options[OPT_HDMA].value, FALSE);
                 VDMA_Virtualize(opt[OPT_HDMA].value, TRUE);
             }
-            if(MAIN_Options[OPT_DMA].value != opt[OPT_DMA].value || MAIN_Options[OPT_HDMA].value != opt[OPT_HDMA].value || MAIN_Options[OPT_IRQ].value != opt[OPT_IRQ].value || opt[OPT_TYPE].value != MAIN_Options[OPT_TYPE].value)
+            if( MAIN_Options[OPT_DMA].value != opt[OPT_DMA].value || MAIN_Options[OPT_HDMA].value != opt[OPT_HDMA].value ||
+                MAIN_Options[OPT_IRQ].value != opt[OPT_IRQ].value || opt[OPT_TYPE].value != MAIN_Options[OPT_TYPE].value ||
+                MAIN_Options[OPT_FIX_TC].value != opt[OPT_FIX_TC].value)
             {
                 _LOG("Reinit SBEMU\n");
                 MAIN_Options[OPT_DMA].value = opt[OPT_DMA].value;
                 MAIN_Options[OPT_HDMA].value = opt[OPT_HDMA].value;
                 MAIN_Options[OPT_IRQ].value = opt[OPT_IRQ].value;
                 MAIN_Options[OPT_TYPE].value = opt[OPT_TYPE].value;
-                SBEMU_Init(MAIN_Options[OPT_IRQ].value, MAIN_Options[OPT_DMA].value, MAIN_Options[OPT_HDMA].value, MAIN_SB_DSPVersion[MAIN_Options[OPT_TYPE].value], &MAIN_SbemuExtFun);
+                MAIN_Options[OPT_FIX_TC].value = opt[OPT_FIX_TC].value;
+                SBEMU_Init(
+                    MAIN_Options[OPT_IRQ].value,
+                    MAIN_Options[OPT_DMA].value,
+                    MAIN_Options[OPT_HDMA].value,
+                    MAIN_SB_DSPVersion[MAIN_Options[OPT_TYPE].value],
+                    MAIN_Options[OPT_FIX_TC].value,
+                    &MAIN_SbemuExtFun);
             }
 
-            if(MAIN_Options[OPT_OPL].value == opt[OPT_OPL].value && MAIN_Options[OPT_ADDR].value == opt[OPT_ADDR].value && MAIN_Options[OPT_PM].value == opt[OPT_PM].value && MAIN_Options[OPT_RM].value == opt[OPT_RM].value)
+            if(MAIN_Options[OPT_OPL].value == opt[OPT_OPL].value && MAIN_Options[OPT_ADDR].value == opt[OPT_ADDR].value &&
+               MAIN_Options[OPT_PM].value == opt[OPT_PM].value && MAIN_Options[OPT_RM].value == opt[OPT_RM].value && MAIN_Options[OPT_FIX_TC].value == opt[OPT_FIX_TC].value)
             {
                 free(opt);
                 return;
