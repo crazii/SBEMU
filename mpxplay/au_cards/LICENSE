@@ -1,0 +1,68 @@
+License for the mpxplay au_cards code
+https://sourceforge.net/p/mpxplay/discussion/219198/thread/ac6560662b/
+
+crazii - 2023-02-21
+Hi,
+
+I was using the sound driver code of MPXPlay (and slightly modification/adaption) to emulate the DOS sound blaster on modern sound card. I wonder if I can use/modify the source and distribute it?
+What license is it? MIT or GPL?
+BTW the program shows extra informmation like "Source code used from: MPXPlay (https://mpxplay.sourceforge.net/) " when /? command.
+Here's the repo of my project, which is basically working but in test phase: https://github.com/crazii/SBEMU
+There's also some problem fixed relating to ICH&HDA in DOS, someone asked me to build a new mpxplay but I thought it'll be better if the fixing can merge to the mpxplay official repo.
+
+I tried contact with mpxplay@freemail.hu , but it seems no reply.
+
+Mpxplay - 2023-02-26
+Hi,
+Sorry, currently I have limited time to develop and support.
+Keeping the header in the Mpxplay related files and keeping the project opensource, you can use that (audio driver) part of my sources.
+But I don't support (would like to see) Mpxplay clones.
+Later I'll check your changes/updates in my code.
+
+crazii - 2023-02-27
+Thanks!
+I can be sure of that, your headers will not be removed/modified and my project keeps opensource.
+
+crazii - 2023-02-27
+FYI The valid change on Intel HDA involves using command ring buffer CORB/RIRB instead of immediate command registers (IC) IC is PIO mode and optional, some chips doesn't support it.
+The other one on ICH, in INTELICH_getbufpos which handles ICH_PO_PICB_REG.
+
+Other changes are special adaptions/customizations for SBEMU and are mostly irrelevant.
+
+Mpxplay - 2023-05-19
+Thank You for the informations.
+I've got only Intel boards with Realtek codecs, all of them work in IHD PIO mode too.
+But now I've added CORB mode (with IRQ, but without shared IRQ handling) to Mpxplay, that also seems to work. It will be optional, selecting with an -scc 4 command line option or with SoundcardCfg=4 in mpxplay.ini.
+Probably the -scc 2 is not needed anymore, the related bug is corrected by your code.
+I've also replaced PCI-BIOS access with a direct PCI port communication.
+I've corrected ICH and VIA handling too, I hope nothing went wrong, because I cannot test them...
+I plan to release new Mpxplay (all versions) within some weeks.
+
+crazii - 2023-12-05
+Hey, sorry to bother again.
+There're some people that want to participate in the SBEMU project but they're concerned about the license problem. ( https://github.com/sbemu-x/sbemu-x/issues/4 )
+May I license SBEMU under GPL, which will make the portion/clone of the driver of Mpxplay licensed under GPL? The original file header won't be changed in any cases, and of course will be open sourced (under GPL).
+An extra license file adding to my project will work. And the license doesn't apply to your original code of Mpxplay.
+Will you agree on that?
+It'll be very much appreciated that you agree.
+
+Mpxplay - 3 days ago [2023-12-17]
+It's OK for the AU_CARDS directory of Mpxplay.
+What else do you use from Mpxplay?
+Why do you use core Mpxplay files, like playlist.h, in_file.h, mpxinbuf.h, mpxplay.h ?
+
+crazii - 2 days ago [2023-12-18]
+OK.
+There's some header dependency of playlist.h and such (i.e. au_cards.c includes mpxplay.h and other files).
+I wasn't removing them but I think I can remove the dependencies if you like.
+
+Mpxplay - 1 day ago [2023-12-19]
+Yeah, you can merge the required Mpxplay dependencies (out of AU_CARDS) into one file (one C, one H), keep (put) my header in that file, and remove any unnecessary files. Thnx
+Do you use the AU_MIXER as is, or just some functions from it?
+
+crazii - 14 hours ago [2023-12-20]
+OK, cool!
+I don't use AU_MIXER functions as I recall, I included the .c file to solve linking errors. still a dependency problem.
+
+crazii - 4 hours ago [2023-12-20]
+I've moved the required defines & functions into au_base.h & au_base.c. I checked again, they are memory/strings/time/timer from newfunc, one bit/channel conversion function , and a new dpmi I added for djgpp, a new samplerate function I added for SBEMU.
