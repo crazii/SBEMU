@@ -61,7 +61,7 @@ will be supported.
 
 macOS, Linux and Windows is supported. For Windows, consider using
 WSL2 + Linux binaries. If you need to frequently debug/test on your
- local DOS, there's a makeifle.dos for you: `make -f makefile.dos`.
+ local DOS, there's a makeifle.dos for you.
 
 ### Installing a cross-compiler (DJGPP)
 
@@ -92,11 +92,24 @@ If you are planning on building DJGPP from source, some additional build
 tools are needed. Refer to the `build-djgpp` README file for details.
 
 ### Installing DJGPP on DOS
-If building the project on DOS is needed, download the original DJGPP from here:
-https://www.delorie.com/djgpp/zip-picker.html It has make utility too.
-the PATH env needs to be set properly before building. `set PATH=%PATH%;C:\DJGPP\BIN`
-you can also uses RHIDE to perform editing & building on the fly: `SET DJGPP=C:\DJGPP\DJGPP.ENV`
+If building the project on DOS is needed, download the original DJGPP 
+from here: https://www.delorie.com/djgpp/zip-picker.html It has make utility too.  
+* Select `MS-DOS,OpenDOS,PC-DOS` in the `Which operating system will you be using?` drop down,
+* Check `C++` checkbox on `Which programming languages will you be using?`
+* Click `Tell me which files I need`
+* Unpack all the zip files into a same folder, and it on your DOS partion (i.e. C:\DJGPP)
+
+The PATH env needs to be set properly before building.
+`set PATH=%PATH%;C:\DJGPP\BIN` is recommended to be put in autoexec.bat,
+and then
+
+`make -f makefile.dos`  
+
+You can also uses RHIDE to perform editing & building on the fly:
+add `SET DJGPP=C:\DJGPP\DJGPP.ENV` to autoexec.bat
 and then just run `rhide` in the project root via command line.
+Use `Alt+C` to active `Compile` menu and select `Make` for dependency build
+or `Build all` for a clean build.
 
 ### Building the project
 
