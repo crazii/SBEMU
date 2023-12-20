@@ -17,6 +17,9 @@
    Do NOT enable interrupts in the user routine.  Thanks to ctm@ardi.com for
    the improvements.  C. Sandmann 3/95 */
 
+/* Keeps FLAGS untouched on IRET (new line 83), 
+   useful for HW interrupt handlers. Crazii 12/20/2023 */
+
 #define	STACK_WAS_MALLOCED	(1 << 0)
 
 #define	FILL	0x00

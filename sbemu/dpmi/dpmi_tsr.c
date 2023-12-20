@@ -20,7 +20,7 @@
 #include <file.h>
 #include <go32.h>
 #include <stubinfo.h>
-#include "coff.h"
+#include "djgpp/coff.h"
 #include "dbgutil.h"
 
 #pragma GCC diagnostic ignored "-Wpedantic"
