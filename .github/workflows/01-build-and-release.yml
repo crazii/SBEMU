@@ -21,7 +21,7 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/src
           test -f main.c
-          make
+          make CC=gcc CXX=g++
           test -f output/sbemu.exe
       - name: Build FreeDOS SBEMU USB image
         run: |
