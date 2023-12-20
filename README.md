@@ -97,8 +97,9 @@ from here: https://www.delorie.com/djgpp/zip-picker.html It has make utility too
 * Select `MS-DOS,OpenDOS,PC-DOS` in the `Which operating system will you be using?` drop down,
 * Check `C++` checkbox on `Which programming languages will you be using?`
 * Click `Tell me which files I need`
-* Unpack all the zip files into a same folder, and it on your DOS partion (i.e. C:\DJGPP)
+* Unpack all the zip files into a same folder, and put it on your DOS partion (i.e. C:\DJGPP)
 
+[DOSLFN](http://www.adoxa.altervista.org/doslfn/) is also need to perform build.
 The PATH env needs to be set properly before building.
 `set PATH=%PATH%;C:\DJGPP\BIN` is recommended to be put in autoexec.bat,
 and then
