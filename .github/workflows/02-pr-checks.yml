@@ -4,6 +4,12 @@ on:
     branches:
       - main
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: shellcheck build-release-artifacts.sh
+        run: |
+          shellcheck scripts/build-release-artifacts.sh
   build:
     runs-on: ubuntu-latest
     container:
