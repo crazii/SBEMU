@@ -60,9 +60,8 @@ will be supported.
 ## Building from source
 
 macOS, Linux and Windows is supported. For Windows, consider using
-WSL2 + Linux binaries. DOS isn't supported officially, because why
-would you use a single-tasking operating system (either emulated or
-on old hardware) to build this project? :)
+WSL2 + Linux binaries. If you need to frequently debug/test on your
+ local DOS, there's a makeifle.dos for you: `make -f makefile.dos`.
 
 ### Installing a cross-compiler (DJGPP)
 
@@ -91,6 +90,13 @@ On MacOS, install the Xcode command-line tools, which should give you
 
 If you are planning on building DJGPP from source, some additional build
 tools are needed. Refer to the `build-djgpp` README file for details.
+
+### Installing DJGPP on DOS
+If building the project on DOS is needed, download the original DJGPP from here:
+https://www.delorie.com/djgpp/zip-picker.html It has make utility too.
+the PATH env needs to be set properly before building. `set PATH=%PATH%;C:\DJGPP\BIN`
+you can also uses RHIDE to perform editing & building on the fly: `SET DJGPP=C:\DJGPP\DJGPP.ENV`
+and then just run `rhide` in the project root via command line.
 
 ### Building the project
 
