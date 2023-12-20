@@ -13,5 +13,5 @@ jobs:
         uses: actions/checkout@v3
       - name: Build project
         run: |
-          make
-          i586-pc-msdosdjgpp-objdump -x output/sbemu.exe
+          make CC=gcc CXX=g++
+          objdump -x output/sbemu.exe
