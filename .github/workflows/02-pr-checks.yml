@@ -5,7 +5,9 @@ on:
       - main
 jobs:
   build:
-    runs-on: ghcr.io/volkertb/debian-djgpp:v0.2
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/volkertb/debian-djgpp:v0.2
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
