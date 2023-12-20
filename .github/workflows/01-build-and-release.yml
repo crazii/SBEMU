@@ -25,7 +25,6 @@ jobs:
           test -f output/sbemu.exe
       - name: Build FreeDOS SBEMU USB image
         run: |
-          shellcheck $GITHUB_WORKSPACE/src/scripts/build-release-artifacts.sh
           $GITHUB_WORKSPACE/src/scripts/build-release-artifacts.sh $GITHUB_WORKSPACE/src/output/sbemu.exe $GITHUB_WORKSPACE/
       - name: Generate release tag
         id: tag
