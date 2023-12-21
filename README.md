@@ -28,7 +28,6 @@ Source code exists, but "doesn't work yet":
 Source code exists, but not sure if viable:
 
  * `sc_wss`: Windows Sound System compatible cards
- * `sc_cmi`: CMI 8338/8738 (PCI) cards
  * `sc_ess`: ESS card handling
  * `sc_gus`: Gravis UltraSound
  * `sc_sb16`: Sound Blaster 16
