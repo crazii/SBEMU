@@ -28,11 +28,15 @@ Source code exists, but "doesn't work yet":
 Source code exists, but not sure if viable:
 
  * `sc_wss`: Windows Sound System compatible cards
- * `sc_cmi`: CMI 8338/8738 (PCI) cards
  * `sc_ess`: ESS card handling
  * `sc_gus`: Gravis UltraSound
+ * `sc_sb16`: Sound Blaster 16
+ * `sc_sbpro`: Sound Blaster 1.0, 1.5, 2.0, Pro
  * `sc_midas`: MIDAS library handling
-
+ * `sc_winds`: Win32 DirectSound output
+ * `sc_winwo`: Windows WavOut sound output
+ * `sc_wav`: WAV-file and bitstream output
+ 
 ## Emulated modes
 
  * 8-bit and 16-bit DMA (mono, stereo, high-speed)

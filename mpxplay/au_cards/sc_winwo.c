@@ -12,7 +12,7 @@
 //*  Please contact with the author (with me) if you want to use           *
 //*  or modify this source.                                                *
 //**************************************************************************
-//function: Wibdows WavOut sound output
+//function: Windows WavOut sound output
 
 //#define MPXPLAY_USE_DEBUGF 1
 //#define WAVOUT_DEBUG_OUTPUT NULL
