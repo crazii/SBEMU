@@ -331,7 +331,7 @@ struct MAIN_OPT
     "/SC", "Select sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN,
     "/R", "Reset sound card driver", 0, MAIN_SETCMD_HIDDEN,
     "/P", "UART mode MPU-401 IO address (default 330) [*]", 0x330, 0,
-    "/MCOM", "UART mode MPU-401 COM port (1=COM1, 2=COM2, 3=COM3, 4=COM4, 8=D040, 9=D050, or base address >= 400) [*]", 0, 0,
+    "/MCOM", "UART mode MPU-401 COM port (1=COM1, 2=COM2, 3=COM3, 4=COM4, 8=D040, 9=D050, or base address >= 400)", 0, 0,
 #if MPU_DEBUG
     "/MDBG", "Enable MPU-401 debugging (0 to disable, 1 or 2 to enable)", 0, 0,
 #endif
