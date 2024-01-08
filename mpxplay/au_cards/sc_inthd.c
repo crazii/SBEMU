@@ -222,6 +222,23 @@ static void azx_single_send_cmd(struct intelhd_card_s *chip,uint32_t val)
  chip->corb_buffer[corbindex] = val;
  azx_writew(chip, CORBWP, corbindex);
  azx_writeb(chip, CORBCTL, 0x2); //start
+ // https://www.intel.com/content/dam/www/public/us/en/documents/product-specifications/high-definition-audio-specification.pdf
+ // According to page 37, when enabling DMA, you "Must read the value back"
+ // or simply delaying might work: pds_delay_10us(1000);
+ timeout = 2000; // 200 ms
+ int c;
+ do {
+   c = azx_readb(chip, CORBCTL);
+   //mpxplay_debugf(IHD_DEBUG_OUTPUT,"CORBCTL:%x",c);
+   pds_delay_10us(10);
+   if ((c & 2) == 2) {
+     break;
+   }
+ } while (--timeout);
+#ifdef MPXPLAY_USE_DEBUGF
+ if(!timeout)
+  mpxplay_debugf(IHD_DEBUG_OUTPUT,"corb dma run timeout %d", timeout);
+#endif
  }
 }
 
@@ -267,8 +284,11 @@ static unsigned int azx_get_response(struct intelhd_card_s *chip)
     break;
   pds_delay_10us(10);
   }while(--timeout);
- if(!timeout)
+ if(!timeout){
   mpxplay_debugf(IHD_DEBUG_OUTPUT,"read response timeout %d", timeout);
+  chip->config_select |= AUCARDSCONFIG_IHD_USE_PIO;
+  return 0xffffffff;
+ }
   int rirbindex = azx_readw(chip, RIRBWP);
   long long data = chip->rirb_buffer[rirbindex];
   azx_writeb(chip, RIRBSTS, 1);
@@ -280,8 +300,38 @@ static unsigned int snd_hda_codec_read(struct intelhd_card_s *chip, hda_nid_t ni
                          uint32_t direct,
              unsigned int verb, unsigned int parm)
 {
+ int pio;
+retry:
+ pio = chip->config_select & AUCARDSCONFIG_IHD_USE_PIO;
  snd_hda_codec_write(chip,nid,direct,verb,parm);
- return azx_get_response(chip);
+ unsigned int r = azx_get_response(chip);
+ if (r == 0xffffffff && pio != (chip->config_select & AUCARDSCONFIG_IHD_USE_PIO)) {
+  int timeout = 2000; // 200 ms
+  mpxplay_debugf(IHD_DEBUG_OUTPUT,"rirb retry");
+  printf("Intel HDA: Switching to PIO.\n");
+  azx_writeb(chip, CORBCTL, 0); // DMA Stop
+  int c;
+  do {
+    c = azx_readb(chip, CORBCTL);
+    //mpxplay_debugf(IHD_DEBUG_OUTPUT,"CORBCTL:%x",c);
+    pds_delay_10us(10);
+    if ((c & 2) == 0) {
+      break;
+    }
+  } while (--timeout);
+  azx_writew(chip, RIRBCTL, 0); // DMA Stop, Disable Interrupt
+  do {
+    c = azx_readb(chip, RIRBCTL);
+    //mpxplay_debugf(IHD_DEBUG_OUTPUT,"RIRBCTL:%x",c);
+    if ((c & 2) == 0) {
+      break;
+    }
+    pds_delay_10us(10);
+  } while (--timeout);
+  azx_writel(chip, GCTL, (azx_readl(chip, GCTL) & (~ICH6_GCTL_UREN)));
+  goto retry;
+ }
+ return r;
 }
 
 #define snd_hda_param_read(codec,nid,param) snd_hda_codec_read(codec,nid,0,AC_VERB_PARAMETERS,param)
@@ -698,8 +748,6 @@ static unsigned int azx_reset(struct intelhd_card_s *chip)
  // set CORB command DMA buffer
  azx_writel(chip, CORBLBASE, (unsigned long)pds_cardmem_physicalptr(chip->dm, chip->corb_buffer));
  //azx_writel(chip, CORBSIZE, 0);
- //azx_writew(chip, CORBRP, 1 << 15); // Reset    // Needed to avoid freeze on D945GCLF2 ICH7
- //azx_writeb(chip, CORBCTL, 0x02); // enable DMA // Needed to avoid freeze on D945GCLF2 ICH7
  azx_writel(chip, RIRBLBASE, (unsigned long)pds_cardmem_physicalptr(chip->dm, chip->rirb_buffer));
  //azx_writel(chip, RIRBSIZE, 0); maybe only 1 supported
  azx_writew(chip, RINTCNT, 1); //1 response for one interrupt each time
