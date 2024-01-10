@@ -160,7 +160,7 @@ typedef struct au_cardconfig_v0154_s{
  #endif
  #ifdef AU_CARDS_LINK_PCI
   #define AU_CARDS_LINK_CMI8X38 1
-  //#define AU_CARDS_LINK_EMU20KX 1
+  #define AU_CARDS_LINK_EMU20KX 1
   #define AU_CARDS_LINK_ES1371  1
   #define AU_CARDS_LINK_ICH     1
   #define AU_CARDS_LINK_IHD     1
@@ -181,7 +181,7 @@ typedef struct au_cardconfig_v0154_s{
  #endif
  #ifdef AU_CARDS_LINK_PCI
   #define AU_CARDS_LINK_CMI8X38 1
-  //#define AU_CARDS_LINK_EMU20KX 1
+  #define AU_CARDS_LINK_EMU20KX 1
   #define AU_CARDS_LINK_ES1371  1
   #define AU_CARDS_LINK_ICH     1
   #define AU_CARDS_LINK_IHD     1

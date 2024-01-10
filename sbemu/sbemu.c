@@ -80,13 +80,13 @@ static int SBEMU_Indexof(uint8_t* array, int count, uint8_t  val)
 
 void SBEMU_Mixer_WriteAddr(int16_t port, uint8_t value)
 {
-    _LOG("SBEMU: mixer wirte addr: %x %x\n", port, value);
+    _LOG("SBEMU: mixer write addr: %x %x\n", port, value);
     SBEMU_MixerRegIndex = value;
 }
 
 void SBEMU_Mixer_Write(uint16_t port, uint8_t value)
 {
-    _LOG("SBEMU: mixer wirte: %x\n", value);
+    _LOG("SBEMU: mixer write: %x\n", value);
     SBEMU_MixerRegs[SBEMU_MixerRegIndex] = value;
     if(SBEMU_MixerRegIndex == SBEMU_MIXERREG_RESET)
     {
