@@ -65,7 +65,11 @@ ser_setup(int stype, unsigned int sdev)
     if (sdev >= 1 && sdev <= 4) {
         iobase = get_com_port_address(sdev);
     } else {
-        iobase = sdev;
+        if (sdev > 0xff) { // Check for typos (less than 3 hexadecimal digits)
+            iobase = sdev;
+        } else {
+            iobase = 0;
+        }
     }
 
     switch (stype) {
