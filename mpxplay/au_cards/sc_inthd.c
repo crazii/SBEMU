@@ -307,13 +307,11 @@ retry:
  unsigned int r = azx_get_response(chip);
  if (r == 0xffffffff && pio != (chip->config_select & AUCARDSCONFIG_IHD_USE_PIO)) {
   int timeout = 2000; // 200 ms
-  mpxplay_debugf(IHD_DEBUG_OUTPUT,"rirb retry");
   printf("Intel HDA: Switching to PIO.\n");
   azx_writeb(chip, CORBCTL, 0); // DMA Stop
   int c;
   do {
     c = azx_readb(chip, CORBCTL);
-    //mpxplay_debugf(IHD_DEBUG_OUTPUT,"CORBCTL:%x",c);
     pds_delay_10us(10);
     if ((c & 2) == 0) {
       break;
@@ -322,7 +320,6 @@ retry:
   azx_writew(chip, RIRBCTL, 0); // DMA Stop, Disable Interrupt
   do {
     c = azx_readb(chip, RIRBCTL);
-    //mpxplay_debugf(IHD_DEBUG_OUTPUT,"RIRBCTL:%x",c);
     if ((c & 2) == 0) {
       break;
     }
@@ -797,11 +794,7 @@ static unsigned int snd_ihd_buffer_init(struct mpxplay_audioout_info_s *aui,stru
  unsigned long gcap, sdo_offset;
  unsigned int beginmem_aligned;
 
-#if SBEMU_USE_CORB
- card->pcmout_period_size = 512;
-#else
  card->pcmout_period_size = AZX_PERIOD_SIZE;
-#endif
  card->pcmout_bufsize = MDma_get_max_pcmoutbufsize(aui,0,card->pcmout_period_size,bytes_per_sample*aui->chan_card/2,aui->freq_set);
  allbufsize += card->pcmout_bufsize;
  card->dm=MDma_alloc_cardmem(allbufsize);
@@ -833,7 +826,6 @@ static unsigned int snd_ihd_buffer_init(struct mpxplay_audioout_info_s *aui,stru
     card->config_select, aui->card_select_config, gcap, sdo_offset);
 
  card->sd_addr = card->iobase + sdo_offset;
- card->pcmout_period_size = AZX_PERIOD_SIZE;
  card->pcmout_num_periods = card->pcmout_bufsize / card->pcmout_period_size;
 
  return 1;
