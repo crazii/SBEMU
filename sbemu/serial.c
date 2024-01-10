@@ -3,6 +3,10 @@
 
 #include "serial.h"
 
+#include <stdio.h>
+#include <go32.h>
+#include <sys/farptr.h>
+
 #include <string.h>
 #include <stdarg.h>
 #include <unistd.h>
@@ -38,18 +42,30 @@
 static unsigned int dbg_iobase = 0;
 static unsigned int midi_iobase = 0;
 
+#define BDA_COMPORTS 0x0400 // BIOS Data Area (BDA) address
+static unsigned short
+get_com_port_address(int portno)
+{
+    unsigned short p = _farpeekw(_dos_ds, BDA_COMPORTS + (portno-1)*2);
+    return p;
+}
+
 void
+ser_print_com_ports()
+{
+    for (int n = 1; n <= 4; n++) {
+        printf("COM%d: %4.4x\n", n, get_com_port_address(n));
+    }
+}
+
+int
 ser_setup(int stype, unsigned int sdev)
 {
     unsigned int iobase = 0;
-    switch (sdev) {
-        case 1: iobase = UART1_BASE; break;
-        case 2: iobase = UART2_BASE; break;
-        case 3: iobase = UART3_BASE; break;
-        case 4: iobase = UART4_BASE; break;
-        case 8: iobase = UART8_BASE; break;
-        case 9: iobase = UART9_BASE; break;
-        default: iobase = sdev; break;
+    if (sdev >= 1 && sdev <= 4) {
+        iobase = get_com_port_address(sdev);
+    } else {
+        iobase = sdev;
     }
 
     switch (stype) {
@@ -58,7 +74,12 @@ ser_setup(int stype, unsigned int sdev)
     }
 
     if (iobase == 0) {
-        return;
+        if (sdev != 0) {
+            printf("Invalid COM port %d", sdev);
+            return 1;
+        } else {
+            return 0;
+        }
     }
 
     unsigned int baud = (stype == 2) ? DIV_BAUD_FASTDBG : ((stype == 1) ? DIV_BAUD_MIDI : DIV_BAUD_DBG);
@@ -76,6 +97,8 @@ ser_setup(int stype, unsigned int sdev)
     // How to read output:
     // stty -F /dev/ttyS0 9600 cs8 -cstopb -parenb && cat /dev/ttyS0
     // or: stty -F /dev/ttyS0 115200 cs8 -cstopb -parenb && cat /dev/ttyS0
+
+    return 0;
 }
 
 void

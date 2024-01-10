@@ -310,7 +310,7 @@ struct MAIN_OPT
 }MAIN_Options[] =
 {
     "/?", "Show this help screen", FALSE, 0,
-    "/DBG", "Debug output (0=console, 1=COM1, 2=COM2, 3=COM3, 4=COM4, 8=D040, 9=D050, or base address >= 400)", 0, 0,
+    "/DBG", "Debug output (0=console, 1=COM1, 2=COM2, 3=COM3, 4=COM4, otherwise base address)", 0, 0,
 
     "/A", "IO address (220 or 240) [*]", 0x220, 0,
     "/I", "IRQ number (5 or 7) [*]", 7, 0,
@@ -332,7 +332,8 @@ struct MAIN_OPT
     "/SC", "Select sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN,
     "/R", "Reset sound card driver", 0, MAIN_SETCMD_HIDDEN,
     "/P", "UART mode MPU-401 IO address (default 330) [*]", 0x330, 0,
-    "/MCOM", "UART mode MPU-401 COM port (1=COM1, 2=COM2, 3=COM3, 4=COM4, 8=D040, 9=D050, or base address >= 400)", 0, 0,
+    "/MCOM", "UART mode MPU-401 COM port (1=COM1, 2=COM2, 3=COM3, 4=COM4, otherwise base address)", 0, 0,
+    "/COML", "List installed COM ports", 0, MAIN_SETCMD_HIDDEN,
 #if MPU_DEBUG
     "/MDBG", "Enable MPU-401 debugging (0 to disable, 1 or 2 to enable)", 0, 0,
 #endif
@@ -362,6 +363,7 @@ enum EOption
     OPT_RESET,
     OPT_MPUADDR,
     OPT_MPUCOMPORT,
+    OPT_COMPORTLIST,
     OPT_MDBG,
 
     OPT_COUNT,
@@ -437,34 +439,32 @@ print_enabled_newline(bool enabled)
     cprintf(".\r\n");
 }
 
-static void
+static int
 update_serial_debug_output()
 {
     bool enabled = (MAIN_Options[OPT_DEBUG_OUTPUT].value != 0);
     if (!enabled) {
         _LOG("Serial port debugging disabled.\n");
     }
-    ser_setup(MAIN_Options[OPT_MDBG].value ? 2 : 0, MAIN_Options[OPT_DEBUG_OUTPUT].value);
+    int err = ser_setup(MAIN_Options[OPT_MDBG].value ? 2 : 0, MAIN_Options[OPT_DEBUG_OUTPUT].value);
     if (enabled) {
         _LOG("Serial port debugging enabled.\n");
     }
-    // while (1) { // To check what serial port you are outputting to
-    //   _LOG("Serial port debugging enabled.\n");
-    //   printf("Serial port debugging enabled: %x.\n", enabled);
-    // }
+    return err;
 }
 
-static void
+static int
 update_serial_mpu_output()
 {
     bool enabled = (MAIN_Options[OPT_MPUCOMPORT].value != 0);
     if (!enabled) {
         _LOG("MPU-401 serial output disabled.\n");
     }
-    ser_setup(1, MAIN_Options[OPT_MPUCOMPORT].value);
+    int err = ser_setup(1, MAIN_Options[OPT_MPUCOMPORT].value);
     if (enabled) {
         _LOG("MPU-401 serial output enabled.\n");
     }
+    return err;
 }
 
 int main(int argc, char* argv[])
@@ -552,11 +552,20 @@ int main(int argc, char* argv[])
     mpu_debug = MAIN_Options[OPT_MDBG].value;
 #endif
     if (MAIN_Options[OPT_DEBUG_OUTPUT].value) {
-        update_serial_debug_output();
+        if (update_serial_debug_output()) {
+            return 1;
+        }
+    }
+
+    if (MAIN_Options[OPT_COMPORTLIST].value) {
+      ser_print_com_ports();
+      return 0;
     }
 
     if (MAIN_Options[OPT_MPUCOMPORT].value) {
-        update_serial_mpu_output();
+        if (update_serial_mpu_output()) {
+            return 1;
+        }
     }
 
     if(MAIN_Options[OPT_ADDR].value != 0x220 && MAIN_Options[OPT_ADDR].value != 0x240)
@@ -721,7 +730,7 @@ int main(int argc, char* argv[])
             return 1;
         }
 
-        printf("MPU-401 at address %x: ",
+        printf("MPU-401 UART emulation at address %x: ",
                MAIN_Options[OPT_MPUADDR].value);
         print_enabled_newline(true);
     }
