@@ -66,6 +66,7 @@ struct intelhd_card_s
  long pcmout_bufsize;
  unsigned long* corb_buffer;
  unsigned long long* rirb_buffer;
+ int first_rirb;
  unsigned long pcmout_dmasize;
  unsigned int  pcmout_num_periods;
  unsigned long pcmout_period_size;
@@ -278,22 +279,55 @@ static unsigned int azx_get_response(struct intelhd_card_s *chip)
 #endif
  return azx_readl(chip, IR);
  } else { //Immediate Commands are optional, some devices don't have it, use CORB
- do{
+ if (chip->first_rirb) {
   azx_writeb(chip, RIRBCTL, 0x3);
+ }
+ do{
   if(azx_readb(chip, RIRBSTS)&1)
     break;
   pds_delay_10us(10);
-  }while(--timeout);
+ }while(--timeout);
  if(!timeout){
   mpxplay_debugf(IHD_DEBUG_OUTPUT,"read response timeout %d", timeout);
+  if (chip->first_rirb) {
+   // Some chipsets will freeze if you now try to read the RIRB
+   chip->first_rirb = 0;
+   return 0;
+  }
   chip->config_select |= AUCARDSCONFIG_IHD_USE_PIO;
+  chip->first_rirb = 0;
   return 0xffffffff;
  }
+  chip->first_rirb = 0;
   int rirbindex = azx_readw(chip, RIRBWP);
   long long data = chip->rirb_buffer[rirbindex];
   azx_writeb(chip, RIRBSTS, 1);
   return (unsigned int)(data);
  }
+}
+
+static void switch_to_pio(struct intelhd_card_s *chip)
+{
+ int timeout = 2000; // 200 ms
+ printf("Intel HDA: Switching to PIO.\n");
+ azx_writeb(chip, CORBCTL, 0); // DMA Stop
+ int c;
+ do {
+  c = azx_readb(chip, CORBCTL);
+  pds_delay_10us(10);
+  if ((c & 2) == 0) {
+   break;
+  }
+ } while (--timeout);
+ azx_writew(chip, RIRBCTL, 0); // DMA Stop, Disable Interrupt
+ do {
+  c = azx_readb(chip, RIRBCTL);
+  if ((c & 2) == 0) {
+   break;
+  }
+  pds_delay_10us(10);
+ } while (--timeout);
+ azx_writel(chip, GCTL, (azx_readl(chip, GCTL) & (~ICH6_GCTL_UREN)));
 }
 
 static unsigned int snd_hda_codec_read(struct intelhd_card_s *chip, hda_nid_t nid,
@@ -306,26 +340,7 @@ retry:
  snd_hda_codec_write(chip,nid,direct,verb,parm);
  unsigned int r = azx_get_response(chip);
  if (r == 0xffffffff && pio != (chip->config_select & AUCARDSCONFIG_IHD_USE_PIO)) {
-  int timeout = 2000; // 200 ms
-  printf("Intel HDA: Switching to PIO.\n");
-  azx_writeb(chip, CORBCTL, 0); // DMA Stop
-  int c;
-  do {
-    c = azx_readb(chip, CORBCTL);
-    pds_delay_10us(10);
-    if ((c & 2) == 0) {
-      break;
-    }
-  } while (--timeout);
-  azx_writew(chip, RIRBCTL, 0); // DMA Stop, Disable Interrupt
-  do {
-    c = azx_readb(chip, RIRBCTL);
-    if ((c & 2) == 0) {
-      break;
-    }
-    pds_delay_10us(10);
-  } while (--timeout);
-  azx_writel(chip, GCTL, (azx_readl(chip, GCTL) & (~ICH6_GCTL_UREN)));
+  switch_to_pio(chip);
   goto retry;
  }
  return r;
@@ -807,6 +822,7 @@ static unsigned int snd_ihd_buffer_init(struct mpxplay_audioout_info_s *aui,stru
 #if SBEMU_USE_CORB
  card->corb_buffer = (long*)(((uint32_t)card->pcmout_buffer + card->pcmout_bufsize + HDA_CORB_ALIGN-1)&(~(HDA_CORB_ALIGN-1)));
  card->rirb_buffer = (long long*)(((uint32_t)card->corb_buffer + HDA_CORB_MAXSIZE + HDA_RIRB_ALGIN-1)&(~(HDA_RIRB_ALGIN-1)));
+ card->first_rirb = 1;
 #endif
 
  gcap = (unsigned long)azx_readw(card,GCAP);
@@ -858,8 +874,45 @@ static unsigned int snd_ihd_mixer_init(struct intelhd_card_s *card)
  mpxplay_debugf(IHD_DEBUG_OUTPUT,"snd_ihd_mixer_init start");
 
  card->codec_vendor_id = snd_hda_param_read(card, AC_NODE_ROOT,AC_PAR_VENDOR_ID);
- if(card->codec_vendor_id <=0)
-  card->codec_vendor_id = snd_hda_param_read(card, AC_NODE_ROOT,AC_PAR_VENDOR_ID);
+ if(card->codec_vendor_id <=0){
+  // Heuristic to switch problematic chipsets to PIO
+  azx_writeb(card, CORBCTL, 0); // DMA Stop
+  int timeout = 2000;
+  int c;
+  do {
+   c = azx_readb(card, CORBCTL);
+   pds_delay_10us(10);
+   if ((c & 2) == 0) {
+    break;
+   }
+  } while (--timeout);
+  azx_writel(card, CORBRP, 1<<15); // Reset
+  //pds_delay_10us(100); // need this delay? -> no
+  timeout = 2000;
+  do {
+   int rp = azx_readl(card, CORBRP);
+   if (rp & (1<<15)) break;
+   pds_delay_10us(10);
+  } while (--timeout);
+  //printf("Intel HDA: CORBRP timeout %d\n", timeout);
+  mpxplay_debugf(IHD_DEBUG_OUTPUT,"corbrp timeout %d\n", timeout);
+  if (timeout > 0) {
+   card->config_select |= AUCARDSCONFIG_IHD_USE_PIO;
+   switch_to_pio(card);
+   azx_writel(card, CORBRP, 0); // No sound without this!
+   pds_delay_10us(100);
+   card->codec_vendor_id = snd_hda_param_read(card, AC_NODE_ROOT,AC_PAR_VENDOR_ID);
+  } else {
+   timeout = 2000;
+   azx_writel(card, CORBRP, 0);
+   do {
+    int rp = azx_readl(card, CORBRP);
+    if (rp & (1<<15) == 0) break;
+    pds_delay_10us(10);
+   } while (--timeout);
+   card->codec_vendor_id = snd_hda_param_read(card, AC_NODE_ROOT,AC_PAR_VENDOR_ID);
+  }
+ }
  mpxplay_debugf(IHD_DEBUG_OUTPUT,"codec vendor id:%8.8X",card->codec_vendor_id);
 
  snd_hda_search_audio_node(card);
