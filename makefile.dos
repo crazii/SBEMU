@@ -33,9 +33,9 @@ VPATH += mpxplay/au_cards
 
 all: $(TARGET)
 
-EXCLUDE := sc_null.c sc_sb16.c sc_sbpro.c sc_gus.c sc_ess.c sc_midas.c sc_wav.c sc_winds.c sc_winwo.c sc_wss.c
+EXCLUDE := 
 
-SRC := $(notdir $(shell dir *.c /b/s) $(shell dir *.cpp /b/s))
+SRC := $(notdir $(shell dir *.c /b/s/l/-p) $(shell dir *.cpp /b/s/l/-p))
 SRC := $(filter-out $(EXCLUDE), $(SRC))
 OBJS := $(patsubst %.cpp,output/%.o,$(patsubst %.c,output/%.o,$(SRC)))
 
