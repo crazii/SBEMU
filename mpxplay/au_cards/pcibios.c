@@ -335,8 +335,10 @@ typedef struct
 
 #define BUFSIZE (16*1024)
 //copied & modified for usbddos
-uint8_t  pcibios_GetIRQ(pci_config_s* ppkey, uint8_t INTPIN)
+uint8_t  pcibios_GetIRQ(pci_config_s* ppkey)
 {
+    uint8_t INTPIN = pcibios_ReadConfig_Byte(ppkey, PCIR_INTR_PIN);
+    
     dosmem_t dosmem = {0};
     pds_dpmi_dos_allocmem(&dosmem, BUFSIZE);
 

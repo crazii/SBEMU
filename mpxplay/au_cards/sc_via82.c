@@ -283,7 +283,7 @@ static int VIA82XX_adetect(struct mpxplay_audioout_info_s *aui)
  //printf("VT82 irq: %d\n",aui->card_irq);
  if(aui->card_irq == 0 || aui->card_irq == 0xFF)
  {
-     aui->card_irq = card->irq = 10;
+     aui->card_irq = card->irq = pcibios_GetIRQ(card->pci_dev);
      //pcibios_WriteConfig_Byte(card->pci_dev, PCIR_INTR_LN, aui->card_irq); //RW //delayed in VIA82XX_start
  }
  aui->card_samples_per_int = PCMBUFFERPAGESIZE / 4;
