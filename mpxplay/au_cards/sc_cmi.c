@@ -15,6 +15,8 @@
 //function: CMI 8338/8738 (PCI) low level routines
 //based on the ALSA (http://www.alsa-project.org)
 
+//ref: CMI-8738/PCI-SX AUDIO Specification
+
 #include "au_cards.h"
 
 #ifdef AU_CARDS_LINK_CMI8X38
@@ -104,8 +106,8 @@
 #define CM_INT_HOLD        0x00000002
 #define CM_INT_CLEAR        0x00000001
 
-#define CM_REG_INT_STATUS    0x10
-#define CM_INTR            0x80000000
+#define CM_REG_INT_STATUS    0x10 //(R)
+#define CM_INTR            0x80000000 //Interrupt reflected from any sources. 
 #define CM_VCO            0x08000000    /* Voice Control? CMI8738 */
 #define CM_MCBINT        0x04000000    /* Master Control Block abort cond.? */
 #define CM_UARTINT        0x00010000
@@ -513,7 +515,11 @@ static void cmi8x38_chip_init(struct cmi8x38_card *cm)
  query_chip(cm);
 
  /* initialize codec registers */
+ #ifdef SBEMU
+ snd_cmipci_write_32(cm, CM_REG_INT_HLDCLR, CM_TDMA_INT_EN|CM_CH1_INT_EN|CM_CH0_INT_EN);    /* enable ints */
+ #else
  snd_cmipci_write_32(cm, CM_REG_INT_HLDCLR, 0);    /* disable ints */
+ #endif
  snd_cmipci_ch_reset(cm, CM_CH_PLAY);
  snd_cmipci_ch_reset(cm, CM_CH_CAPT);
  snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, 0);    /* disable channels */
@@ -779,9 +785,22 @@ static unsigned long CMI8X38_readMIXER(struct mpxplay_audioout_info_s *aui,unsig
 static int CMI8X38_IRQRoutine(mpxplay_audioout_info_s* aui)
 {
   cmi8x38_card *card=aui->card_private_data;
-  int status = snd_cmipci_read_32(card, CM_REG_INT_STATUS);
-  snd_cmipci_write_32(card, CM_REG_INT_STATUS, status); //ack all
-  return status != 0;
+  int status = snd_cmipci_read_32(card, CM_REG_INT_STATUS); //read only reg (R)
+  if(status&CM_MCBINT) //Abort conditions occur during PCI Bus Target/Master Access
+  {
+    //nothing we can do
+  }
+  if(status&CM_UARTINT)
+  {
+
+  }
+  if(status&(CM_LTDMAINT|CM_HTDMAINT|CM_CHINT0|CM_CHINT1))
+  {
+    //interrupt clear, not sure if it is the right way
+    snd_cmipci_write_32(card, CM_REG_INT_HLDCLR, 0);
+    snd_cmipci_write_32(card, CM_REG_INT_HLDCLR, CM_TDMA_INT_EN|CM_CH1_INT_EN|CM_CH0_INT_EN); //re-enable hold
+  }
+  return (status&CM_INTR) != 0;
 }
 #endif
 
