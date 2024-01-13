@@ -1,5 +1,6 @@
-// https://github.com/MindlapseDemos/wip-dosdemo/blob/master/src/dos/logger.c
-// GPLv3 by John Tsiombikas
+// SBEMU sbemu/serial.c
+// based on: https://github.com/MindlapseDemos/wip-dosdemo/blob/master/src/dos/logger.c
+//           GPLv3 by John Tsiombikas
 
 #include "serial.h"
 
@@ -11,13 +12,6 @@
 #include <stdarg.h>
 #include <unistd.h>
 #include <pc.h>
-
-#define UART1_BASE	0x3f8
-#define UART2_BASE	0x2f8
-#define UART3_BASE	0x3e8
-#define UART4_BASE	0x2e8
-#define UART8_BASE	0xD040 // COM3 (Moschip 9935CV PCI card)
-#define UART9_BASE	0xD050 // COM2 (Moschip 9935CV PCI card)
 
 #define UART_DATA	0
 #define UART_DIVLO	0
@@ -86,7 +80,7 @@ ser_setup(int stype, unsigned int sdev)
         }
     }
 
-    unsigned int baud = (stype == 2) ? DIV_BAUD_FASTDBG : ((stype == 1) ? DIV_BAUD_MIDI : DIV_BAUD_DBG);
+    unsigned int baud = (stype == SBEMU_SERIAL_TYPE_FASTDBG) ? DIV_BAUD_FASTDBG : ((stype == SBEMU_SERIAL_TYPE_MIDI) ? DIV_BAUD_MIDI : DIV_BAUD_DBG);
     /* set clock divisor */
     outp(iobase | UART_LCTL, LCTL_DLAB);
     outp(iobase | UART_DIVLO, baud & 0xff);

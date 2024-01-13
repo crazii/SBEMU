@@ -444,7 +444,7 @@ update_serial_debug_output()
     if (!enabled) {
         _LOG("Serial port debugging disabled.\n");
     }
-    int err = ser_setup(MAIN_Options[OPT_MDBG].value ? 2 : 0, MAIN_Options[OPT_DEBUG_OUTPUT].value);
+    int err = ser_setup(MAIN_Options[OPT_MDBG].value ? SBEMU_SERIAL_TYPE_FASTDBG : SBEMU_SERIAL_TYPE_DBG, MAIN_Options[OPT_DEBUG_OUTPUT].value);
     if (enabled) {
         _LOG("Serial port debugging enabled.\n");
     }
@@ -458,7 +458,7 @@ update_serial_mpu_output()
     if (!enabled) {
         _LOG("MPU-401 serial output disabled.\n");
     }
-    int err = ser_setup(1, MAIN_Options[OPT_MPUCOMPORT].value);
+    int err = ser_setup(SBEMU_SERIAL_TYPE_MIDI, MAIN_Options[OPT_MPUCOMPORT].value);
     if (enabled) {
         _LOG("MPU-401 serial output enabled.\n");
     }
