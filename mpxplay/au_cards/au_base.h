@@ -371,6 +371,7 @@ typedef struct rminfo{
 
 #if defined(DJGPP)
 #include <sys/segments.h>
+#include <sys/movedata.h>
 
 typedef struct xmsmem_t{
  unsigned short remap;
@@ -399,7 +400,11 @@ extern farptr pds_dos_getvect(unsigned int intno);
 extern void pds_dos_setvect(unsigned int intno, farptr vect);
 extern int  pds_dpmi_xms_allocmem(xmsmem_t *,unsigned int size);
 extern void pds_dpmi_xms_freemem(xmsmem_t *);
-#else
+#define dosput(d, s, l) dosmemput(s, l, (uintptr_t)(d))
+#define dosget(d, s, l) dosmemget((uintptr_t)(s), l, d)
+
+#else //__WATCOMC__
+
 #define far
 #define __far
 #define __interrupt
@@ -416,6 +421,9 @@ extern void far *pds_dpmi_getexcvect(unsigned int intno);
 extern void pds_dpmi_setexcvect(unsigned int intno, void far *vect);
 extern void far *pds_dos_getvect(unsigned int intno);
 extern void pds_dos_setvect(unsigned int intno, void far *vect);
+#define dosput(d, s, l) memcpy(d, s, l)
+#define dosget(d, s, l) memcpy(d, s, l)
+
 #endif//DJGPP
 
 extern int  pds_dpmi_dos_allocmem(dosmem_t *,unsigned int size);
