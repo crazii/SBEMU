@@ -323,7 +323,6 @@ struct MAIN_OPT
     "/RM", "Enable real mode support (requires QEMM or JEMM+QPIEMU)", TRUE, 0,
 
     "/O", "Select output. 0: headphone, 1: speaker. Intel HDA only", 1, 0,
-    "/PIO", "0: CORB, 1: PIO. Intel HDA only", 0, 0,
     "/VOL", "Set master volume (0-9)", 7, 0,
 
     "/K", "Internal sample rate (22050 or 44100)", 0x22050, 0,
@@ -354,7 +353,6 @@ enum EOption
     OPT_PM,
     OPT_RM,
     OPT_OUTPUT,
-    OPT_PIO,
     OPT_VOL,
     OPT_RATE,
     OPT_FIX_TC,
@@ -593,11 +591,6 @@ int main(int argc, char* argv[])
         printf("Error: Invalid Output.\n");
         return 1;
     }
-    if(MAIN_Options[OPT_PIO].value != 0 && MAIN_Options[OPT_PIO].value != 1)
-    {
-        printf("Error: Invalid PIO.\n");
-        return 1;
-    }
     if(MAIN_Options[OPT_VOL].value < 0 || MAIN_Options[OPT_VOL].value > 9)
     {
         printf("Error: Invalid Volume.\n");
@@ -666,9 +659,6 @@ int main(int argc, char* argv[])
     if(MAIN_Options[OPT_SC].value)
         aui.card_select_index = MAIN_Options[OPT_SC].value; //TODO: this is a HEX in commandline, it's OK to not inform user since there's might not be over 10 (0xA) sound cards installed
     aui.card_select_config = MAIN_Options[OPT_OUTPUT].value;
-    if (MAIN_Options[OPT_PIO].value == 1) {
-      aui.card_select_config |= (1<<2);
-    }
     AU_init(&aui);
     if(!aui.card_handler)
         return 1;
@@ -1288,9 +1278,6 @@ static void MAIN_TSR_Interrupt()
                     AU_close(&aui);
                     memset(&aui, 0, sizeof(aui));
                     aui.card_select_config = MAIN_Options[OPT_OUTPUT].value = opt[OPT_OUTPUT].value;
-                    if (MAIN_Options[OPT_PIO].value == 1) {
-                      aui.card_select_config |= (1<<2);
-                    }
                     aui.card_select_index =  MAIN_Options[OPT_SC].value;
                     aui.card_controlbits |= AUINFOS_CARDCNTRLBIT_SILENT; //don't print anything in interrupt
                     AU_init(&aui);
