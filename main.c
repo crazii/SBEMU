@@ -121,6 +121,88 @@ static uint32_t MAIN_SB_DSP_ReadINT16BitACK(uint32_t port, uint32_t val, uint32_
     return out ? val : (val &=~0xFF, val |= SBEMU_DSP_INT16ACK(port));
 }
 
+int mpu_state = 0;
+#define MPU_DEBUG 1
+#if MPU_DEBUG
+static int mpu_debug = 0;
+static int mpu_dbg_ctr = 0;
+#endif
+
+static uint32_t MAIN_MPU_330(uint32_t port, uint32_t val, uint32_t out)
+{
+#if MPU_DEBUG
+  if (mpu_debug) {
+    if (out) {
+      if (mpu_debug >= 2) {
+        mpu_dbg_ctr++;
+        char c = ' ';
+        if (mpu_dbg_ctr == 26) {
+          c = '\n';
+          mpu_dbg_ctr = 0;
+        }
+        DBG_Log("%02x%c", val, c);
+      }
+    } else {
+      DBG_Log("r%x\n", mpu_state);
+    }
+  }
+#endif
+  if (out) {
+    ser_putbyte((int)(val & 0xff));
+    return 0;
+  } else {
+    if (mpu_state == 1) {
+      mpu_state = 0;
+      return 0xfe;
+    } else if (mpu_state == 2) {
+      mpu_state = 4;
+      return 0xfe;
+    } else {
+      return 0;
+    }
+  }
+}
+static uint32_t MAIN_MPU_331(uint32_t port, uint32_t val, uint32_t out)
+{
+#if MPU_DEBUG
+  if (mpu_debug) {
+    if (out) {
+      DBG_Log("s%x\n", val);
+    } else {
+      if (mpu_dbg_ctr < 10 && mpu_state <= 2) {
+        DBG_Log("sr%x\n", mpu_state);
+        mpu_dbg_ctr++;
+      }
+    }
+  }
+#endif
+  if (out) {
+    if (val == 0xff) { // Reset
+#if MPU_DEBUG
+      mpu_dbg_ctr = 0;
+#endif
+      mpu_state = 1;
+    } else if (val == 0x3f) { // UART mode
+#if MPU_DEBUG
+      mpu_dbg_ctr = 0;
+#endif
+      mpu_state = 2;
+    }
+    return 0;
+  }
+  if ((mpu_state & 3) == 0) {
+    return 0x80;
+  } else {
+    return 0;
+  }
+}
+
+static QEMM_IODT MAIN_MPUIODT[2] =
+{
+    0x330, &MAIN_MPU_330,
+    0x331, &MAIN_MPU_331
+};
+
 static QEMM_IODT MAIN_OPL3IODT[4] =
 {
     0x388, &MAIN_OPL3_388,
@@ -201,6 +283,8 @@ static QEMM_IODT MAIN_SB_IODT[13] =
 
 QEMM_IOPT OPL3IOPT;
 QEMM_IOPT OPL3IOPT_PM;
+QEMM_IOPT MPUIOPT;
+QEMM_IOPT MPUIOPT_PM;
 QEMM_IOPT MAIN_VDMA_IOPT;
 QEMM_IOPT MAIN_VIRQ_IOPT;
 QEMM_IOPT MAIN_SB_IOPT;
@@ -226,7 +310,7 @@ struct MAIN_OPT
 }MAIN_Options[] =
 {
     "/?", "Show this help screen", FALSE, 0,
-    "/DBG", "Debug output (0=console, 1=COM1, 2=COM2)", 0, 0,
+    "/DBG", "Debug output (0=console, 1=COM1, 2=COM2, 3=COM3, 4=COM4, otherwise base address)", 0, 0,
 
     "/A", "IO address (220 or 240) [*]", 0x220, 0,
     "/I", "IRQ number (5 or 7) [*]", 7, 0,
@@ -246,6 +330,12 @@ struct MAIN_OPT
     "/SCL", "List installed sound cards", 0, MAIN_SETCMD_HIDDEN,
     "/SC", "Select sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN,
     "/R", "Reset sound card driver", 0, MAIN_SETCMD_HIDDEN,
+    "/P", "UART mode MPU-401 IO address (default 330) [*]", 0x330, 0,
+    "/MCOM", "UART mode MPU-401 COM port (1=COM1, 2=COM2, 3=COM3, 4=COM4, otherwise base address)", 0, 0,
+    "/COML", "List installed COM ports", 0, MAIN_SETCMD_HIDDEN,
+#if MPU_DEBUG
+    "/MDBG", "Enable MPU-401 debugging (0 to disable, 1 or 2 to enable)", 0, 0,
+#endif
 
     NULL, NULL, 0,
 };
@@ -269,6 +359,10 @@ enum EOption
     OPT_SCLIST,
     OPT_SC,
     OPT_RESET,
+    OPT_MPUADDR,
+    OPT_MPUCOMPORT,
+    OPT_COMPORTLIST,
+    OPT_MDBG,
 
     OPT_COUNT,
 };
@@ -320,9 +414,9 @@ static void MAIN_SetBlasterEnv(struct MAIN_OPT* opt) //alter BLASTER env.
 {
     char buf[256];
     if(opt[OPT_TYPE].value != 6)
-        sprintf(buf, "A%x I%x D%x", opt[OPT_ADDR].value, opt[OPT_IRQ].value, opt[OPT_DMA].value);
+        sprintf(buf, "A%x I%x D%x P%x", opt[OPT_ADDR].value, opt[OPT_IRQ].value, opt[OPT_DMA].value, opt[OPT_MPUADDR].value);
     else
-        sprintf(buf, "A%x I%x D%x T%x H%x", opt[OPT_ADDR].value, opt[OPT_IRQ].value, opt[OPT_DMA].value, opt[OPT_TYPE].value, opt[OPT_HDMA].value);
+        sprintf(buf, "A%x I%x D%x T%x H%x P%x", opt[OPT_ADDR].value, opt[OPT_IRQ].value, opt[OPT_DMA].value, opt[OPT_TYPE].value, opt[OPT_HDMA].value, opt[OPT_MPUADDR].value);
     #ifdef DJGPP //makes vscode happy
     setenv("BLASTER", buf, TRUE);
     #endif
@@ -343,17 +437,32 @@ print_enabled_newline(bool enabled)
     cprintf(".\r\n");
 }
 
-static void
+static int
 update_serial_debug_output()
 {
     bool enabled = (MAIN_Options[OPT_DEBUG_OUTPUT].value != 0);
     if (!enabled) {
         _LOG("Serial port debugging disabled.\n");
     }
-    ser_setup(MAIN_Options[OPT_DEBUG_OUTPUT].value);
+    int err = ser_setup(MAIN_Options[OPT_MDBG].value ? SBEMU_SERIAL_TYPE_FASTDBG : SBEMU_SERIAL_TYPE_DBG, MAIN_Options[OPT_DEBUG_OUTPUT].value);
     if (enabled) {
         _LOG("Serial port debugging enabled.\n");
     }
+    return err;
+}
+
+static int
+update_serial_mpu_output()
+{
+    bool enabled = (MAIN_Options[OPT_MPUCOMPORT].value != 0);
+    if (!enabled) {
+        _LOG("MPU-401 serial output disabled.\n");
+    }
+    int err = ser_setup(SBEMU_SERIAL_TYPE_MIDI, MAIN_Options[OPT_MPUCOMPORT].value);
+    if (enabled) {
+        _LOG("MPU-401 serial output enabled.\n");
+    }
+    return err;
 }
 
 int main(int argc, char* argv[])
@@ -412,6 +521,8 @@ int main(int argc, char* argv[])
                     MAIN_Options[OPT_DMA].value = *(blaster++) - '0';
                 else if(c == 'A')
                     MAIN_Options[OPT_ADDR].value = strtol(blaster, &blaster, 16);
+                else if(c == 'P')
+                    MAIN_Options[OPT_MPUADDR].value = strtol(blaster, &blaster, 16);
                 else if(c =='T')
                     MAIN_Options[OPT_TYPE].value = *(blaster++) - '0';
                 else if(c =='H')
@@ -435,8 +546,24 @@ int main(int argc, char* argv[])
         }
     }
 
+#if MPU_DEBUG
+    mpu_debug = MAIN_Options[OPT_MDBG].value;
+#endif
     if (MAIN_Options[OPT_DEBUG_OUTPUT].value) {
-        update_serial_debug_output();
+        if (update_serial_debug_output()) {
+            return 1;
+        }
+    }
+
+    if (MAIN_Options[OPT_COMPORTLIST].value) {
+      ser_print_com_ports();
+      return 0;
+    }
+
+    if (MAIN_Options[OPT_MPUCOMPORT].value) {
+        if (update_serial_mpu_output()) {
+            return 1;
+        }
     }
 
     if(MAIN_Options[OPT_ADDR].value != 0x220 && MAIN_Options[OPT_ADDR].value != 0x240)
@@ -578,6 +705,26 @@ int main(int argc, char* argv[])
         print_enabled_newline(true);
     }
     
+    if(MAIN_Options[OPT_MPUADDR].value && MAIN_Options[OPT_MPUCOMPORT].value)
+    {
+        for(int i = 0; i < countof(MAIN_MPUIODT); ++i) MAIN_MPUIODT[i].port = MAIN_Options[OPT_MPUADDR].value+i;
+        if(enableRM && !QEMM_Install_IOPortTrap(MAIN_MPUIODT, 2, &MPUIOPT))
+        {
+            printf("Error: Failed installing MPU-401 IO port trap for QEMM.\n");
+            return 1;
+        }
+        if(enablePM && !HDPMIPT_Install_IOPortTrap(MAIN_Options[OPT_MPUADDR].value, MAIN_Options[OPT_MPUADDR].value+1, MAIN_MPUIODT, 2, &MPUIOPT_PM))
+        {
+            printf("Error: Failed installing MPU-401 IO port trap for HDPMI.\n");
+            if(enableRM) QEMM_Uninstall_IOPortTrap(&MPUIOPT);
+            return 1;
+        }
+
+        printf("MPU-401 UART emulation at address %x: ",
+               MAIN_Options[OPT_MPUADDR].value);
+        print_enabled_newline(true);
+    }
+
     MAIN_SbemuExtFun.StartPlayback = NULL; //not used
     MAIN_SbemuExtFun.RaiseIRQ = NULL;
     MAIN_SbemuExtFun.DMA_Size = &VDMA_GetCounter;
@@ -1107,10 +1254,20 @@ static void MAIN_TSR_Interrupt()
             int irq = aui.card_irq;
             PIC_MaskIRQ(irq);
 
+#if MPU_DEBUG
+            mpu_debug = MAIN_Options[OPT_MDBG].value = opt[OPT_MDBG].value;
+#endif
             if(MAIN_Options[OPT_DEBUG_OUTPUT].value != opt[OPT_DEBUG_OUTPUT].value)
             {
                 MAIN_Options[OPT_DEBUG_OUTPUT].value = opt[OPT_DEBUG_OUTPUT].value;
                 update_serial_debug_output();
+            }
+            if(MAIN_Options[OPT_MPUCOMPORT].value != opt[OPT_MPUCOMPORT].value)
+            {
+                unsigned int curval = MAIN_Options[OPT_MPUCOMPORT].value;
+                MAIN_Options[OPT_MPUCOMPORT].value = opt[OPT_MPUCOMPORT].value;
+                update_serial_mpu_output();
+                MAIN_Options[OPT_MPUCOMPORT].value = curval;
             }
 
             if(MAIN_Options[OPT_OUTPUT].value != opt[OPT_OUTPUT].value || MAIN_Options[OPT_RATE].value != opt[OPT_RATE].value || opt[OPT_RESET].value)
@@ -1185,7 +1342,8 @@ static void MAIN_TSR_Interrupt()
             }
 
             if(MAIN_Options[OPT_OPL].value == opt[OPT_OPL].value && MAIN_Options[OPT_ADDR].value == opt[OPT_ADDR].value &&
-               MAIN_Options[OPT_PM].value == opt[OPT_PM].value && MAIN_Options[OPT_RM].value == opt[OPT_RM].value && MAIN_Options[OPT_FIX_TC].value == opt[OPT_FIX_TC].value)
+               MAIN_Options[OPT_PM].value == opt[OPT_PM].value && MAIN_Options[OPT_RM].value == opt[OPT_RM].value && MAIN_Options[OPT_FIX_TC].value == opt[OPT_FIX_TC].value &&
+               MAIN_Options[OPT_MPUADDR].value == opt[OPT_MPUADDR].value && MAIN_Options[OPT_MPUCOMPORT].value == opt[OPT_MPUCOMPORT].value)
             {
                 free(opt);
                 return;
@@ -1196,6 +1354,7 @@ static void MAIN_TSR_Interrupt()
             {
                 _LOG("uninstall qemm\n");
                 if(MAIN_Options[OPT_OPL].value) QEMM_Uninstall_IOPortTrap(&OPL3IOPT);
+                if(MAIN_Options[OPT_MPUADDR].value && MAIN_Options[OPT_MPUCOMPORT].value) QEMM_Uninstall_IOPortTrap(&MPUIOPT);
                 QEMM_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT);
                 #if !MAIN_TRAP_PIC_ONDEMAND
                 QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
@@ -1206,6 +1365,7 @@ static void MAIN_TSR_Interrupt()
             {
                 _LOG("uninstall hdpmi\n");
                 if(MAIN_Options[OPT_OPL].value) HDPMIPT_Uninstall_IOPortTrap(&OPL3IOPT_PM);
+                if(MAIN_Options[OPT_MPUADDR].value && MAIN_Options[OPT_MPUCOMPORT].value) HDPMIPT_Uninstall_IOPortTrap(&MPUIOPT_PM);
                 HDPMIPT_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT_PM1);
                 HDPMIPT_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT_PM2);
                 HDPMIPT_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT_PM3);
@@ -1227,6 +1387,16 @@ static void MAIN_TSR_Interrupt()
                 if(opt[OPT_RM].value) QEMM_Install_IOPortTrap(MAIN_OPL3IODT, 4, &OPL3IOPT);
                 if(opt[OPT_PM].value) HDPMIPT_Install_IOPortTrap(0x388, 0x38B, MAIN_OPL3IODT, 4, &OPL3IOPT_PM);
             }
+
+            if(opt[OPT_MPUADDR].value && opt[OPT_MPUCOMPORT].value)
+            {
+                _LOG("install mpu\n");
+                for(int i = 0; i < countof(MAIN_MPUIODT); ++i) MAIN_MPUIODT[i].port = opt[OPT_MPUADDR].value+i;
+                if(opt[OPT_RM].value) QEMM_Install_IOPortTrap(MAIN_MPUIODT, 2, &MPUIOPT);
+                if(opt[OPT_PM].value) HDPMIPT_Install_IOPortTrap(opt[OPT_MPUADDR].value, opt[OPT_MPUADDR].value+1, MAIN_MPUIODT, 2, &MPUIOPT_PM);
+            }
+            MAIN_Options[OPT_MPUADDR].value = opt[OPT_MPUADDR].value;
+            MAIN_Options[OPT_MPUCOMPORT].value = opt[OPT_MPUCOMPORT].value;
 
             QEMM_IODT* SB_Iodt = opt[OPT_OPL].value ? MAIN_SB_IODT : MAIN_SB_IODT+4;
             int SB_IodtCount = opt[OPT_OPL].value ? countof(MAIN_SB_IODT) : countof(MAIN_SB_IODT)-4;
