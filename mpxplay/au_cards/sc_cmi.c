@@ -825,7 +825,7 @@ static aucards_allmixerchan_s cmi8x38_mixerset[]={
 };
 
 one_sndcard_info CMI8X38_sndcard_info={
- "CMI",
+ "CMI 8338/8738",
  SNDCARD_LOWLEVELHAND|SNDCARD_INT08_ALLOWED,
 
  NULL,

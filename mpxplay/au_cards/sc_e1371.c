@@ -621,7 +621,7 @@ static int ES1371_IRQRoutine(mpxplay_audioout_info_s* aui)
 #endif
 
 one_sndcard_info ES1371_sndcard_info={
- "ENS",
+ "Ensoniq/SBPCI",
  SNDCARD_LOWLEVELHAND|SNDCARD_INT08_ALLOWED,
 
  NULL,
