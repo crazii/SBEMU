@@ -1,2 +1,2 @@
-*.o
-sbemu.exe
+output/*
+.vscode
