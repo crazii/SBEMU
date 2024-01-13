@@ -38,6 +38,7 @@
 #define  ES_1371_GPIO_OUT(o)    (((o)&0x0f)<<16)/* GPIO out [3:0] pins - W/R */
 #define  ES_1371_SYNC_RES    (1<<14)        /* Warm AC97 reset */
 #define  ES_DAC1_EN        (1<<6)        /* DAC1 playback channel enable */
+#define  ES_CCB_INTRM      (1<<10)
 #define ES_REG_STATUS    0x04     /* R/O: Interrupt/Chip select status register */
 #define  ES_STS_INTR           0x80000000 //Interrupt from DAC1, DAC2, ADC, UART, CCB or power management has occurred.
 #define  ES_STS_INTR_ADC       0x00000001
@@ -475,6 +476,9 @@ static int ES1371_adetect(struct mpxplay_audioout_info_s *aui)
  card->port = pcibios_ReadConfig_Dword(card->pci_dev, PCIR_NAMBAR);
  if(!card->port)
   goto err_adetect;
+ #ifdef SBEMU
+ aui->card_irq = 
+ #endif
  card->irq = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
  card->chiprev= pcibios_ReadConfig_Byte(card->pci_dev, PCIR_RID);
 
@@ -500,6 +504,10 @@ static int ES1371_adetect(struct mpxplay_audioout_info_s *aui)
 
  snd_es1371_chip_init(card);
  snd_es1371_ac97_init(card);
+
+ #ifdef SBEMU
+ aui->card_samples_per_int = aui->card_dmasize >> 1; //used for SB direct mode
+ #endif
 
  return 1;
 
@@ -555,6 +563,9 @@ static void ES1371_stop(struct mpxplay_audioout_info_s *aui)
 {
  struct ensoniq_card_s *card=aui->card_private_data;
  funcbit_enable(card->sctrl,ES_P1_PAUSE);
+#ifdef SBEMU
+ funcbit_disable(card->sctrl, ES_P1_INTR_EN|ES_P2_INTR_EN); //disable interrupts
+#endif
  outl(card->port + ES_REG_SERIAL, card->sctrl);
 }
 
@@ -601,7 +612,7 @@ static int ES1371_IRQRoutine(mpxplay_audioout_info_s* aui)
     outl(card->port + ES_REG_SERIAL, card->sctrl&(~ES_P1_INTR_EN));
     outl(card->port + ES_REG_SERIAL, card->sctrl); //re-enable
   }
-  if(status&ES_STS_INTR_DAC2) //dac2
+  if(status&ES_STS_INTR_DAC2) //dac2, not used
   {
     //clear DAC2 interrupt status by the spec
     outl(card->port + ES_REG_SERIAL, card->sctrl&(~ES_P2_INTR_EN));
@@ -612,8 +623,11 @@ static int ES1371_IRQRoutine(mpxplay_audioout_info_s* aui)
   {
     //clear ADC interrupt status by the spec
     outl(card->port + ES_REG_SERIAL, card->sctrl&(~ES_R1_INTR_EN));
-    outl(card->port + ES_REG_SERIAL, card->sctrl); //re-enable
+    //outl(card->port + ES_REG_SERIAL, card->sctrl); //re-enable
   }
+  outl((card->port + ES_REG_CONTROL), card->ctrl&(~ES_CCB_INTRM));
+  outb((card->port + ES_REG_UART_CONTROL), 0x00);
+  outl((card->port + ES_REG_1371_LEGACY), 0);
   #endif
   return (status&ES_STS_INTR);
 }
