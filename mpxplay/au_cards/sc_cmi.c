@@ -17,6 +17,9 @@
 
 //ref: CMI-8738/PCI-SX AUDIO Specification
 
+//#define MPXPLAY_USE_DEBUGF 1
+#define CMI_DEBUG_OUTPUT stdout
+
 #include "au_cards.h"
 
 #ifdef AU_CARDS_LINK_CMI8X38
@@ -603,7 +606,7 @@ static int CMI8X38_adetect(struct mpxplay_audioout_info_s *aui)
  card->iobase = pcibios_ReadConfig_Dword(card->pci_dev, PCIR_NAMBAR)&0xfff0;
  if(!card->iobase)
   goto err_adetect;
- card->irq    = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
+ aui->card_irq = card->irq = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
  card->chiprev=pcibios_ReadConfig_Byte(card->pci_dev, PCIR_RID);
  card->model  =pcibios_ReadConfig_Word(card->pci_dev, PCIR_SSID);
 
@@ -619,6 +622,8 @@ static int CMI8X38_adetect(struct mpxplay_audioout_info_s *aui)
 
  // init chip
  cmi8x38_chip_init(card);
+
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "did init, IRQ: %d, iobase: %x", card->irq, card->iobase);
 
  return 1;
 
@@ -672,13 +677,12 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
  if(aui->bits_card>=16){
   card->fmt|=0x02;
   card->shift++;
-  //if(aui->bits_card>16) // 24,32 bits ???
-  // card->shift++;
  }
  if(aui->chan_card>1){
   card->fmt|=0x01;
   card->shift++;
  }
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "card->shift: %d", card->shift);
 
  //
  if(set_dac_channels(card,aui->chan_card)!=0)
@@ -686,7 +690,7 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
 
  //buffer cfg
  card->dma_size    = dmabufsize >> card->shift;
- card->period_size = dmabufsize >> card->shift;
+ card->period_size = dmabufsize >> (card->shift + 1);
  //card->dma_size    >>= card->ac3_shift;
  //card->period_size >>= card->ac3_shift;
 
@@ -696,14 +700,30 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
  //}
 
  // set buffer address
- snd_cmipci_write_32(card, CM_REG_CH0_FRAME1, (long) pds_cardmem_physicalptr(card->dm, card->pcmout_buffer));
+ snd_cmipci_write_32(card, CM_REG_CH0_FRAME1, (uint32_t) pds_cardmem_physicalptr(card->dm, card->pcmout_buffer));
  // program sample counts
  snd_cmipci_write_16(card, CM_REG_CH0_FRAME2    , card->dma_size - 1);
  snd_cmipci_write_16(card, CM_REG_CH0_FRAME2 + 2, card->period_size - 1);
 
+ /* set adc/dac flag */
+ val = CM_CHADC0;
+ if (1) //(rec->is_dac)
+   card->ctrl &= ~val;
+ else
+   card->ctrl |= val;
+ snd_cmipci_write_32(card, CM_REG_FUNCTRL0, card->ctrl);
+
  // set sample rate
  freqnum = snd_cmipci_rate_freq(aui->freq_card);
  aui->freq_card=cmi_rates[freqnum]; // if the freq-config is not standard at CMI
+
+ // ADC
+ val = snd_cmipci_read_32(card, CM_REG_FUNCTRL1);
+ val &= ~CM_ASFC_MASK;
+ val |= (freqnum << CM_ASFC_SHIFT) & CM_ASFC_MASK;
+ snd_cmipci_write_32(card, CM_REG_FUNCTRL1, val);
+
+ // DAC
  val = snd_cmipci_read_32(card, CM_REG_FUNCTRL1);
  val &= ~CM_DSFC_MASK;
  val |= (freqnum << CM_DSFC_SHIFT) & CM_DSFC_MASK;
@@ -720,6 +740,8 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
  // snd_cmipci_set_bit(card, CM_REG_FUNCTRL1, CM_PLAYBACK_SPDF);
  //else
   snd_cmipci_clear_bit(card, CM_REG_FUNCTRL1, CM_PLAYBACK_SPDF);
+
+  mpxplay_debugf(CMI_DEBUG_OUTPUT, "setrate done freqnum: %d  freq: %d", freqnum, aui->freq_card);
 }
 
 static void CMI8X38_start(struct mpxplay_audioout_info_s *aui)
@@ -745,19 +767,23 @@ static long CMI8X38_getbufpos(struct mpxplay_audioout_info_s *aui)
  struct cmi8x38_card *card=aui->card_private_data;
  unsigned long bufpos;
 
- bufpos = snd_cmipci_read_16(card, CM_REG_CH0_FRAME2);
- if(bufpos && (bufpos<=card->dma_size)){
-  bufpos = card->dma_size -bufpos;
-  bufpos <<= card->shift;
-  //bufpos <<= card->ac3_shift;
-  //if(aui->chan_card > 2)
-  // bufpos = (bufpos * 2) / aui->chan_card;
-
-  if(bufpos<aui->card_dmasize)
-   aui->card_dma_lastgoodpos=bufpos;
+ // From the Linux driver
+ unsigned int reg = CM_REG_CH0_FRAME2;
+ unsigned int rem, tries;
+ for (tries = 0; tries < 3; tries++) {
+   rem = snd_cmipci_read_16(card, reg);
+   //mpxplay_debugf(CMI_DEBUG_OUTPUT, "PCM ptr: %u, card->dma_size: %d  aui->card_dmasize: %d", rem, card->dma_size, aui->card_dmasize);
+   if (rem < card->dma_size)
+     goto ok;
  }
-
- return aui->card_dma_lastgoodpos;
+ //mpxplay_debugf(CMI_DEBUG_OUTPUT, "invalid PCM pointer!!! %u", rem);
+ goto notok;
+ ok:
+  bufpos = (card->dma_size - (rem + 1)) << card->shift;
+  if (bufpos < aui->card_dmasize)
+    aui->card_dma_lastgoodpos = bufpos;
+ notok:
+  return aui->card_dma_lastgoodpos;
 }
 
 static void CMI8X38_clearbuf(struct mpxplay_audioout_info_s *aui)
@@ -785,6 +811,9 @@ static int CMI8X38_IRQRoutine(mpxplay_audioout_info_s* aui)
 {
   cmi8x38_card *card=aui->card_private_data;
   int status = snd_cmipci_read_32(card, CM_REG_INT_STATUS); //read only reg (R)
+  if (!(status & CM_INTR)) {
+    return 0;
+  }
   if(status&CM_MCBINT) //Abort conditions occur during PCI Bus Target/Master Access
   {
     //nothing we can do
@@ -793,13 +822,14 @@ static int CMI8X38_IRQRoutine(mpxplay_audioout_info_s* aui)
   {
 
   }
-  if(status&(CM_LTDMAINT|CM_HTDMAINT|CM_CHINT0|CM_CHINT1))
-  {
-    //interrupt clear, not sure if it is the right way
-    snd_cmipci_write_32(card, CM_REG_INT_HLDCLR, 0);
-    snd_cmipci_write_32(card, CM_REG_INT_HLDCLR, CM_TDMA_INT_EN|CM_CH1_INT_EN|CM_CH0_INT_EN); //re-enable hold
-  }
-  return (status&CM_INTR) != 0;
+  unsigned int mask = CM_TDMA_INT_EN;
+  if (status & CM_CHINT0)
+    mask |= CM_CH0_INT_EN;
+  if (status & CM_CHINT1)
+    mask |= CM_CH1_INT_EN;
+  snd_cmipci_write_32(card, CM_REG_INT_HLDCLR, 0);
+  snd_cmipci_write_32(card, CM_REG_INT_HLDCLR, mask); //re-enable hold
+  return 1;
 }
 #endif
 
