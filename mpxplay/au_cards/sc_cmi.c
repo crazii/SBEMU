@@ -775,6 +775,16 @@ static unsigned long CMI8X38_readMIXER(struct mpxplay_audioout_info_s *aui,unsig
  return snd_cmipci_mixer_read(card,reg);
 }
 
+#ifdef SBEMU
+static int CMI8X38_IRQRoutine(mpxplay_audioout_info_s* aui)
+{
+  cmi8x38_card *card=aui->card_private_data;
+  int status = snd_cmipci_read_32(card, CM_REG_INT_STATUS);
+  snd_cmipci_write_32(card, CM_REG_INT_STATUS, status); //ack all
+  return status != 0;
+}
+#endif
+
 //like SB16
 static aucards_onemixerchan_s cmi8x38_master_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_MASTER,AU_MIXCHANFUNC_VOLUME),2,{{0x30,31,3,0},{0x31,31,3,0}}};
 static aucards_onemixerchan_s cmi8x38_pcm_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_PCM,AU_MIXCHANFUNC_VOLUME),      2,{{0x32,31,3,0},{0x33,31,3,0}}};
@@ -812,7 +822,11 @@ one_sndcard_info CMI8X38_sndcard_info={
  &CMI8X38_getbufpos,
  &CMI8X38_clearbuf,
  &MDma_interrupt_monitor,
+ #ifdef SBEMU
+ &CMI8X38_IRQRoutine,
+ #else
  NULL,
+ #endif
 
  &CMI8X38_writeMIXER,
  &CMI8X38_readMIXER,
