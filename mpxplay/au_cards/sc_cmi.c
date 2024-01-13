@@ -676,20 +676,12 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
  card->shift=0;
  if(aui->bits_card>=16){
   card->fmt|=0x02;
-#if 1
   card->shift++;
-#else
-  if(aui->bits_card > 16){
-    card->shift++;
-  }
-#endif
  }
-#if 1
  if(aui->chan_card>1){
   card->fmt|=0x01;
   card->shift++;
  }
-#endif
  mpxplay_debugf(CMI_DEBUG_OUTPUT, "card->shift: %d", card->shift);
 
  //
@@ -775,32 +767,22 @@ static long CMI8X38_getbufpos(struct mpxplay_audioout_info_s *aui)
  struct cmi8x38_card *card=aui->card_private_data;
  unsigned long bufpos;
 
-#if 0
- bufpos = snd_cmipci_read_16(card, CM_REG_CH0_FRAME2);
- //mpxplay_debugf(CMI_DEBUG_OUTPUT, "bufpos: %d, card->dma_size: %d  aui->card_dmasize: %d", bufpos, card->dma_size, aui->card_dmasize);
- if(bufpos && (bufpos<=card->dma_size)){
-   bufpos = card->dma_size - bufpos;
-   //bufpos = card->dma_size - bufpos - 1;
-  bufpos <<= card->shift;
-  //if(aui->chan_card > 2)
-  // bufpos = (bufpos * 2) / aui->chan_card;
- }
-#else
  // From the Linux driver
  unsigned int reg = CM_REG_CH0_FRAME2;
  unsigned int rem, tries;
  for (tries = 0; tries < 3; tries++) {
    rem = snd_cmipci_read_16(card, reg);
-   //mpxplay_debugf(CMI_DEBUG_OUTPUT, "PCM ptr %u", rem);
+   //mpxplay_debugf(CMI_DEBUG_OUTPUT, "PCM ptr: %u, card->dma_size: %d  aui->card_dmasize: %d", rem, card->dma_size, aui->card_dmasize);
    if (rem < card->dma_size)
      goto ok;
  }
  //mpxplay_debugf(CMI_DEBUG_OUTPUT, "invalid PCM pointer!!! %u", rem);
+ goto notok;
  ok:
   bufpos = (card->dma_size - (rem + 1)) << card->shift;
-#endif
   if (bufpos < aui->card_dmasize)
     aui->card_dma_lastgoodpos = bufpos;
+ notok:
   return aui->card_dma_lastgoodpos;
 }
 
