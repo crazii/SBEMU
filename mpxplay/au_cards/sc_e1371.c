@@ -337,10 +337,6 @@ static void snd_es1371_chip_init(struct ensoniq_card_s *card)
 {
  int idx;
 
- #ifdef SBEMU
- funcbit_enable(card->sctrl, ES_P1_INTR_EN|ES_P2_INTR_EN); //enable interrupt for DAC1,DAC2
- #endif
-
  outl((card->port + ES_REG_CONTROL), card->ctrl);
  outl((card->port + ES_REG_SERIAL), card->sctrl);
  outl((card->port + ES_REG_1371_LEGACY), 0);
@@ -418,7 +414,7 @@ static void snd_es1371_prepare_playback(struct ensoniq_card_s *card,struct mpxpl
  funcbit_disable(card->ctrl,ES_DAC1_EN);
  outl((card->port + ES_REG_CONTROL), card->ctrl);
  outl((card->port + ES_REG_MEM_PAGE), ES_MEM_PAGEO(ES_PAGE_DAC));
- outl((card->port + ES_REG_DAC1_FRAME), (unsigned long) card->pcmout_buffer);
+ outl((card->port + ES_REG_DAC1_FRAME), (unsigned long) pds_cardmem_physicalptr(card->dm,card->pcmout_buffer));
  outl((card->port + ES_REG_DAC1_SIZE), (aui->card_dmasize >> 2) - 1);
  funcbit_disable(card->sctrl,(ES_P1_LOOP_SEL|ES_P1_PAUSE|ES_P1_SCT_RLD|ES_P1_MODEM));
  funcbit_enable(card->sctrl,ES_P1_MODEO(0x03)); // stereo, 16 bits
@@ -549,6 +545,9 @@ static void ES1371_start(struct mpxplay_audioout_info_s *aui)
  funcbit_enable(card->ctrl,ES_DAC1_EN);
  outl(card->port + ES_REG_CONTROL, card->ctrl);
  funcbit_disable(card->sctrl,ES_P1_PAUSE);
+#ifdef SBEMU
+ funcbit_enable(card->sctrl, ES_P1_INTR_EN|ES_P2_INTR_EN); //enable interrupt for DAC1,DAC2
+#endif
  outl(card->port + ES_REG_SERIAL, card->sctrl);
 }
 

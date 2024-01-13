@@ -515,11 +515,7 @@ static void cmi8x38_chip_init(struct cmi8x38_card *cm)
  query_chip(cm);
 
  /* initialize codec registers */
- #ifdef SBEMU
- snd_cmipci_write_32(cm, CM_REG_INT_HLDCLR, CM_TDMA_INT_EN|CM_CH1_INT_EN|CM_CH0_INT_EN);    /* enable ints */
- #else
  snd_cmipci_write_32(cm, CM_REG_INT_HLDCLR, 0);    /* disable ints */
- #endif
  snd_cmipci_ch_reset(cm, CM_CH_PLAY);
  snd_cmipci_ch_reset(cm, CM_CH_CAPT);
  snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, 0);    /* disable channels */
@@ -700,7 +696,7 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
  //}
 
  // set buffer address
- snd_cmipci_write_32(card, CM_REG_CH0_FRAME1, (long)card->pcmout_buffer);
+ snd_cmipci_write_32(card, CM_REG_CH0_FRAME1, (long) pds_cardmem_physicalptr(card->dm, card->pcmout_buffer));
  // program sample counts
  snd_cmipci_write_16(card, CM_REG_CH0_FRAME2    , card->dma_size - 1);
  snd_cmipci_write_16(card, CM_REG_CH0_FRAME2 + 2, card->period_size - 1);
@@ -729,6 +725,9 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
 static void CMI8X38_start(struct mpxplay_audioout_info_s *aui)
 {
  struct cmi8x38_card *card=aui->card_private_data;
+#ifdef SBEMU
+ snd_cmipci_write_32(card, CM_REG_INT_HLDCLR, CM_TDMA_INT_EN|CM_CH1_INT_EN|CM_CH0_INT_EN);    /* enable ints */
+#endif
  card->ctrl |= CM_CHEN0;
  card->ctrl &= ~CM_PAUSE0;
  snd_cmipci_write_32(card, CM_REG_FUNCTRL0, card->ctrl);
