@@ -448,7 +448,7 @@ static int INTELICH_adetect(struct mpxplay_audioout_info_s *aui)
 
  #ifdef SBEMU
  //some BIOSes don't set NAMBAR/NABMBAR at all. assign manually
- int iobase = 0xF000; //0xFFFF didn't work
+ int iobase = 0xF000; //0xFFFF didn't work - TODO: Thi is a hack that needs to be improved.
  if(card->baseport_bm == 0)
  {
      iobase &=~0x3F;
@@ -473,9 +473,12 @@ static int INTELICH_adetect(struct mpxplay_audioout_info_s *aui)
   goto err_adetect;
  aui->card_irq = card->irq = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
  #ifdef SBEMU
+ //on some PC the irq is not well-configured, seen on a 855PM laptop
  if(aui->card_irq == 0xFF || aui->card_irq == 0)
  {
-     pcibios_WriteConfig_Byte(card->pci_dev, PCIR_INTR_LN, 11);
+     aui->card_irq = pcibios_GetIRQ(card->pci_dev);
+     if(aui->card_irq == 0xFF) aui->card_irq = 11; //this does always work
+     pcibios_WriteConfig_Byte(card->pci_dev, PCIR_INTR_LN, aui->card_irq);
      aui->card_irq = card->irq = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
  }
   #endif

@@ -15,6 +15,8 @@
 //function: CMI 8338/8738 (PCI) low level routines
 //based on the ALSA (http://www.alsa-project.org)
 
+//ref: CMI-8738/PCI-SX AUDIO Specification
+
 #include "au_cards.h"
 
 #ifdef AU_CARDS_LINK_CMI8X38
@@ -104,8 +106,8 @@
 #define CM_INT_HOLD        0x00000002
 #define CM_INT_CLEAR        0x00000001
 
-#define CM_REG_INT_STATUS    0x10
-#define CM_INTR            0x80000000
+#define CM_REG_INT_STATUS    0x10 //(R)
+#define CM_INTR            0x80000000 //Interrupt reflected from any sources. 
 #define CM_VCO            0x08000000    /* Voice Control? CMI8738 */
 #define CM_MCBINT        0x04000000    /* Master Control Block abort cond.? */
 #define CM_UARTINT        0x00010000
@@ -694,7 +696,7 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
  //}
 
  // set buffer address
- snd_cmipci_write_32(card, CM_REG_CH0_FRAME1, (long)card->pcmout_buffer);
+ snd_cmipci_write_32(card, CM_REG_CH0_FRAME1, (long) pds_cardmem_physicalptr(card->dm, card->pcmout_buffer));
  // program sample counts
  snd_cmipci_write_16(card, CM_REG_CH0_FRAME2    , card->dma_size - 1);
  snd_cmipci_write_16(card, CM_REG_CH0_FRAME2 + 2, card->period_size - 1);
@@ -723,6 +725,9 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
 static void CMI8X38_start(struct mpxplay_audioout_info_s *aui)
 {
  struct cmi8x38_card *card=aui->card_private_data;
+#ifdef SBEMU
+ snd_cmipci_write_32(card, CM_REG_INT_HLDCLR, CM_TDMA_INT_EN|CM_CH1_INT_EN|CM_CH0_INT_EN);    /* enable ints */
+#endif
  card->ctrl |= CM_CHEN0;
  card->ctrl &= ~CM_PAUSE0;
  snd_cmipci_write_32(card, CM_REG_FUNCTRL0, card->ctrl);
@@ -775,6 +780,29 @@ static unsigned long CMI8X38_readMIXER(struct mpxplay_audioout_info_s *aui,unsig
  return snd_cmipci_mixer_read(card,reg);
 }
 
+#ifdef SBEMU
+static int CMI8X38_IRQRoutine(mpxplay_audioout_info_s* aui)
+{
+  cmi8x38_card *card=aui->card_private_data;
+  int status = snd_cmipci_read_32(card, CM_REG_INT_STATUS); //read only reg (R)
+  if(status&CM_MCBINT) //Abort conditions occur during PCI Bus Target/Master Access
+  {
+    //nothing we can do
+  }
+  if(status&CM_UARTINT)
+  {
+
+  }
+  if(status&(CM_LTDMAINT|CM_HTDMAINT|CM_CHINT0|CM_CHINT1))
+  {
+    //interrupt clear, not sure if it is the right way
+    snd_cmipci_write_32(card, CM_REG_INT_HLDCLR, 0);
+    snd_cmipci_write_32(card, CM_REG_INT_HLDCLR, CM_TDMA_INT_EN|CM_CH1_INT_EN|CM_CH0_INT_EN); //re-enable hold
+  }
+  return (status&CM_INTR) != 0;
+}
+#endif
+
 //like SB16
 static aucards_onemixerchan_s cmi8x38_master_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_MASTER,AU_MIXCHANFUNC_VOLUME),2,{{0x30,31,3,0},{0x31,31,3,0}}};
 static aucards_onemixerchan_s cmi8x38_pcm_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_PCM,AU_MIXCHANFUNC_VOLUME),      2,{{0x32,31,3,0},{0x33,31,3,0}}};
@@ -796,7 +824,7 @@ static aucards_allmixerchan_s cmi8x38_mixerset[]={
 };
 
 one_sndcard_info CMI8X38_sndcard_info={
- "CMI",
+ "CMI 8338/8738",
  SNDCARD_LOWLEVELHAND|SNDCARD_INT08_ALLOWED,
 
  NULL,
@@ -812,7 +840,11 @@ one_sndcard_info CMI8X38_sndcard_info={
  &CMI8X38_getbufpos,
  &CMI8X38_clearbuf,
  &MDma_interrupt_monitor,
+ #ifdef SBEMU
+ &CMI8X38_IRQRoutine,
+ #else
  NULL,
+ #endif
 
  &CMI8X38_writeMIXER,
  &CMI8X38_readMIXER,

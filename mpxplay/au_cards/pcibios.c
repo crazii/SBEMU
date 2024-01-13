@@ -324,3 +324,66 @@ void pcibios_enable_memmap_set_master(pci_config_s *ppkey)
  cmd|=0x02|0x04; // enable memory mapping and set master
  pcibios_WriteConfig_Byte(ppkey, PCIR_PCICMD, cmd);
 }
+
+typedef struct
+{
+    uint16_t size;
+    uint16_t off;
+    uint16_t seg;
+    uint16_t padding;
+}IRQRoutingOptionBuffer;
+
+#define BUFSIZE (16*1024)
+//copied & modified for usbddos
+uint8_t  pcibios_GetIRQ(pci_config_s* ppkey)
+{
+    uint8_t INTPIN = pcibios_ReadConfig_Byte(ppkey, PCIR_INTR_PIN);
+    
+    dosmem_t dosmem = {0};
+    pds_dpmi_dos_allocmem(&dosmem, BUFSIZE);
+
+    IRQRoutingOptionBuffer buf;
+    buf.size = BUFSIZE-sizeof(buf);
+    buf.off = sizeof(buf);
+    buf.seg = dosmem.segment;
+    dosput(dosmem.linearptr, &buf, sizeof(buf));
+
+    rminfo r = {0};
+    r.EAX = (PCI_FUNCTION_ID<<8)|PCI_GET_ROUTING;
+    r.DS = 0xF000;
+    r.ES = dosmem.segment;
+    r.EDI = 0;
+    pds_dpmi_realmodeint_call(PCI_SERVICE, &r);
+
+    uint16_t map = 0;
+    if(((r.EAX>>8)&0xFF) == PCI_SUCCESSFUL) //ah=PCI_SUCCESSFUL)
+    {
+        dosget(&buf, dosmem.linearptr, sizeof(buf));
+
+        for(uint16_t start = 0; start < buf.size; start+=16)
+        {
+            char* addr = dosmem.linearptr+sizeof(buf)+start;
+            uint8_t b,d;
+            dosget(&b, addr, sizeof(b));
+            dosget(&d, addr+1, sizeof(d));
+            d>>=3;
+            if(b == ppkey->bBus && d == ppkey->bDev)
+            {
+                dosget(&map, addr+INTPIN*3, sizeof(map));
+                break;
+            }
+        }
+    }
+    pds_dpmi_dos_freemem(&dosmem);
+
+    map &= (uint16_t)r.EBX; //PCI dedicated IRQ
+    uint8_t irq = 0xFF;
+    //find the highset available
+    while(map)
+    {
+        map>>=1;
+        ++irq;
+    }
+    return irq;
+}
+#undef BUFSIZE

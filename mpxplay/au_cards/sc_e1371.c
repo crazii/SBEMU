@@ -18,6 +18,8 @@
 //#define MPXPLAY_USE_DEBUGF 1
 //#define ENS_DEBUG_OUTPUT stdout
 
+//ref: ENSONIQ AudioPCI 97 Specification Rev 1.1
+
 #include "au_cards.h"
 
 #ifdef AU_CARDS_LINK_ES1371
@@ -37,6 +39,13 @@
 #define  ES_1371_SYNC_RES    (1<<14)        /* Warm AC97 reset */
 #define  ES_DAC1_EN        (1<<6)        /* DAC1 playback channel enable */
 #define ES_REG_STATUS    0x04     /* R/O: Interrupt/Chip select status register */
+#define  ES_STS_INTR           0x80000000 //Interrupt from DAC1, DAC2, ADC, UART, CCB or power management has occurred.
+#define  ES_STS_INTR_ADC       0x00000001
+#define  ES_STS_INTR_DAC2      0x00000002
+#define  ES_STS_INTR_DAC1      0x00000004
+#define  ES_STS_INTR_UART      0x00000008
+#define  ES_STS_INTR_MCCB      0x00000010
+#define  ES_STS_INTR_MPWR      0x00000020
 #define  ES_1371_ST_AC97_RST    (1<<29)        /* CT5880 AC'97 Reset bit */
 #define ES_REG_UART_CONTROL 0x09 /* W/O: UART control register */
 #define ES_REG_UART_RES    0x0a     /* R/W: UART reserver register */
@@ -66,6 +75,9 @@
 #define  ES_P1_PAUSE        (1<<11)        /* DAC1; 0 - play mode; 1 = pause mode */
 #define  ES_P1_SCT_RLD        (1<<7)        /* force sample counter reload for DAC1 */
 #define  ES_P1_MODEO(o)            (((o)&0x03)<<0)    /* DAC1 mode; -- '' -- */
+#define  ES_P1_INTR_EN            (1<<8) //enable DAC1 interrupt
+#define  ES_P2_INTR_EN            (1<<9) //enable DAC2 interrupt
+#define  ES_R1_INTR_EN            (1<<10) //enable ADC interrupt
 
 #define ES_REG_DAC1_COUNT 0x24    /* R/W: DAC1 sample count register */
 #define ES_REG_DAC1_FRAME 0x30    /* R/W: PAGE 0x0c; DAC1 frame address */
@@ -402,7 +414,7 @@ static void snd_es1371_prepare_playback(struct ensoniq_card_s *card,struct mpxpl
  funcbit_disable(card->ctrl,ES_DAC1_EN);
  outl((card->port + ES_REG_CONTROL), card->ctrl);
  outl((card->port + ES_REG_MEM_PAGE), ES_MEM_PAGEO(ES_PAGE_DAC));
- outl((card->port + ES_REG_DAC1_FRAME), (unsigned long) card->pcmout_buffer);
+ outl((card->port + ES_REG_DAC1_FRAME), (unsigned long) pds_cardmem_physicalptr(card->dm,card->pcmout_buffer));
  outl((card->port + ES_REG_DAC1_SIZE), (aui->card_dmasize >> 2) - 1);
  funcbit_disable(card->sctrl,(ES_P1_LOOP_SEL|ES_P1_PAUSE|ES_P1_SCT_RLD|ES_P1_MODEM));
  funcbit_enable(card->sctrl,ES_P1_MODEO(0x03)); // stereo, 16 bits
@@ -533,6 +545,9 @@ static void ES1371_start(struct mpxplay_audioout_info_s *aui)
  funcbit_enable(card->ctrl,ES_DAC1_EN);
  outl(card->port + ES_REG_CONTROL, card->ctrl);
  funcbit_disable(card->sctrl,ES_P1_PAUSE);
+#ifdef SBEMU
+ funcbit_enable(card->sctrl, ES_P1_INTR_EN|ES_P2_INTR_EN); //enable interrupt for DAC1,DAC2
+#endif
  outl(card->port + ES_REG_SERIAL, card->sctrl);
 }
 
@@ -575,8 +590,37 @@ static unsigned long ES1371_readMIXER(struct mpxplay_audioout_info_s *aui,unsign
  return snd_es1371_codec_read(card,reg);
 }
 
+#ifdef SBEMU
+static int ES1371_IRQRoutine(mpxplay_audioout_info_s* aui)
+{
+  ensoniq_card_s *card=aui->card_private_data;
+  int status = inl(card->port + ES_REG_STATUS);
+  if(status&ES_STS_INTR_DAC1)
+  {
+    //clear DAC1 interrupt status by the spec
+    outl(card->port + ES_REG_SERIAL, card->sctrl&(~ES_P1_INTR_EN));
+    outl(card->port + ES_REG_SERIAL, card->sctrl); //re-enable
+  }
+  if(status&ES_STS_INTR_DAC2) //dac2
+  {
+    //clear DAC2 interrupt status by the spec
+    outl(card->port + ES_REG_SERIAL, card->sctrl&(~ES_P2_INTR_EN));
+    outl(card->port + ES_REG_SERIAL, card->sctrl); //re-enable
+  }
+  #if 0
+  if(status&ES_STS_INTR_ADC) //adc, not used.
+  {
+    //clear ADC interrupt status by the spec
+    outl(card->port + ES_REG_SERIAL, card->sctrl&(~ES_R1_INTR_EN));
+    outl(card->port + ES_REG_SERIAL, card->sctrl); //re-enable
+  }
+  #endif
+  return (status&ES_STS_INTR);
+}
+#endif
+
 one_sndcard_info ES1371_sndcard_info={
- "ENS",
+ "Ensoniq/SBPCI",
  SNDCARD_LOWLEVELHAND|SNDCARD_INT08_ALLOWED,
 
  NULL,
@@ -592,7 +636,11 @@ one_sndcard_info ES1371_sndcard_info={
  &ES1371_getbufpos,
  &MDma_clearbuf,
  &MDma_interrupt_monitor,
+ #ifdef SBEMU
+ &ES1371_IRQRoutine,
+ #else
  NULL,
+#endif
 
  &ES1371_writeMIXER,
  &ES1371_readMIXER,

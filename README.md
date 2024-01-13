@@ -11,8 +11,8 @@ is used to support the following sound cards/chips.
 Enabled and working:
 
  * `sc_ich`: Intel ICH / nForce / SIS 7012
- * `sc_inthd`: Intel High Definition Audio
- * `sc_via82`: VIA VT82C686, VT8233
+ * `sc_inthd`: Intel High Definition Audio (HDA)
+ * `sc_via82`: VIA VT82C686, VT8233/37
  * `sc_sbliv`: SB Live! / Audigy
  * `sc_sbl24`: SB Audigy LS (CA0106)
 
@@ -20,27 +20,16 @@ Support compiled-in, but untested:
 
  * `sc_es1371`: Ensoniq ES1371/1373
  * `sc_cmi`: C-Media CMI8338/8738
+ * `sc_via82`: VIA VT8235
 
 Source code exists, but "doesn't work yet":
 
  * `sc_sbxfi`: Creative X-Fi EMU20KX
 
-Source code exists, but not sure if viable:
-
- * `sc_wss`: Windows Sound System compatible cards
- * `sc_ess`: ESS card handling
- * `sc_gus`: Gravis UltraSound
- * `sc_sb16`: Sound Blaster 16
- * `sc_sbpro`: Sound Blaster 1.0, 1.5, 2.0, Pro
- * `sc_midas`: MIDAS library handling
- * `sc_winds`: Win32 DirectSound output
- * `sc_winwo`: Windows WavOut sound output
- * `sc_wav`: WAV-file and bitstream output
- 
 ## Emulated modes
 
  * 8-bit and 16-bit DMA (mono, stereo, high-speed)
- * Sound Blaster 1.0, 2.0, Pro, 16
+ * Sound Blaster 1.0, 2.0, Pro, Pro2, 16
  * OPL3 FM via [DOSBox' OPL3 FM implementation](https://www.dosbox.com/)
 
 ## Requirements
