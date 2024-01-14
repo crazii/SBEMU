@@ -793,7 +793,7 @@ static long CMI8X38_getbufpos(struct mpxplay_audioout_info_s *aui)
  //mpxplay_debugf(CMI_DEBUG_OUTPUT, "invalid PCM pointer!!! %u", rem);
  return aui->card_dma_lastgoodpos;
  ok:
-  bufpos = ((card->dma_size - rem)%card->dma_size) << card->shift;
+  bufpos = (card->dma_size - (rem + 1)) << card->shift;
 #endif
 
   if (bufpos < aui->card_dmasize)
