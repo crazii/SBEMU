@@ -375,7 +375,7 @@ static int snd_live24_isr(emu10k1_card *card)
  outl(card->iobase+IPR, intmask);
  int intmask2 = snd_ca0106_ptr_read(card, EXTENDED_INT, 0);
  snd_ca0106_ptr_write(card, EXTENDED_INT, 0, intmask2); //ack
- return intmask;
+ return intmask|intmask2;
 }
 #endif
 
