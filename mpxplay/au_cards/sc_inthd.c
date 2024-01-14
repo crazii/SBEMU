@@ -931,17 +931,25 @@ static unsigned int snd_ihd_mixer_init(struct intelhd_card_s *card)
  if(!card->afg_nodes)
   goto err_out_mixinit;
 
-  #if SBEMU_USE_CORB
-  snd_hda_codec_write(card, card->afg_root_nodenum, 0, AC_VERB_SET_POWER_STATE, 0/*full power*/); 
+  #ifdef SBEMU
+  //perform a double reset incase in D3cold power state
+  snd_hda_codec_write(card, card->afg_root_nodenum, 0, AC_VERB_SET_CODEC_RESET, 0);
+  delay(10);
+  snd_hda_codec_write(card, card->afg_root_nodenum, 0, AC_VERB_SET_CODEC_RESET, 0);
+  delay(200); //required for D3cold to D0
+  snd_hda_codec_write(card, card->afg_root_nodenum, 0, AC_VERB_SET_POWER_STATE, 0/*d0: full power*/); 
   #endif
 
  for(i=0;i<card->afg_num_nodes;i++,nid++)
  {
   snd_hda_add_new_node(card,&card->afg_nodes[i],nid);
-  #if SBEMU_USE_CORB
-  snd_hda_codec_write(card, nid, 0, AC_VERB_SET_POWER_STATE, 0/*full power*/); 
+  #ifdef SBEMU
+  snd_hda_codec_write(card, nid, 0, AC_VERB_SET_POWER_STATE, 0/*d0: full power*/); 
   #endif
  }
+ #ifdef SBEMU
+ delay(75); //spec required max time to full power on (D0)
+ #endif
 
  if(!snd_hda_parse_output(card))
   goto err_out_mixinit;
