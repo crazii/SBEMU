@@ -1525,7 +1525,7 @@ one_sndcard_info IHD_sndcard_info={
  &INTELHD_getbufpos,
  &MDma_clearbuf,
  &MDma_interrupt_monitor,
- #if SBEMU
+ #ifdef SBEMU
  &INTELHD_IRQRoutine,
  #else
  NULL,

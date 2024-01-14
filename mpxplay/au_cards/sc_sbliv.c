@@ -863,7 +863,7 @@ static void snd_emu10kx_setrate(struct emu10k1_card *card,struct mpxplay_audioou
 static void snd_emu10kx_pcm_start_playback(struct emu10k1_card *card)
 {
 #ifdef SBEMU
- emu10k1_writefn0(card, INTE, emu10k1_readfn0(card, INTE)|INTE_SAMPLERATETRACKER|INTE_INTERVALTIMERENB); //enable timer interrupt
+ emu10k1_writefn0(card, INTE, emu10k1_readfn0(card, INTE)|INTE_SAMPLERATETRACKER|INTE_INTERVALTIMERENB|INTE_FXDSPENABLE); //enable timer interrupt
  emu10k1_writefn0(card, TIMER, 0x240); //set timer rate
 #endif
 

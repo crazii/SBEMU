@@ -31,7 +31,11 @@
 
 #define CMI8X38_LINK_MULTICHAN 1
 
+#ifdef SBEMU
+#define PCMBUFFERPAGESIZE      512
+#else
 #define PCMBUFFERPAGESIZE      4096
+#endif
 
 /*
  * CM8x38 registers definition
@@ -580,7 +584,7 @@ static void CMI8X38_card_info(struct mpxplay_audioout_info_s *aui)
 {
  struct cmi8x38_card *card=aui->card_private_data;
  char sout[100];
- sprintf(sout,"CMI : %s soundcard found on port:%4.4X irq:%d chipver:%d max-chans:%d",
+ sprintf(sout,"CMI 8338/8738 : %s soundcard found on port:%4.4X irq:%d chipver:%d max-chans:%d",
          card->pci_dev->device_name,card->iobase,card->irq,card->chip_version,card->max_channels);
  pds_textdisplay_printf(sout);
 }
@@ -689,8 +693,19 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
   return;
 
  //buffer cfg
+#ifdef SBEMU
+ int periods = max(1, dmabufsize / PCMBUFFERPAGESIZE);
  card->dma_size    = dmabufsize >> card->shift;
- card->period_size = dmabufsize >> (card->shift + 1);
+ card->period_size = (dmabufsize/periods) >> card->shift;
+
+ aui->card_samples_per_int = card->period_size;
+
+ // set buffer address
+ snd_cmipci_write_32(card, CM_REG_CH0_FRAME1, (uint32_t) pds_cardmem_physicalptr(card->dm, card->pcmout_buffer));
+#else
+ card->dma_size    = dmabufsize >> card->shift;
+ card->period_size = dmabufsize >> card->shift;
+#endif
  //card->dma_size    >>= card->ac3_shift;
  //card->period_size >>= card->ac3_shift;
 
@@ -699,7 +714,7 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
  // card->period_size = (card->period_size * aui->chan_card) / 2;
  //}
 
- // set buffer address
+  // set buffer address
  snd_cmipci_write_32(card, CM_REG_CH0_FRAME1, (uint32_t) pds_cardmem_physicalptr(card->dm, card->pcmout_buffer));
  // program sample counts
  snd_cmipci_write_16(card, CM_REG_CH0_FRAME2    , card->dma_size - 1);
@@ -716,12 +731,6 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
  // set sample rate
  freqnum = snd_cmipci_rate_freq(aui->freq_card);
  aui->freq_card=cmi_rates[freqnum]; // if the freq-config is not standard at CMI
-
- // ADC
- val = snd_cmipci_read_32(card, CM_REG_FUNCTRL1);
- val &= ~CM_ASFC_MASK;
- val |= (freqnum << CM_ASFC_SHIFT) & CM_ASFC_MASK;
- snd_cmipci_write_32(card, CM_REG_FUNCTRL1, val);
 
  // DAC
  val = snd_cmipci_read_32(card, CM_REG_FUNCTRL1);
@@ -767,22 +776,34 @@ static long CMI8X38_getbufpos(struct mpxplay_audioout_info_s *aui)
  struct cmi8x38_card *card=aui->card_private_data;
  unsigned long bufpos;
 
+#ifndef SBEMU
+ bufpos = snd_cmipci_read_16(card, CM_REG_CH0_FRAME2);
+ //mpxplay_debugf(CMI_DEBUG_OUTPUT, "bufpos: %d, card->dma_size: %d  aui->card_dmasize: %d", bufpos, card->dma_size, aui->card_dmasize);
+ if(bufpos && (bufpos<=card->dma_size)){
+   bufpos = card->dma_size - bufpos;
+   //bufpos = card->dma_size - bufpos - 1;
+  bufpos <<= card->shift;
+  //if(aui->chan_card > 2)
+  // bufpos = (bufpos * 2) / aui->chan_card;
+ }
+#else
  // From the Linux driver
  unsigned int reg = CM_REG_CH0_FRAME2;
  unsigned int rem, tries;
  for (tries = 0; tries < 3; tries++) {
-   rem = snd_cmipci_read_16(card, reg);
+   rem = snd_cmipci_read_16(card, reg); //note: current sample count can be 0
    //mpxplay_debugf(CMI_DEBUG_OUTPUT, "PCM ptr: %u, card->dma_size: %d  aui->card_dmasize: %d", rem, card->dma_size, aui->card_dmasize);
    if (rem < card->dma_size)
      goto ok;
  }
  //mpxplay_debugf(CMI_DEBUG_OUTPUT, "invalid PCM pointer!!! %u", rem);
- goto notok;
+ return aui->card_dma_lastgoodpos;
  ok:
   bufpos = (card->dma_size - (rem + 1)) << card->shift;
+#endif
+
   if (bufpos < aui->card_dmasize)
     aui->card_dma_lastgoodpos = bufpos;
- notok:
   return aui->card_dma_lastgoodpos;
 }
 
