@@ -695,8 +695,8 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
   return;
 
  //buffer cfg
- #ifdef SBEMU
-  int periods = max(1, dmabufsize / PCMBUFFERPAGESIZE);
+#ifdef SBEMU
+ int periods = max(1, dmabufsize / PCMBUFFERPAGESIZE);
  card->dma_size    = dmabufsize >> card->shift;
  card->period_size = (dmabufsize/periods) >> card->shift;
 
@@ -704,16 +704,10 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
 
  // set buffer address
  snd_cmipci_write_32(card, CM_REG_CH0_FRAME1, (uint32_t) pds_cardmem_physicalptr(card->dm, card->pcmout_buffer));
- // program sample counts
- // EXPERIMENTAL: the spec says 'Base count of samples at Codec.' and 'Base count of samples at Bus Master.' but never mention -1,
- // it's possible that the driver reserved 1 sample for safety, but we don't need that
- // or it possible the spec is not clear, need test out.
- snd_cmipci_write_16(card, CM_REG_CH0_FRAME2    , card->dma_size);
- snd_cmipci_write_16(card, CM_REG_CH0_FRAME2 + 2, card->period_size);
- #else
+#else
  card->dma_size    = dmabufsize >> card->shift;
  card->period_size = dmabufsize >> card->shift;
-
+#endif
  //card->dma_size    >>= card->ac3_shift;
  //card->period_size >>= card->ac3_shift;
 
@@ -727,7 +721,6 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
  // program sample counts
  snd_cmipci_write_16(card, CM_REG_CH0_FRAME2    , card->dma_size - 1);
  snd_cmipci_write_16(card, CM_REG_CH0_FRAME2 + 2, card->period_size - 1);
-  #endif
 
  // set sample rate
  freqnum = snd_cmipci_rate_freq(aui->freq_card);
@@ -794,7 +787,7 @@ static long CMI8X38_getbufpos(struct mpxplay_audioout_info_s *aui)
  for (tries = 0; tries < 3; tries++) {
    rem = snd_cmipci_read_16(card, reg); //note: current sample count can be 0
    //mpxplay_debugf(CMI_DEBUG_OUTPUT, "PCM ptr: %u, card->dma_size: %d  aui->card_dmasize: %d", rem, card->dma_size, aui->card_dmasize);
-   if (rem <= card->dma_size) //add = since we don't use card->dma_size-1 as base count.
+   if (rem < card->dma_size)
      goto ok;
  }
  //mpxplay_debugf(CMI_DEBUG_OUTPUT, "invalid PCM pointer!!! %u", rem);
