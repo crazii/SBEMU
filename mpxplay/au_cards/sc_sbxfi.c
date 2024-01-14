@@ -66,7 +66,20 @@
 #define    I2SCTL        0x1C5420
 #define    SPOCTL        0x1C5480
 #define    SPICTL        0x1C5484
-#define    GIE        0x1C6014
+#define    GIE        0x1C6014 //interrupt enable
+#define    GIP			0x1C6010 //interrupt pending
+#define     PLL_INT     (1<<10)
+#define     FI_INT      (1<<9) //force interrupt (manual trigger)
+#define     IT_INT      (1<<8) //timer interrupt
+#define     PCI_INT     (1<<7)
+#define     URT_INT     (1<<6)
+#define     GPI_INT     (1<<5)
+#define     MIX_INT     (1<<4)
+#define     DAI_INT     (1<<3)
+#define     TP_INT      (1<<2)
+#define     DSP_INT     (1<<1)
+#define     SRC_INT     (1<<0)
+
 #define    GPIO        0x1C6020
 #define    GPIOCTL        0x1C6024
 #define    PLLCTL        0x1C6060
@@ -130,6 +143,12 @@
 #define AMOPHI_SADR    0x000000FF
 #define AMOPHI_SE    0x80000000
 
+#define TIMR          0x1C6004
+#define   TIMR_IE     (1<<15)
+#define   TIMR_IP     (1<<14)
+#define HARDWARE_RATE 96000	/* Internal rate used by the hardware */
+#define TIMER_INTERVAL  2
+
 enum CT_AMIXER_CTL{
  // volume control mixers
  AMIXER_MASTER_F,
@@ -182,7 +201,7 @@ typedef struct emu20kx_card_s
  unsigned int    subsys_id;
  struct pci_config_s  *pci_dev;
 
- dosmem_t *dm;
+ cardmem_t *dm;
  char *pcmout_buffer;
  long pcmout_bufsize;
  uint32_t *virtualpagetable;
@@ -334,6 +353,13 @@ static unsigned int float14_to_uint16(unsigned int x)
 }
 
 //-------------------------------------------------------------------------
+static void set_interval_timer(struct emu20kx_card_s *card, int msecs)
+{
+  int tic = (HARDWARE_RATE*msecs)/1000;
+
+  hw_write_20kx (card, TIMR, tic | TIMR_IE|TIMR_IP);
+}
+
 static int hw_pll_init(struct emu20kx_card_s *card)
 {
  unsigned int i,pllctl;
@@ -604,11 +630,11 @@ static unsigned int snd_emu20kx_buffer_init(struct emu20kx_card_s *card,struct m
  pcmbufp=(uint32_t)card->pcmout_buffer;
  pcmbufp<<=1;
  for(pagecount = 0; pagecount < (card->pcmout_bufsize/EMU20KX_PAGESIZE); pagecount++){
-  card->virtualpagetable[pagecount] = pcmbufp | pagecount;
+  card->virtualpagetable[pagecount] = (uint32_t)pds_cardmem_physicalptr(card->dm, pcmbufp) | pagecount;
   pcmbufp+=EMU20KX_PAGESIZE*2;
  }
  for( ; pagecount<EMU20KX_MAXPAGES; pagecount++)
-  card->virtualpagetable[pagecount] = ((uint32_t)card->silentpage)<<1;
+  card->virtualpagetable[pagecount] = ((uint32_t)pds_cardmem_physicalptr(card->dm, card->silentpage))<<1;
 
  aui->card_DMABUFF=card->pcmout_buffer;
  mpxplay_debugf(XFI_DEBUG_OUTPUT,"buffer init: pcmoutbuf:%8.8X size:%d",(unsigned long)card->pcmout_buffer,card->pcmout_bufsize);
@@ -669,7 +695,7 @@ static unsigned int snd_emu20kx_chip_init(struct emu20kx_card_s *card)
 
  // init transport operations
  trnctl = 0x13;  // 32-bit, 4k-size page
- hw_write_20kx(card, PTPALX, (uint32_t) card->virtualpagetable);// ptp_phys_low
+ hw_write_20kx(card, PTPALX, (uint32_t) pds_cardmem_physicalptr(card->dm, card->virtualpagetable));// ptp_phys_low
  hw_write_20kx(card, PTPAHX, 0); // ptp_phys_high
  hw_write_20kx(card, TRNCTL, trnctl);
  hw_write_20kx(card, TRNIS, 0x200c01); /* realy needed? */
@@ -759,7 +785,7 @@ static void EMU20KX_card_info(struct mpxplay_audioout_info_s *aui)
 {
  struct emu20kx_card_s *card=aui->card_private_data;
  char sout[100];
- sprintf(sout,"XFI : Creative %s (%4.4X) found on port:%4.4X irq:%d",
+ sprintf(sout,"SBXFI : Creative %s (%4.4X) found on port:%4.4X irq:%d",
          card->pci_dev->device_name,card->subsys_id,card->iobase,card->irq);
  pds_textdisplay_printf(sout);
 }
@@ -768,16 +794,16 @@ static int EMU20KX_adetect(struct mpxplay_audioout_info_s *aui)
 {
  struct emu20kx_card_s *card;
 
- card=(struct emu20kx_card_s *)calloc(1,sizeof(struct emu20kx_card_s));
+ card=(struct emu20kx_card_s *)pds_calloc(1,sizeof(struct emu20kx_card_s));
  if(!card)
   return 0;
  aui->card_private_data=card;
 
- card->pci_dev=(struct pci_config_s *)calloc(1,sizeof(struct pci_config_s));
+ card->pci_dev=(struct pci_config_s *)pds_calloc(1,sizeof(struct pci_config_s));
  if(!card->pci_dev)
   goto err_adetect;
 
- if(pcibios_search_devices(&emu20kx_devices,card->pci_dev)!=PCI_SUCCESSFUL)
+ if(pcibios_search_devices(emu20kx_devices,card->pci_dev)!=PCI_SUCCESSFUL)
   goto err_adetect;
 
  pcibios_set_master(card->pci_dev);
@@ -787,7 +813,7 @@ static int EMU20KX_adetect(struct mpxplay_audioout_info_s *aui)
  if(!card->iobase)
   goto err_adetect;
 
- card->irq = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
+ aui->card_irq = card->irq = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
  card->subsys_id=pcibios_ReadConfig_Word(card->pci_dev,PCIR_SSID);
 
  mpxplay_debugf(XFI_DEBUG_OUTPUT,"vend_id:%4.4X dev_id:%4.4X subid:%8.8X port:%8.8X",
@@ -819,8 +845,8 @@ static void EMU20KX_close(struct mpxplay_audioout_info_s *aui)
   }
   MDma_free_cardmem(card->dm);
   if(card->pci_dev)
-   free(card->pci_dev);
-  free(card);
+   pds_free(card->pci_dev);
+  pds_free(card);
   aui->card_private_data=NULL;
  }
 }
@@ -839,6 +865,10 @@ static void EMU20KX_start(struct mpxplay_audioout_info_s *aui)
  set_field(&card->src_ctl,SRCCTL_BM, 1);
  set_field(&card->src_ctl,SRCCTL_STATE, SRC_STATE_INIT);
  hw_write_20kx(card, SRCCTL+card->src_idx*0x100, card->src_ctl);
+#ifdef SBEMU
+ set_interval_timer(card, TIMER_INTERVAL); //enable timer
+ hw_write_20kx (card, GIE, /*SRC_INT |*/ IT_INT | DSP_INT); //enable interrupts
+#endif
 }
 
 static void EMU20KX_stop(struct mpxplay_audioout_info_s *aui)
@@ -847,6 +877,9 @@ static void EMU20KX_stop(struct mpxplay_audioout_info_s *aui)
  set_field(&card->src_ctl,SRCCTL_BM, 0);
  set_field(&card->src_ctl,SRCCTL_STATE, SRC_STATE_OFF);
  hw_write_20kx(card, SRCCTL+card->src_idx*0x100, card->src_ctl);
+#ifdef SBEMU
+ hw_write_20kx (card, GIE, 0); //disable interrupts
+#endif
 }
 
 //------------------------------------------------------------------------
@@ -882,8 +915,23 @@ static unsigned long EMU20KX_readMIXER(struct mpxplay_audioout_info_s *aui,unsig
  return 0;
 }
 
+#ifdef SBEMU
+static int EMU20KX_IRQRoutine(struct mpxplay_audioout_info_s *aui)
+{
+  struct emu20kx_card_s *card=aui->card_private_data;
+  int status = hw_read_20kx(card, GIP);
+
+  if(status&IT_INT) //timer
+    set_interval_timer(card, TIMER_INTERVAL); //reset timer. is it needed?
+    
+  if(status)
+    hw_write_20kx(card, GIP, status); //ack all
+  return status;
+}
+#endif
+
 one_sndcard_info EMU20KX_sndcard_info={
- "XFI",
+ "SBXFI",
  SNDCARD_LOWLEVELHAND|SNDCARD_INT08_ALLOWED,
 
  NULL,
@@ -899,7 +947,11 @@ one_sndcard_info EMU20KX_sndcard_info={
  &EMU20KX_getbufpos,
  &MDma_clearbuf,
  &MDma_interrupt_monitor,
+ #ifdef SBEMU
+ &EMU20KX_IRQRoutine,
+ #else
  NULL,
+ #endif
 
  &EMU20KX_writeMIXER,
  &EMU20KX_readMIXER,

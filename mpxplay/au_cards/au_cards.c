@@ -48,11 +48,11 @@ extern one_sndcard_info IHD_sndcard_info;
 extern one_sndcard_info VIA82XX_sndcard_info;
 extern one_sndcard_info SBLIVE_sndcard_info;
 extern one_sndcard_info CMI8X38_sndcard_info;
+extern one_sndcard_info EMU20KX_sndcard_info;
 #ifndef SBEMU
 extern one_sndcard_info ESS_sndcard_info;
 extern one_sndcard_info WSS_sndcard_info;
 extern one_sndcard_info SB16_sndcard_info;
-extern one_sndcard_info EMU20KX_sndcard_info;
 extern one_sndcard_info GUS_sndcard_info;
 extern one_sndcard_info SB_sndcard_info;
 extern one_sndcard_info MIDAS_sndcard_info;
@@ -60,7 +60,6 @@ extern one_sndcard_info MIDAS_sndcard_info;
 #undef AU_CARDS_LINK_ESS
 #undef AU_CARDS_LINK_WSS
 #undef AU_CARDS_LINK_SB16
-#undef AU_CARDS_LINK_EMU20KX
 #undef AU_CARDS_LINK_GUS
 #undef AU_CARDS_LINK_SB
 #undef AU_CARDS_LINK_MIDAS
