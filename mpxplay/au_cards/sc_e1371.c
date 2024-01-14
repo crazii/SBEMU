@@ -83,7 +83,7 @@
 #define ES_REG_DAC1_COUNT 0x24    /* R/W: DAC1 sample count register */
 #define ES_REG_DAC1_FRAME 0x30    /* R/W: PAGE 0x0c; DAC1 frame address */
 #define ES_REG_DAC1_SIZE  0x34    /* R/W: PAGE 0x0c; DAC1 frame size */
-#define  ES_REG_FCURR_COUNTI(i) (((i)>>14)&0x3fffc)
+#define  ES_REG_FCURR_COUNTI(i) (((i)>>14)&0x3fffc) // (i>>16: get count in dwords)<<2: in bytes
 
 //Sample rate converter addresses
 #define ES_SMPREG_DAC1        0x70
@@ -402,8 +402,13 @@ static void snd_es1371_chip_close(struct ensoniq_card_s *card)
 
 static void snd_es1371_ac97_init(struct ensoniq_card_s *card)
 {
+ #ifdef SBEMU
+ snd_es1371_codec_write(card, AC97_MASTER_VOL_STEREO, 0x3333); //|mute|x|6|xx|6|, default 8000
+ snd_es1371_codec_write(card, AC97_PCMOUT_VOL,        0x1F1F); //|mute|xx|5:xxx|5|, default 8808
+ #else
  snd_es1371_codec_write(card, AC97_MASTER_VOL_STEREO, 0x0404);
  snd_es1371_codec_write(card, AC97_PCMOUT_VOL,        0x0404);
+ #endif
  snd_es1371_codec_write(card, AC97_HEADPHONE_VOL,     0x0404);
  snd_es1371_codec_write(card, AC97_CD_VOL,            0x0404);
  snd_es1371_codec_write(card, AC97_EXTENDED_STATUS,AC97_EA_SPDIF);
@@ -416,11 +421,17 @@ static void snd_es1371_prepare_playback(struct ensoniq_card_s *card,struct mpxpl
  outl((card->port + ES_REG_CONTROL), card->ctrl);
  outl((card->port + ES_REG_MEM_PAGE), ES_MEM_PAGEO(ES_PAGE_DAC));
  outl((card->port + ES_REG_DAC1_FRAME), (unsigned long) pds_cardmem_physicalptr(card->dm,card->pcmout_buffer));
- outl((card->port + ES_REG_DAC1_SIZE), (aui->card_dmasize >> 2) - 1);
+ outl((card->port + ES_REG_DAC1_SIZE), (aui->card_dmasize >> 2) - 1); //in dwords, -1
  funcbit_disable(card->sctrl,(ES_P1_LOOP_SEL|ES_P1_PAUSE|ES_P1_SCT_RLD|ES_P1_MODEM));
  funcbit_enable(card->sctrl,ES_P1_MODEO(0x03)); // stereo, 16 bits
  outl((card->port + ES_REG_SERIAL), card->sctrl);
+ #if SBEMU
+ int periods = max(1,aui->card_dmasize / ES1371_DMABUF_ALIGN);
+ outl((card->port + ES_REG_DAC1_COUNT), ((aui->card_dmasize/periods) >> 2) -1);  // samples (pcm16) / channels (stereo)
+ aui->card_samples_per_int = ES1371_DMABUF_ALIGN / 4; //used for SB direct mode
+ #else
  outl((card->port + ES_REG_DAC1_COUNT), (aui->card_dmasize >> 2) -1);
+ #endif
  outl((card->port + ES_REG_CONTROL), card->ctrl);
  snd_es1371_dac1_rate(card, aui->freq_card);
  mpxplay_debugf(ENS_DEBUG_OUTPUT,"prepare playback end");
@@ -449,7 +460,7 @@ static void ES1371_card_info(struct mpxplay_audioout_info_s *aui)
 {
  struct ensoniq_card_s *card=aui->card_private_data;
  char sout[100];
- sprintf(sout,"ENS : Ensoniq %s found on port:%4.4X irq:%d rev:%2.2X",
+ sprintf(sout,"Ensoniq/SBPCI : %s found on port:%4.4X irq:%d rev:%2.2X",
          card->pci_dev->device_name,card->port,card->irq,card->chiprev);
  pds_textdisplay_printf(sout);
 }
@@ -476,10 +487,22 @@ static int ES1371_adetect(struct mpxplay_audioout_info_s *aui)
  card->port = pcibios_ReadConfig_Dword(card->pci_dev, PCIR_NAMBAR);
  if(!card->port)
   goto err_adetect;
+ aui->card_irq = card->irq = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
  #ifdef SBEMU
- aui->card_irq = 
+ if(card->irq <= 0x07) //SBPCI may use irq 5/7 to gain DOS compatility?
+ {
+  printf("WARNING: Low IRQ %d on master PIC, higher IRQ number is recommended.\nTrying to enable Level triggered mode.\n");
+  //TODO: do we need to do this? 
+  if(card->irq > 2) //don't use level triggering for legacy ISA IRQ (timer/kbd etc)
+  {
+    uint16_t elcr = inpw(0x4D0); //edge level control reg
+    elcr |= (card->irq<<1);
+    outpw(0x4D0, elcr);
+  }
+  //option 2: we can change the irq for it, using PIC IRQ routing options.
+ }
  #endif
- card->irq = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
+
  card->chiprev= pcibios_ReadConfig_Byte(card->pci_dev, PCIR_RID);
 
  if((card->pci_dev->vendor_id==0x1274) &&
@@ -504,10 +527,6 @@ static int ES1371_adetect(struct mpxplay_audioout_info_s *aui)
 
  snd_es1371_chip_init(card);
  snd_es1371_ac97_init(card);
-
- #ifdef SBEMU
- aui->card_samples_per_int = aui->card_dmasize >> 1; //used for SB direct mode
- #endif
 
  return 1;
 
