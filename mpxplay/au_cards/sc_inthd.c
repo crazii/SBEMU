@@ -23,6 +23,7 @@
 #ifdef AU_CARDS_LINK_IHD
 
 #include <string.h>
+#include <dos.h>
 #include "dmairq.h"
 #include "pcibios.h"
 #include "sc_inthd.h"
@@ -936,7 +937,7 @@ static unsigned int snd_ihd_mixer_init(struct intelhd_card_s *card)
   snd_hda_codec_write(card, card->afg_root_nodenum, 0, AC_VERB_SET_CODEC_RESET, 0);
   delay(10);
   snd_hda_codec_write(card, card->afg_root_nodenum, 0, AC_VERB_SET_CODEC_RESET, 0);
-  delay(200); //required for D3cold to D0
+  delay(200); //requited for D3cold to D0
   snd_hda_codec_write(card, card->afg_root_nodenum, 0, AC_VERB_SET_POWER_STATE, 0/*d0: full power*/); 
   #endif
 
@@ -948,7 +949,7 @@ static unsigned int snd_ihd_mixer_init(struct intelhd_card_s *card)
   #endif
  }
  #ifdef SBEMU
- delay(75); //spec required max time to full power on (D0)
+ delay(75); //spec require max to full power on (D0)
  #endif
 
  if(!snd_hda_parse_output(card))
