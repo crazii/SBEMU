@@ -31,7 +31,11 @@
 
 #define CMI8X38_LINK_MULTICHAN 1
 
+#ifdef SBEMU
+#define PCMBUFFERPAGESIZE      512
+#else
 #define PCMBUFFERPAGESIZE      4096
+#endif
 
 /*
  * CM8x38 registers definition
@@ -580,7 +584,7 @@ static void CMI8X38_card_info(struct mpxplay_audioout_info_s *aui)
 {
  struct cmi8x38_card *card=aui->card_private_data;
  char sout[100];
- sprintf(sout,"CMI : %s soundcard found on port:%4.4X irq:%d chipver:%d max-chans:%d",
+ sprintf(sout,"CMI 8338/8738 : %s soundcard found on port:%4.4X irq:%d chipver:%d max-chans:%d",
          card->pci_dev->device_name,card->iobase,card->irq,card->chip_version,card->max_channels);
  pds_textdisplay_printf(sout);
 }
@@ -677,6 +681,8 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
  if(aui->bits_card>=16){
   card->fmt|=0x02;
   card->shift++;
+  //if(aui->bits_card>16) // 24,32 bits ???
+  // card->shift++;
  }
  if(aui->chan_card>1){
   card->fmt|=0x01;
@@ -689,8 +695,25 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
   return;
 
  //buffer cfg
+ #ifdef SBEMU
+  int periods = max(1, dmabufsize / PCMBUFFERPAGESIZE);
  card->dma_size    = dmabufsize >> card->shift;
- card->period_size = dmabufsize >> (card->shift + 1);
+ card->period_size = (dmabufsize/periods) >> card->shift;
+
+ aui->card_samples_per_int = card->period_size;
+
+ // set buffer address
+ snd_cmipci_write_32(card, CM_REG_CH0_FRAME1, (uint32_t) pds_cardmem_physicalptr(card->dm, card->pcmout_buffer));
+ // program sample counts
+ // EXPERIMENTAL: the spec says 'Base count of samples at Codec.' and 'Base count of samples at Bus Master.' but never mention -1,
+ // it's possible that the driver reserved 1 sample for safety, but we don't need that
+ // or it possible the spec is not clear, need test out.
+ snd_cmipci_write_16(card, CM_REG_CH0_FRAME2    , card->dma_size);
+ snd_cmipci_write_16(card, CM_REG_CH0_FRAME2 + 2, card->period_size);
+ #else
+ card->dma_size    = dmabufsize >> card->shift;
+ card->period_size = dmabufsize >> card->shift;
+
  //card->dma_size    >>= card->ac3_shift;
  //card->period_size >>= card->ac3_shift;
 
@@ -699,33 +722,16 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
  // card->period_size = (card->period_size * aui->chan_card) / 2;
  //}
 
- #ifdef SBEMU
- aui->card_samples_per_int = card->dma_size;
- #endif
-
- // set buffer address
+  // set buffer address
  snd_cmipci_write_32(card, CM_REG_CH0_FRAME1, (uint32_t) pds_cardmem_physicalptr(card->dm, card->pcmout_buffer));
  // program sample counts
  snd_cmipci_write_16(card, CM_REG_CH0_FRAME2    , card->dma_size - 1);
  snd_cmipci_write_16(card, CM_REG_CH0_FRAME2 + 2, card->period_size - 1);
-
- /* set adc/dac flag */
- val = CM_CHADC0;
- if (1) //(rec->is_dac)
-   card->ctrl &= ~val;
- else
-   card->ctrl |= val;
- snd_cmipci_write_32(card, CM_REG_FUNCTRL0, card->ctrl);
+  #endif
 
  // set sample rate
  freqnum = snd_cmipci_rate_freq(aui->freq_card);
  aui->freq_card=cmi_rates[freqnum]; // if the freq-config is not standard at CMI
-
- // ADC
- val = snd_cmipci_read_32(card, CM_REG_FUNCTRL1);
- val &= ~CM_ASFC_MASK;
- val |= (freqnum << CM_ASFC_SHIFT) & CM_ASFC_MASK;
- snd_cmipci_write_32(card, CM_REG_FUNCTRL1, val);
 
  // DAC
  val = snd_cmipci_read_32(card, CM_REG_FUNCTRL1);
@@ -786,15 +792,15 @@ static long CMI8X38_getbufpos(struct mpxplay_audioout_info_s *aui)
  unsigned int reg = CM_REG_CH0_FRAME2;
  unsigned int rem, tries;
  for (tries = 0; tries < 3; tries++) {
-   rem = snd_cmipci_read_16(card, reg);
+   rem = snd_cmipci_read_16(card, reg); //note: current sample count can be 0
    //mpxplay_debugf(CMI_DEBUG_OUTPUT, "PCM ptr: %u, card->dma_size: %d  aui->card_dmasize: %d", rem, card->dma_size, aui->card_dmasize);
-   if (rem < card->dma_size)
+   if (rem <= card->dma_size) //add = since we don't use card->dma_size-1 as base count.
      goto ok;
  }
  //mpxplay_debugf(CMI_DEBUG_OUTPUT, "invalid PCM pointer!!! %u", rem);
  return aui->card_dma_lastgoodpos;
  ok:
-  bufpos = (card->dma_size - (rem + 1)) << card->shift;
+  bufpos = ((card->dma_size - rem)%card->dma_size) << card->shift;
 #endif
 
   if (bufpos < aui->card_dmasize)
