@@ -469,7 +469,7 @@ extern unsigned long pds_gettimeh(void); // clock time in hsec
 extern mpxp_int64_t pds_gettimem(void);  // clock time in msec
 extern mpxp_int64_t pds_gettimeu(void);  // clock time in usec
 extern void pds_delay_10us(unsigned int ticks);
-extern void pds_delay_10us(unsigned int ticks);
+extern void pds_mdelay(unsigned long msec);
 #define pds_textdisplay_printf(text) { fprintf(stdout, "%s", (text)); fprintf(stdout, "\n"); fflush(stdout); }
 //-newfunc
 

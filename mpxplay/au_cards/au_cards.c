@@ -60,7 +60,6 @@ extern one_sndcard_info MIDAS_sndcard_info;
 #undef AU_CARDS_LINK_ESS
 #undef AU_CARDS_LINK_WSS
 #undef AU_CARDS_LINK_SB16
-//#undef AU_CARDS_LINK_EMU20KX
 #undef AU_CARDS_LINK_GUS
 #undef AU_CARDS_LINK_SB
 #undef AU_CARDS_LINK_MIDAS

@@ -539,8 +539,8 @@ static void cmi8x38_chip_init(struct cmi8x38_card *cm)
   case PCI_DEVICE_ID_CMEDIA_CM8738:
   case PCI_DEVICE_ID_CMEDIA_CM8738B:
        /* PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82437VX */
-       if(pcibios_FindDevice(0x8086, 0x7030,NULL)==PCI_SUCCESSFUL)
-        snd_cmipci_set_bit(cm, CM_REG_MISC_CTRL, CM_TXVX);
+       if(pcibios_FindDevice(0x8086, 0x7030,NULL)==PCI_DEVICE_NOTFOUND)
+        snd_cmipci_set_bit(cm, CM_REG_MISC_CTRL, CM_TXVX); //bit set means TX
        break;
  }
 
@@ -697,11 +697,7 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
  int periods = max(1, dmabufsize / PCMBUFFERPAGESIZE);
  card->dma_size    = dmabufsize >> card->shift;
  card->period_size = (dmabufsize/periods) >> card->shift;
-
  aui->card_samples_per_int = card->period_size;
-
- // set buffer address
- snd_cmipci_write_32(card, CM_REG_CH0_FRAME1, (uint32_t) pds_cardmem_physicalptr(card->dm, card->pcmout_buffer));
 #else
  card->dma_size    = dmabufsize >> card->shift;
  card->period_size = dmabufsize >> card->shift;
