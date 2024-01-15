@@ -400,8 +400,7 @@ static unsigned int azx_get_response(struct intelhd_card_s *chip)
     timeout = 20000; // 200000 ms
     while((azx_readw(chip, IRS) & ICH6_IRS_BUSY) && (--timeout)) pds_mdelay(10);
     mpxplay_debugf(IHD_DEBUG_OUTPUT,"PIO wait cmd response timeout2 %d", timeout); //timetout2 should not happen (always>0)
-
-    resp = 0; //invalid
+    //resp = 0; //not sure if it is invalid
   }
 
 #ifdef INTHD_CODEC_EXTRA_DELAY_US
