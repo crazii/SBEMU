@@ -445,6 +445,8 @@ enum {
 #define ICH6_REG_CORBWP            0x48
 #define ICH6_REG_CORBRP            0x4A
 #define ICH6_REG_CORBCTL        0x4c
+#define  CMEIE 1
+#define  CORBRUN 2
 #define ICH6_REG_CORBSTS        0x4d
 #define ICH6_REG_CORBSIZE        0x4e
 
@@ -453,8 +455,15 @@ enum {
 #define ICH6_REG_RIRBWP            0x58
 #define ICH6_REG_RINTCNT        0x5a
 #define ICH6_REG_RIRBCTL        0x5c
+#define  RINTCTL 1 //interrupt, 1=enable
+#define  RIRBDMAEN 2
+#define  RIRBOIC 4 //overrun interrup,t 1=enable
 #define ICH6_REG_RIRBSTS        0x5d
 #define ICH6_REG_RIRBSIZE        0x5e
+//reset for CORBRP,RIRBWP
+#define CORBRPRST (1<<15)
+#define RIRBWPRST (1<<15)
+
 
 #define ICH6_REG_IC            0x60
 #define ICH6_REG_IR            0x64
