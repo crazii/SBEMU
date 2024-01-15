@@ -67,7 +67,6 @@ struct intelhd_card_s
  long pcmout_bufsize;
  unsigned long* corb_buffer;
  unsigned long long* rirb_buffer;
- int first_rirb;
  unsigned long pcmout_dmasize;
  unsigned int  pcmout_num_periods;
  unsigned long pcmout_period_size;
@@ -225,9 +224,20 @@ static void azx_corb_stop(struct intelhd_card_s *chip)
   if(!timeout) mpxplay_debugf(IHD_DEBUG_OUTPUT, "stop rirb timeout\n");
 }
 
+static void azx_switch_to_pio(struct intelhd_card_s *chip)
+{
+ printf("Intel HDA: Switching to PIO.\n");
+ azx_corb_stop(chip);
+ chip->config_select |= AUCARDSCONFIG_IHD_USE_PIO;
+ azx_writel(chip, GCTL, (azx_readl(chip, GCTL) & (~ICH6_GCTL_UREN)));
+}
+
+static unsigned int snd_hda_codec_read(struct intelhd_card_s *chip, hda_nid_t nid,
+                         uint32_t direct,
+             unsigned int verb, unsigned int parm);
+
 static void azx_corb_init(struct intelhd_card_s *chip)  // setup CORB command DMA buffer
 {
-
   //stop CORB/RIRB DMA: initial sets need them to be stopped
   azx_corb_stop(chip);
 
@@ -258,6 +268,41 @@ static void azx_corb_init(struct intelhd_card_s *chip)  // setup CORB command DM
   if(!timeout) mpxplay_debugf(IHD_DEBUG_OUTPUT, "reset corb rp timeout2\n");
 
   azx_corb_start(chip, 0);//no need to confirm, not actually running if list empty
+
+  //read anything that should not be 0, to check CORB
+  int anything = snd_hda_codec_read(chip, AC_NODE_ROOT,0,AC_VERB_PARAMETERS,AC_PAR_VENDOR_ID);
+  if(anything == 0)
+  {
+    azx_corb_stop(chip);
+
+    azx_writew(chip, CORBRP, CORBRPRST); // Reset CORBRP
+    //pds_delay_10us(100); // need this delay? -> no
+    timeout = 2000;
+    do {
+      int rp = azx_readw(chip, CORBRP);
+      if (rp & CORBRPRST) break;
+      pds_delay_10us(10);
+    } while (--timeout);
+
+    //printf("Intel HDA: CORBRP timeout %d\n", timeout);
+    mpxplay_debugf(IHD_DEBUG_OUTPUT,"corbrp timeout %d\n", timeout);
+
+    if (timeout > 0) {
+      azx_switch_to_pio(chip);
+      pds_delay_10us(100);
+    }
+
+    timeout = 2000;
+    azx_writew(chip, CORBRP, 0);
+    do {
+      int rp = azx_readw(chip, CORBRP);
+      if ((rp & CORBRPRST) == 0) break;
+      pds_delay_10us(10);
+    } while (--timeout);
+
+    if(!(chip->config_select&AUCARDSCONFIG_IHD_USE_PIO))
+      azx_corb_start(chip, 1);
+  }
 }
 
 static void azx_single_send_cmd(struct intelhd_card_s *chip,uint32_t val)
@@ -283,6 +328,13 @@ IRR register and the IRV is cleared by writing a 1 to it
 In the case where IRV bit is not set after a long delay, software should implement a timeout 
 condition where the software clears the ICB bit 0 and then polls until ICB bit 0 returns to zero
 */
+ //PIO step1, prepare. make sure not busy, not valid, required by spec
+ while((azx_readw(chip, IRS) & ICH6_IRS_BUSY) && (--timeout)) pds_delay_10us(10);
+ if(!timeout) mpxplay_debugf(IHD_DEBUG_OUTPUT,"PIO set cmd: busy  timeout %d", timeout);
+ azx_writew(chip, IRS, 0); //clear busy, spec permitted
+
+ azx_writew(chip, IRS, ICH6_IRS_VALID); //clear valid
+
  azx_writel(chip, IC, val); //PIO step 1
  azx_writew(chip, IRS, ICH6_IRS_BUSY); //PIO step 2
 
@@ -344,7 +396,7 @@ static unsigned int azx_get_response(struct intelhd_card_s *chip)
   else
   { //PIO step 5, timeout
     mpxplay_debugf(IHD_DEBUG_OUTPUT,"PIO wait cmd response timeout!");
-    azx_writew(chip, IRS, azx_readw(chip, IRS) & (~ICH6_IRS_BUSY));
+    azx_writew(chip, IRS, 0); //clear busy, spec permitted
     timeout = 20000; // 200000 ms
     while((azx_readw(chip, IRS) & ICH6_IRS_BUSY) && (--timeout)) pds_mdelay(10);
     mpxplay_debugf(IHD_DEBUG_OUTPUT,"PIO wait cmd response timeout2 %d", timeout); //timetout2 should not happen (always>0)
@@ -365,15 +417,9 @@ static unsigned int azx_get_response(struct intelhd_card_s *chip)
     pds_delay_10us(10);
   }while(--timeout);
   if(!timeout){
-    if(chip->first_rirb) //switch to PIO on first failure. Don't switch to PIO if first rirb read OK (then it should work), and later fails
-    {
-      chip->first_rirb = 0;
       mpxplay_debugf(IHD_DEBUG_OUTPUT,"RIRB read response timeout %d", timeout);
-      chip->config_select |= AUCARDSCONFIG_IHD_USE_PIO;
-      return 0xffffffff;
-    }
+      return 0; //don't read since its not ready
   }
-  chip->first_rirb = 0;
   int rirbindex = azx_readw(chip, RIRBWP);
   long long data = chip->rirb_buffer[rirbindex];
   azx_writeb(chip, RIRBSTS, 1);
@@ -381,45 +427,12 @@ static unsigned int azx_get_response(struct intelhd_card_s *chip)
  }
 }
 
-static void switch_to_pio(struct intelhd_card_s *chip)
-{
- int timeout = 2000; // 200 ms
- printf("Intel HDA: Switching to PIO.\n");
- azx_writeb(chip, CORBCTL, 0); // DMA Stop
- int c;
- do {
-  c = azx_readb(chip, CORBCTL);
-  pds_delay_10us(10);
-  if ((c & 2) == 0) {
-   break;
-  }
- } while (--timeout);
- azx_writew(chip, RIRBCTL, 0); // DMA Stop, Disable Interrupt
- timeout = 2000; 
- do {
-  c = azx_readb(chip, RIRBCTL);
-  if ((c & 2) == 0) {
-   break;
-  }
-  pds_delay_10us(10);
- } while (--timeout);
- azx_writel(chip, GCTL, (azx_readl(chip, GCTL) & (~ICH6_GCTL_UREN)));
-}
-
 static unsigned int snd_hda_codec_read(struct intelhd_card_s *chip, hda_nid_t nid,
                          uint32_t direct,
              unsigned int verb, unsigned int parm)
 {
- int pio;
-retry:
- pio = chip->config_select & AUCARDSCONFIG_IHD_USE_PIO;
  snd_hda_codec_write(chip,nid,direct,verb,parm);
- unsigned int r = azx_get_response(chip);
- if (r == 0xffffffff && pio != (chip->config_select & AUCARDSCONFIG_IHD_USE_PIO)) {
-  switch_to_pio(chip);
-  goto retry;
- }
- return r;
+ return azx_get_response(chip);
 }
 
 #define snd_hda_param_read(codec,nid,param) snd_hda_codec_read(codec,nid,0,AC_VERB_PARAMETERS,param)
@@ -840,7 +853,6 @@ static unsigned int azx_reset(struct intelhd_card_s *chip)
 
 #if SBEMU_USE_CORB
  azx_corb_init(chip);
- 
 #endif
 
  return 1;
