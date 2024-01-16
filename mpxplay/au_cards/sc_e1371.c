@@ -483,6 +483,7 @@ static int ES1371_adetect(struct mpxplay_audioout_info_s *aui)
 
  mpxplay_debugf(ENS_DEBUG_OUTPUT,"chip init : enable PCI io and busmaster");
  pcibios_set_master(card->pci_dev);
+ pcibios_enable_interrupt(card->pci_dev);
 
  card->port = pcibios_ReadConfig_Dword(card->pci_dev, PCIR_NAMBAR);
  if(!card->port)

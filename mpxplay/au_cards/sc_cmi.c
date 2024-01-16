@@ -606,6 +606,7 @@ static int CMI8X38_adetect(struct mpxplay_audioout_info_s *aui)
   goto err_adetect;
 
  pcibios_set_master(card->pci_dev);
+ pcibios_enable_interrupt(card->pci_dev);
 
  card->iobase = pcibios_ReadConfig_Dword(card->pci_dev, PCIR_NAMBAR)&0xfff0;
  if(!card->iobase)

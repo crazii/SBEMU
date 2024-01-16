@@ -114,6 +114,7 @@ void     pcibios_WriteConfig_Byte(pci_config_s *, uint16_t, uint8_t);
 void     pcibios_WriteConfig_Word(pci_config_s *, uint16_t, uint16_t);
 void     pcibios_WriteConfig_Dword(pci_config_s *, uint16_t, uint32_t);
 void     pcibios_set_master(pci_config_s *);
+void     pcibios_enable_interrupt(pci_config_s*);
 void     pcibios_enable_memmap_set_master(pci_config_s *);
 
 uint8_t  pcibios_GetIRQ(pci_config_s*); //get highset IRQ from PCI IRQ routing options.
