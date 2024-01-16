@@ -20,6 +20,7 @@
 #include <conio.h>
 #include <io.h>
 #include <dos.h>
+#include <assert.h>
 
 #include "au_base.h"
 #include "pcibios.h"
@@ -29,6 +30,8 @@
 #define PCIDEVFUNC(bDev,bFunc) ((((uint32_t)bDev) << 3) | bFunc)
 
 #define pcibios_clear_regs(reg) pds_memset(&reg,0,sizeof(reg))
+
+#ifndef _MSC_VER //just to make vscode happy
 
 static uint8_t pcibios_GetBus(void)
 {
@@ -72,6 +75,8 @@ uint8_t    pcibios_FindDevice(uint16_t wVendor, uint16_t wDevice, pci_config_s *
 
  return reg.h.ah;
 }
+
+#endif//_MSC_VER
 
 uint8_t pcibios_search_devices(pci_device_s devices[],pci_config_s *ppkey)
 {
@@ -343,7 +348,7 @@ typedef struct
 
 #define BUFSIZE (16*1024)
 //copied & modified for usbddos
-uint8_t  pcibios_GetIRQ(pci_config_s* ppkey)
+uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
 {
     uint8_t INTPIN = pcibios_ReadConfig_Byte(ppkey, PCIR_INTR_PIN);
     
@@ -364,6 +369,7 @@ uint8_t  pcibios_GetIRQ(pci_config_s* ppkey)
     pds_dpmi_realmodeint_call(PCI_SERVICE, &r);
 
     uint16_t map = 0;
+    uint8_t link = 0; //not connected
     if(((r.EAX>>8)&0xFF) == PCI_SUCCESSFUL) //ah=PCI_SUCCESSFUL)
     {
         dosget(&buf, dosmem.linearptr, sizeof(buf));
@@ -378,20 +384,86 @@ uint8_t  pcibios_GetIRQ(pci_config_s* ppkey)
             if(b == ppkey->bBus && d == ppkey->bDev)
             {
                 dosget(&map, addr+INTPIN*3, sizeof(map));
+                dosget(&link,addr+INTPIN*3-1, sizeof(link));
                 break;
             }
         }
     }
-    pds_dpmi_dos_freemem(&dosmem);
-
-    map &= (uint16_t)r.EBX; //PCI dedicated IRQ
-    uint8_t irq = 0xFF;
-    //find the highset available
-    while(map)
+   
+    uint8_t linkedIRQ = 0xFF;
+    pci_config_s cfg;
+    if(map)
     {
-        map>>=1;
-        ++irq;
+        assert(link != 0);
+        //iterate all devices to find devices with the same link (wire-ORed)
+        for(uint16_t start = 0; start < buf.size; start+=16)
+        {
+            char* addr = dosmem.linearptr+sizeof(buf)+start;
+            uint8_t l = 0;
+            dosget(&l,addr+INTPIN*3-1, sizeof(l));
+            if(l != link /*|| (b == ppkey->bBus && d == ppkey->bDev && f == ppkey->bFunc)*/)
+                continue;
+            dosget(&cfg.bBus, addr, sizeof(cfg.bBus));
+            dosget(&cfg.bDev, addr+1, sizeof(cfg.bDev));
+            cfg.bFunc = cfg.bDev&0x7;
+            cfg.bDev>>=3;
+            linkedIRQ = pcibios_ReadConfig_Byte(&cfg, PCIR_INTR_LN);
+            if(linkedIRQ != 0xFF)
+                break;
+        }
     }
+
+    uint8_t irq = linkedIRQ;
+    if(irq != 0xFF)
+        pcibios_WriteConfig_Byte(ppkey, PCIR_INTR_LN, irq); //found a shared IRQ, it's gonna work.
+    else
+    {
+        if(map&(uint16_t)r.EBX)
+            map &= (uint16_t)r.EBX; //PCI dedicated IRQ
+        //find the highset available
+        while(map)
+        {
+            map>>=1;
+            ++irq;
+        }
+
+        if(irq != 0xFF)
+        {
+            assert(irq > 2);
+
+            pcibios_clear_regs(r);
+            r.EAX = (PCI_FUNCTION_ID<<8)|PCI_SET_INTERRUPT;
+            r.ECX = ((uint32_t)irq<<8) | (0xA + INTPIN);
+            r.EBX = ((uint32_t)ppkey->bBus<<8) | (ppkey->bDev<<3) | (ppkey->bFunc&0x7);
+            r.DS = 0xF000;
+            pds_dpmi_realmodeint_call(PCI_SERVICE, &r);
+
+            if(((r.EAX>>8)&0xFF) == PCI_SUCCESSFUL)
+            {
+                //set PCI_SET_INTERRUPT done, it's gonna work too, but the pci bios 2.1 spec require us to update the IRQ_LINE
+                //for all linked devices (shared INTPIN)
+                //assign to all wire-ORed pin, including input (ppkey)
+                for(uint16_t start = 0; start < buf.size; start+=16)
+                {
+                    char* addr = dosmem.linearptr+sizeof(buf)+start;
+                    uint8_t l = 0;
+                    dosget(&l,addr+INTPIN*3-1, sizeof(l));
+                    if(l != link)
+                        continue;
+                    dosget(&cfg.bBus, addr, sizeof(cfg.bBus));
+                    dosget(&cfg.bDev, addr+1, sizeof(cfg.bDev));
+                    cfg.bFunc = cfg.bDev&0x7;
+                    cfg.bDev>>=3;
+                    assert(pcibios_ReadConfig_Byte(&cfg, PCIR_INTR_LN) == 0xFF);
+                    pcibios_WriteConfig_Byte(&cfg, PCIR_INTR_LN, irq);
+                }
+            }
+            else //TODO: if PCI_SET_INTERRUPT failed, just return the one in routing options, it might work?
+                irq = 0xFF;
+        }
+    }
+
+    pds_dpmi_dos_freemem(&dosmem);
     return irq;
 }
 #undef BUFSIZE

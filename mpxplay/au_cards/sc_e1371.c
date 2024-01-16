@@ -483,26 +483,14 @@ static int ES1371_adetect(struct mpxplay_audioout_info_s *aui)
 
  mpxplay_debugf(ENS_DEBUG_OUTPUT,"chip init : enable PCI io and busmaster");
  pcibios_set_master(card->pci_dev);
- pcibios_enable_interrupt(card->pci_dev);
 
  card->port = pcibios_ReadConfig_Dword(card->pci_dev, PCIR_NAMBAR);
  if(!card->port)
   goto err_adetect;
  aui->card_irq = card->irq = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
- #ifdef SBEMU
- if(card->irq <= 0x07) //SBPCI may use irq 5/7 to gain DOS compatility?
- {
-  printf("WARNING: Low IRQ %d on master PIC, higher IRQ number is recommended.\nTrying to enable Level triggered mode.\n");
-  //TODO: do we need to do this? 
-  if(card->irq > 2) //don't use level triggering for legacy ISA IRQ (timer/kbd etc)
-  {
-    uint16_t elcr = inpw(0x4D0); //edge level control reg
-    elcr |= (card->irq<<1);
-    outpw(0x4D0, elcr);
-  }
-  //option 2: we can change the irq for it, using PIC IRQ routing options.
- }
- #endif
+#ifdef SBEMU
+ aui->card_pci_dev = card->pci_dev;
+#endif
 
  card->chiprev= pcibios_ReadConfig_Byte(card->pci_dev, PCIR_RID);
 

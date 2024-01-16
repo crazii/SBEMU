@@ -181,7 +181,6 @@ static void azx_init_pci(struct intelhd_card_s *card)
  }
 
  pcibios_enable_memmap_set_master(card->pci_dev); // Intel HDA chips uses memory mapping only
- pcibios_enable_interrupt(card->pci_dev);
 
  if(card->pci_dev->vendor_id != 0x1002) // != ATI
   update_pci_byte(card->pci_dev, ICH6_PCIREG_TCSEL, 0x07, 0);
@@ -1446,6 +1445,7 @@ static int INTELHD_adetect(struct mpxplay_audioout_info_s *aui)
  aui->card_DMABUFF=card->pcmout_buffer;
 #ifdef SBEMU
  aui->card_irq = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
+ aui->card_pci_dev = card->pci_dev;
  aui->card_samples_per_int = AZX_PERIOD_SIZE / 4;
 #endif
 

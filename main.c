@@ -5,6 +5,7 @@
 #include <conio.h>
 #include <stdbool.h>
 #include <dos.h>
+#include <stdarg.h>
 #include <dpmi/dbgutil.h>
 #include <sbemucfg.h>
 #include <pic.h>
@@ -18,6 +19,7 @@
 #include "serial.h"
 
 #include <au_cards/au_cards.h>
+#include <au_cards/pcibios.h>
 
 static const char *
 PROGNAME = "SBEMU";
@@ -422,18 +424,25 @@ static void MAIN_SetBlasterEnv(struct MAIN_OPT* opt) //alter BLASTER env.
     #endif
 }
 
-static void
-print_enabled_newline(bool enabled)
+static void MAIN_CPrintf(int color, const char* fmt, ...)
 {
-    if (enabled) {
-        textcolor(LIGHTGREEN);
-        cprintf("enabled");
-    } else {
-        textcolor(LIGHTRED);
-        cprintf("disabled");
-    }
-
+    char buf[2048]; //limit for cprintf (DJGPP): 2048
+    va_list aptr;
+    va_start(aptr, fmt);
+    int n = vsnprintf(buf, sizeof(buf), fmt, aptr);
+    va_end(aptr);
+    int crlf = strcmp(buf+n-2,"\r\n") == 0 || strcmp(buf+n-2,"\n\r") == 0;
+    buf[n-2] = crlf ? '\0' : buf[n-2];
+    textcolor(color);
+    cprintf("%s", buf); //more safe with a fmt string, incase buf contains any fmt.
     textcolor(LIGHTGRAY);
+    if(crlf) cprintf("\r\n");
+}
+
+static void
+MAIN_Print_Enabled_Newline(bool enabled)
+{
+    MAIN_CPrintf(enabled ? LIGHTGREEN : LIGHTRED, "%s", enabled ? "enabled" : "disabled");
     cprintf(".\r\n");
 }
 
@@ -467,22 +476,13 @@ update_serial_mpu_output()
 
 int main(int argc, char* argv[])
 {
-    textcolor(CYAN);
-    cprintf("\r\n%s ", PROGNAME);
-    textcolor(LIGHTCYAN);
-    cprintf("%s ", MAIN_SBEMU_VER);
-    textcolor(LIGHTGRAY);
-    cprintf("(");
-    textcolor(WHITE);
-    cprintf("https://github.com/crazii/SBEMU");
-    textcolor(LIGHTGRAY);
-    cprintf(")\r\n");
-
-    textcolor(WHITE);
-    cprintf("Sound Blaster emulation on PCI sound cards for DOS.\r\n");
-    textcolor(LIGHTGRAY);
-    cprintf("Based on MPXPlay (drivers) and DOSBox (OPL-3 emulation).\r\n");
-
+    MAIN_CPrintf(CYAN, "\r\n%s ", PROGNAME);
+    MAIN_CPrintf(LIGHTCYAN, "%s ", MAIN_SBEMU_VER);
+    MAIN_CPrintf(LIGHTGRAY,"(");
+    MAIN_CPrintf(WHITE, "https://github.com/crazii/SBEMU");
+    MAIN_CPrintf(LIGHTGRAY, ")\r\n");
+    MAIN_CPrintf(WHITE, "Sound Blaster emulation on PCI sound cards for DOS.\r\n");
+    MAIN_CPrintf(LIGHTGRAY, "Based on MPXPlay (drivers) and DOSBox (OPL-3 emulation).\r\n");
     printf("\n");
 
     if((argc == 2 && stricmp(argv[1],"/?") == 0))
@@ -648,9 +648,7 @@ int main(int argc, char* argv[])
     BOOL enableRM = MAIN_Options[OPT_RM].value;
     if(!enablePM && !enableRM)
     {
-        textcolor(RED);
-        cprintf("Both real mode & protected mode support are disabled, exiting.\r\n");
-        textcolor(LIGHTGRAY);
+        MAIN_CPrintf(RED, "Both real mode & protected mode support are disabled, exiting.\r\n");
         return 1;
     }
 
@@ -668,12 +666,39 @@ int main(int argc, char* argv[])
         printf("Please try use /i5 or /i7 switch, or disable some onboard devices in the BIOS settings to release IRQs.\n");
         return 1;
     }
+    if(aui.card_irq <= 0x07) //SBPCI/CMI use irq 5/7 to gain DOS compatility?
+    {
+        printf("WARNING: Low IRQ %d on master PIC, higher IRQ number is recommended.\nTrying to enable Level triggered mode.\n");
+        //TODO: do we need to do this? 
+        if(aui.card_irq > 2) //don't use level triggering for legacy ISA IRQ (timer/kbd etc)
+        {
+            uint16_t elcr = inpw(0x4D0); //edge level control reg
+            elcr |= (aui.card_irq<<1);
+            outpw(0x4D0, elcr);
+        }
+    }
+    if(aui.card_irq > 15)
+    {
+        printf("Invalid Sound card IRQ: ");
+        MAIN_CPrintf(RED, "%d", aui.card_irq);
+        printf(", Trying to assign a valid IRQ...\n", aui.card_irq);
+        aui.card_irq = pcibios_AssignIRQ(aui.card_pci_dev);
+        if(aui.card_irq == 0xFF)
+        {
+            printf("Failed to assign a valid IRQ for sound card, abort.\n");
+            return 1;
+        }
+        printf("Sound card IRQ assigned: ");
+        MAIN_CPrintf(LIGHTGREEN, "%d", aui.card_irq);
+        printf(".\n");
+    }
+    pcibios_enable_interrupt(aui.card_pci_dev);
 
     printf("Real mode support: ");
-    print_enabled_newline(enableRM);
+    MAIN_Print_Enabled_Newline(enableRM);
 
     printf("Protected mode support: ");
-    print_enabled_newline(enablePM);
+    MAIN_Print_Enabled_Newline(enablePM);
 
     if(enableRM)
     {
@@ -702,7 +727,7 @@ int main(int argc, char* argv[])
 
         //OPL3EMU_Init(aui.freq_card);
         printf("OPL3 emulation at port 388: ");
-        print_enabled_newline(true);
+        MAIN_Print_Enabled_Newline(true);
     }
     
     if(MAIN_Options[OPT_MPUADDR].value && MAIN_Options[OPT_MPUCOMPORT].value)
@@ -722,7 +747,7 @@ int main(int argc, char* argv[])
 
         printf("MPU-401 UART emulation at address %x: ",
                MAIN_Options[OPT_MPUADDR].value);
-        print_enabled_newline(true);
+        MAIN_Print_Enabled_Newline(true);
     }
 
     MAIN_SbemuExtFun.StartPlayback = NULL; //not used
@@ -750,7 +775,7 @@ int main(int argc, char* argv[])
             MAIN_Options[OPT_ADDR].value,
             MAIN_Options[OPT_IRQ].value,
             MAIN_Options[OPT_DMA].value);
-    print_enabled_newline(true);
+    MAIN_Print_Enabled_Newline(true);
 
     BOOL QEMMInstalledVDMA = !enableRM || QEMM_Install_IOPortTrap(MAIN_VDMA_IODT, countof(MAIN_VDMA_IODT), &MAIN_VDMA_IOPT);
     #if MAIN_TRAP_PIC_ONDEMAND//will crash with VIRQ installed, do it temporarily. TODO: figure out why

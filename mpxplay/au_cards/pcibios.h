@@ -117,6 +117,6 @@ void     pcibios_set_master(pci_config_s *);
 void     pcibios_enable_interrupt(pci_config_s*);
 void     pcibios_enable_memmap_set_master(pci_config_s *);
 
-uint8_t  pcibios_GetIRQ(pci_config_s*); //get highset IRQ from PCI IRQ routing options.
+uint8_t  pcibios_AssignIRQ(pci_config_s*); //try to assign IRQ from PCI IRQ routing options.
 
 #endif

@@ -229,6 +229,7 @@ typedef struct mpxplay_audioout_info_s{
  int card_test_index;       //tmp curret test index
  int card_select_index;     //user selection via cmd line
  int card_samples_per_int;  //samples per interrupt
+ struct pci_config_s* card_pci_dev;
  #endif
  struct one_sndcard_info *card_handler; // function structure of the card
  void *card_private_data;        // extra private datas can be pointed here (with malloc)

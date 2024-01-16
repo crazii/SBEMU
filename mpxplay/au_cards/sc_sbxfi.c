@@ -814,6 +814,10 @@ static int EMU20KX_adetect(struct mpxplay_audioout_info_s *aui)
   goto err_adetect;
 
  aui->card_irq = card->irq = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
+#ifdef SBEMU
+ aui->card_pci_dev = card->pci_dev;
+#endif
+ 
  card->subsys_id=pcibios_ReadConfig_Word(card->pci_dev,PCIR_SSID);
 
  mpxplay_debugf(XFI_DEBUG_OUTPUT,"vend_id:%4.4X dev_id:%4.4X subid:%8.8X port:%8.8X",
