@@ -539,7 +539,7 @@ static void cmi8x38_chip_init(struct cmi8x38_card *cm)
   case PCI_DEVICE_ID_CMEDIA_CM8738:
   case PCI_DEVICE_ID_CMEDIA_CM8738B:
        /* PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82437VX */
-       if(pcibios_FindDevice(0x8086, 0x7030,NULL)==PCI_DEVICE_NOTFOUND)
+       if(pcibios_FindDevice(0x8086, 0x7030,NULL)!=PCI_SUCCESSFUL)
         snd_cmipci_set_bit(cm, CM_REG_MISC_CTRL, CM_TXVX); //bit set means TX
        break;
  }
@@ -606,6 +606,7 @@ static int CMI8X38_adetect(struct mpxplay_audioout_info_s *aui)
   goto err_adetect;
 
  pcibios_set_master(card->pci_dev);
+ pcibios_enable_interrupt(card->pci_dev);
 
  card->iobase = pcibios_ReadConfig_Dword(card->pci_dev, PCIR_NAMBAR)&0xfff0;
  if(!card->iobase)

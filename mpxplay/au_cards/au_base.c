@@ -24,6 +24,7 @@
 #ifdef DJGPP
 #include <dpmi.h>
 #include <sys/exceptn.h>
+extern unsigned long __djgpp_selector_limit;
 #endif
 
 //dummy symbol to keep original code unmodified
@@ -190,6 +191,7 @@ unsigned long pds_dpmi_map_physical_memory(unsigned long phys_addr,unsigned long
     newlimit = ((newlimit+1+0xFFF)&~0xFFF)-1;//__dpmi_set_segment_limit need page aligned
     __dpmi_set_segment_limit(_my_ds(), max(limit, newlimit));
     __dpmi_set_segment_limit(__djgpp_ds_alias, max(limit, newlimit));
+    __djgpp_selector_limit = max(limit, newlimit);
     return info.address;
  }
  return 0;
@@ -322,6 +324,7 @@ int pds_dpmi_xms_allocmem(xmsmem_t * mem,unsigned int size)
                 //printf("addr: %08x, limit: %08x\n",mem->linearptr, newlimit);
                 __dpmi_set_segment_limit(_my_ds(), max(limit, newlimit));
                 __dpmi_set_segment_limit(__djgpp_ds_alias, max(limit, newlimit));
+                __djgpp_selector_limit = max(limit, newlimit);
                 return 1;
             }
         }while(0);

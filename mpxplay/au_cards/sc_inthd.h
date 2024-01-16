@@ -456,7 +456,7 @@ enum {
 #define ICH6_REG_RINTCNT        0x5a
 #define ICH6_REG_RIRBCTL        0x5c
 #define  RINTCTL 1 //interrupt, 1=enable
-#define  RIRBDMAEN 2
+#define  RIRBDMAEN 2 //DMA ENable
 #define  RIRBOIC 4 //overrun interrup,t 1=enable
 #define ICH6_REG_RIRBSTS        0x5d
 #define ICH6_REG_RIRBSIZE        0x5e
@@ -491,7 +491,7 @@ enum {
 #define HDA_CORB_MAXSIZE 1024
 #define HDA_CORB_ALIGN 128
 #define HDA_RIRB_MAXSIZE 2048
-#define HDA_RIRB_ALGIN 128
+#define HDA_RIRB_ALIGN 128
 
 /* PCI space */
 #define ICH6_PCIREG_TCSEL    0x44
@@ -514,6 +514,7 @@ enum {
 #define SD_CTL_DMA_START    0x02    /* stream DMA start bit */
 #define SD_CTL_STREAM_TAG_MASK    (0xf << 20)
 #define SD_CTL_STREAM_TAG_SHIFT    20
+#define SD_CTL_BI_OUT           (1<<19) //for bidirectional streams. 1 - output, 0 - input
 
 /* SD_CTL and SD_STS */
 #define SD_INT_DESC_ERR        0x10    /* descriptor error interrupt */
@@ -525,7 +526,7 @@ enum {
 #define RIRB_INT_MASK        0x05
 
 /* INTCTL and INTSTS */
-#define ICH6_INT_ALL_STREAM    0xff       /* all stream interrupts */
+#define ICH6_INT_ALL_STREAM    0x3fffffff       /* all stream interrupts */
 #define ICH6_INT_CTRL_EN    0x40000000 /* controller interrupt enable bit */
 #define ICH6_INT_GLOBAL_EN    0x80000000 /* global interrupt enable bit */
 

@@ -325,6 +325,14 @@ void pcibios_enable_memmap_set_master(pci_config_s *ppkey)
  pcibios_WriteConfig_Byte(ppkey, PCIR_PCICMD, cmd);
 }
 
+void pcibios_enable_interrupt(pci_config_s* ppkey)
+{
+ unsigned int cmd;
+ cmd=pcibios_ReadConfig_Byte(ppkey, PCIR_PCICMD);
+ cmd &= ~(1<<10);
+ pcibios_WriteConfig_Byte(ppkey, PCIR_PCICMD, cmd);
+}
+
 typedef struct
 {
     uint16_t size;

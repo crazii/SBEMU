@@ -65,8 +65,12 @@ struct intelhd_card_s
  uint32_t *table_buffer;
  char *pcmout_buffer;
  long pcmout_bufsize;
- unsigned long* corb_buffer;
- unsigned long long* rirb_buffer;
+ uint32_t* corb_buffer;
+ uint64_t* rirb_buffer;
+ unsigned int  rirb_index;
+ unsigned int  is_count; //input stream count in gcap
+ unsigned int  os_count; //output stream count
+ unsigned int  bs_count; //bidirectional stream count
  unsigned long pcmout_dmasize;
  unsigned int  pcmout_num_periods;
  unsigned long pcmout_period_size;
@@ -177,6 +181,7 @@ static void azx_init_pci(struct intelhd_card_s *card)
  }
 
  pcibios_enable_memmap_set_master(card->pci_dev); // Intel HDA chips uses memory mapping only
+ pcibios_enable_interrupt(card->pci_dev);
 
  if(card->pci_dev->vendor_id != 0x1002) // != ATI
   update_pci_byte(card->pci_dev, ICH6_PCIREG_TCSEL, 0x07, 0);
@@ -198,7 +203,7 @@ static void azx_corb_start(struct intelhd_card_s *chip, int confirm)
   }while(confirm && (--timeout));
   if(!timeout) mpxplay_debugf(IHD_DEBUG_OUTPUT, "stop rirb timeout");
 
-  //start rirb, without RINTCTL it might freeze.
+  //start rirb, without RINTCTL it might freeze (RIRBSTS interrupt bit won't be set on tested PC).
   //IRQ should be mask out if ISR not installed, or else the driver init routine needs a ISR to ack the CORB/RIRB interrupt
   azx_writeb(chip, RIRBCTL, RINTCTL|RIRBDMAEN);
 }
@@ -248,6 +253,7 @@ static void azx_corb_init(struct intelhd_card_s *chip)  // setup CORB command DM
   azx_writew(chip, RINTCNT, 1); //1 response for one interrupt each time
   azx_writew(chip, RIRBWP, RIRBWPRST); //reset rirb write ptr, no need to confirm
   azx_writew(chip, CORBWP, 0);
+  chip->rirb_index = 0;
 
   azx_writew(chip, CORBRP, CORBRPRST); //reset corb read ptr
   //confirm reset
@@ -287,7 +293,7 @@ static void azx_corb_init(struct intelhd_card_s *chip)  // setup CORB command DM
     //printf("Intel HDA: CORBRP timeout %d\n", timeout);
     mpxplay_debugf(IHD_DEBUG_OUTPUT,"corbrp timeout %d\n", timeout);
 
-    if (timeout > 0) {
+    if (timeout > 0) { //this is for some chipset not working with CORB/RIRB
       azx_switch_to_pio(chip);
       pds_delay_10us(100);
     }
@@ -311,40 +317,41 @@ static void azx_single_send_cmd(struct intelhd_card_s *chip,uint32_t val)
 
  if (chip->config_select & AUCARDSCONFIG_IHD_USE_PIO) {
 
-/*
-High Definition Audio Specification rev 1.0a
+  /*
+  High Definition Audio Specification rev 1.0a
 
-The steps for PIO operation are as follows:
-1. Software sets up the PIO verb to be sent out in the Immediate Command Output Register 
-(ICW)
-2. Then software writes a “1” to Immediate Command Status ICB (bit 0 of ICS)
-3. HD Audio Controller sends out the PIO verb on the next frame and waits for response in 
-following frame
-4. When response (in frame after PIO verb frame) is received the HD Audio controller sets the 
-IRV (bit 1 of ICS) and clears ICB (bit 0 of ICS)
-5. Software polls for IRV (Bit 1 of ICS) being set, then the PIO verb response is read from the 
-IRR register and the IRV is cleared by writing a 1 to it
+  The steps for PIO operation are as follows:
+  1. Software sets up the PIO verb to be sent out in the Immediate Command Output Register 
+  (ICW)
+  2. Then software writes a “1” to Immediate Command Status ICB (bit 0 of ICS)
+  3. HD Audio Controller sends out the PIO verb on the next frame and waits for response in 
+  following frame
+  4. When response (in frame after PIO verb frame) is received the HD Audio controller sets the 
+  IRV (bit 1 of ICS) and clears ICB (bit 0 of ICS)
+  5. Software polls for IRV (Bit 1 of ICS) being set, then the PIO verb response is read from the 
+  IRR register and the IRV is cleared by writing a 1 to it
 
-In the case where IRV bit is not set after a long delay, software should implement a timeout 
-condition where the software clears the ICB bit 0 and then polls until ICB bit 0 returns to zero
-*/
- //PIO step1, prepare. make sure not busy, not valid, required by spec
- while((azx_readw(chip, IRS) & ICH6_IRS_BUSY) && (--timeout)) pds_delay_10us(10);
- if(!timeout) mpxplay_debugf(IHD_DEBUG_OUTPUT,"PIO set cmd: busy  timeout %d", timeout);
- azx_writew(chip, IRS, 0); //clear busy, spec permitted
+  In the case where IRV bit is not set after a long delay, software should implement a timeout 
+  condition where the software clears the ICB bit 0 and then polls until ICB bit 0 returns to zero
+  */
+  //PIO step1, prepare. make sure not busy, not valid, required by spec
+  //The preparation is necessary because there might be response left in the IRR by previous writes.
+  while((azx_readw(chip, IRS) & ICH6_IRS_BUSY) && (--timeout)) pds_delay_10us(10);
+  if(!timeout) mpxplay_debugf(IHD_DEBUG_OUTPUT,"PIO set cmd: busy  timeout %d", timeout);
+  azx_writew(chip, IRS, 0); //clear busy, spec permitted
 
- azx_writew(chip, IRS, ICH6_IRS_VALID); //clear valid
+  azx_writew(chip, IRS, ICH6_IRS_VALID); //clear valid
 
- azx_writel(chip, IC, val); //PIO step 1
- azx_writew(chip, IRS, ICH6_IRS_BUSY); //PIO step 2
+  azx_writel(chip, IC, val); //PIO step 1
+  azx_writew(chip, IRS, ICH6_IRS_BUSY); //PIO step 2
 
 #ifdef INTHD_CODEC_EXTRA_DELAY_US
   pds_delay_10us(INTHD_CODEC_EXTRA_DELAY_US/10); // 0.1 ms
 #endif
 
  } else { //Immediate Commands are optional, some devices don't have it, use CORB
-  static int corbsizes[4] = {2, 16, 256, 0};
-  int corbsize = corbsizes[(azx_readw(chip, CORBSIZE)&0x3)];
+  static int corb_rirb_sizes[4] = {2, 16, 256, 0};
+  int corbsize = corb_rirb_sizes[(azx_readw(chip, CORBSIZE)&0x3)];
   int corbindex = azx_readw(chip, CORBWP)&0xFF;
   do
   {
@@ -363,11 +370,14 @@ condition where the software clears the ICB bit 0 and then polls until ICB bit 0
   chip->corb_buffer[corbindex] = val;
   azx_writew(chip, CORBWP, corbindex);
 
-  azx_corb_start(chip, 1); //always nofity the controller, or it will react slow
+  int rirbsize = corb_rirb_sizes[(azx_readw(chip, RIRBSIZE)&0x3)];
+  chip->rirb_index = (chip->rirb_index+1)%rirbsize; //advance to next target pointer
+
+  //azx_corb_start(chip, 1); //always nofity the controller, or it will react slow
  }
 }
 
-static void snd_hda_codec_write(struct intelhd_card_s *chip, hda_nid_t nid,
+static void snd_hda_codec_write_no_response(struct intelhd_card_s *chip, hda_nid_t nid,
                          uint32_t direct,
              unsigned int verb, unsigned int parm)
 {
@@ -410,8 +420,10 @@ static unsigned int azx_get_response(struct intelhd_card_s *chip)
    return resp;
  } else { //Immediate Commands are optional, some devices don't have it, use CORB
 
+  int rirbindex;
   do{
-    if(azx_readb(chip, RIRBSTS)&1)
+    rirbindex = azx_readw(chip, RIRBWP);
+    if((azx_readb(chip, RIRBSTS)&1) && rirbindex == chip->rirb_index)
       break;
     pds_delay_10us(10);
   }while(--timeout);
@@ -419,18 +431,39 @@ static unsigned int azx_get_response(struct intelhd_card_s *chip)
       mpxplay_debugf(IHD_DEBUG_OUTPUT,"RIRB read response timeout %d", timeout);
       return 0; //don't read since its not ready
   }
-  int rirbindex = azx_readw(chip, RIRBWP);
-  long long data = chip->rirb_buffer[rirbindex];
+
+  uint64_t data = chip->rirb_buffer[rirbindex];
+  assert(!((data>>32)&(1<<4))); //solicited
   azx_writeb(chip, RIRBSTS, 1);
   return (unsigned int)(data);
  }
+}
+
+static void snd_hda_codec_write(struct intelhd_card_s *chip, hda_nid_t nid,
+                         uint32_t direct,
+             unsigned int verb, unsigned int parm)
+{
+ snd_hda_codec_write_no_response(chip, nid, direct, verb, parm);
+
+ /*
+ NOTE: every verb will have response, even for write only verbs
+ After snd_hda_codec_write, there will in response in rirb and with interrupt bit set in RIRBSTS
+ when the next verb is a 'read/get', it may mistaken the response of this write as its own
+ if its own response is not ready - it might happen on a slow codec.
+ We need
+ 1. azx_get_response and discard the result (as we're doing here in this function)
+ 2. add a pointer on each write so that rirb read will match the right target slot (chip->rirb_index)
+ Either method will work, we just use both to make it more safety.
+ Method 1 also helps with PIO.
+ */
+ azx_get_response(chip);
 }
 
 static unsigned int snd_hda_codec_read(struct intelhd_card_s *chip, hda_nid_t nid,
                          uint32_t direct,
              unsigned int verb, unsigned int parm)
 {
- snd_hda_codec_write(chip,nid,direct,verb,parm);
+ snd_hda_codec_write_no_response(chip,nid,direct,verb,parm);
  return azx_get_response(chip);
 }
 
@@ -885,7 +918,7 @@ static unsigned int snd_ihd_buffer_init(struct mpxplay_audioout_info_s *aui,stru
 {
  unsigned int bytes_per_sample=(aui->bits_set>16)? 4:2;
 #if SBEMU_USE_CORB
- unsigned long allbufsize=BDL_SIZE+1024 + (HDA_CORB_MAXSIZE+HDA_CORB_ALIGN+HDA_RIRB_MAXSIZE+HDA_RIRB_ALGIN);
+ unsigned long allbufsize=BDL_SIZE+1024 + (HDA_CORB_MAXSIZE+HDA_CORB_ALIGN+HDA_RIRB_MAXSIZE+HDA_RIRB_ALIGN);
 #else
  unsigned long allbufsize=BDL_SIZE+1024;
 #endif
@@ -906,15 +939,19 @@ static unsigned int snd_ihd_buffer_init(struct mpxplay_audioout_info_s *aui,stru
  card->rirb_buffer = (long long*)((uintptr_t)card->corb_buffer + HDA_CORB_MAXSIZE);
  card->pcmout_buffer=(char *)((uintptr_t)card->rirb_buffer+HDA_RIRB_MAXSIZE);
  assert((((uint32_t)card->corb_buffer)&(HDA_CORB_ALIGN-1)) == 0);
- assert((((uint32_t)card->rirb_buffer)&(HDA_RIRB_ALGIN-1)) == 0);
+ assert((((uint32_t)card->rirb_buffer)&(HDA_RIRB_ALIGN-1)) == 0);
 #else
   card->pcmout_buffer=(char *)(beginmem_aligned+BDL_SIZE);
 #endif
 
 
  gcap = (unsigned long)azx_readw(card,GCAP);
- if(!(card->config_select & AUCARDSCONFIG_IHD_USE_FIXED_SDO) && (gcap & 0xF000)) // number of playback streams
-  sdo_offset = ((gcap >> 8) & 0x0F) * 0x20 + 0x80; // number of capture streams
+ card->is_count = (gcap >> 8) & 0xF;
+ card->os_count = (gcap >> 12) & 0xF;
+ card->bs_count = (gcap >> 3) & 0x1F;
+ 
+ if(!(card->config_select & AUCARDSCONFIG_IHD_USE_FIXED_SDO) && (card->os_count || card->bs_count)) // number of playback streams
+  sdo_offset = card->is_count * 0x20 + 0x80; // number of capture streams
  else{
   switch(card->board_driver_type){
    case AZX_DRIVER_ATIHDMI:
@@ -930,6 +967,7 @@ static unsigned int snd_ihd_buffer_init(struct mpxplay_audioout_info_s *aui,stru
 
  card->sd_addr = card->iobase + sdo_offset;
  card->pcmout_num_periods = card->pcmout_bufsize / card->pcmout_period_size;
+ assert(card->pcmout_num_periods>=2); //spec required
 
  return 1;
 }
@@ -942,11 +980,11 @@ static void snd_ihd_hw_init(struct intelhd_card_s *card)
  azx_sd_writeb(card, SD_STS, SD_INT_MASK);
  azx_writeb(card, STATESTS, STATESTS_INT_MASK);
  azx_writeb(card, RIRBSTS, RIRB_INT_MASK);
+ azx_writeb(card, CORBSTS, 1);
+ azx_writel(card, INTCTL, 0);
  azx_writel(card, INTSTS, ICH6_INT_CTRL_EN | ICH6_INT_ALL_STREAM);
- #ifdef SBEMU
- azx_writel(card, INTCTL, azx_readl(card, INTCTL) | ICH6_INT_CTRL_EN | ICH6_INT_GLOBAL_EN | ICH6_INT_ALL_STREAM);
- #else
- azx_writel(card, INTCTL, azx_readl(card, INTCTL) | ICH6_INT_CTRL_EN | ICH6_INT_GLOBAL_EN);
+ #ifndef SBEMU
+  azx_writel(card, INTCTL, azx_readl(card, INTCTL) | ICH6_INT_CTRL_EN | ICH6_INT_GLOBAL_EN);
  #endif
 
  azx_writel(card, DPLBASE, 0);
@@ -1107,6 +1145,10 @@ static void azx_setup_controller(struct intelhd_card_s *card)
 
  mpxplay_debugf(IHD_DEBUG_OUTPUT,"timeout2:%d format:%8.8X",timeout,(int)card->format_val);
 
+ //incase there's no otuput, but only bidrectional streams.
+ if(!card->os_count)
+  azx_sd_writel(card, SD_CTL,(azx_sd_readl(card, SD_CTL)|SD_CTL_BI_OUT));
+
  azx_sd_writel(card, SD_CTL,(azx_sd_readl(card, SD_CTL) & ~SD_CTL_STREAM_TAG_MASK)| (stream_tag << SD_CTL_STREAM_TAG_SHIFT));
  azx_sd_writel(card, SD_CBL, card->pcmout_dmasize);
  azx_sd_writew(card, SD_LVI, card->pcmout_num_periods - 1);
@@ -1114,9 +1156,6 @@ static void azx_setup_controller(struct intelhd_card_s *card)
  azx_sd_writel(card, SD_BDLPL, (uint32_t)pds_cardmem_physicalptr(card->dm, card->table_buffer));
  azx_sd_writel(card, SD_BDLPU, 0); // upper 32 bit
  //azx_sd_writel(card, SD_CTL,azx_sd_readl(card, SD_CTL) | SD_INT_MASK);
- #ifdef SBEMU
- azx_sd_writel(card, SD_CTL,azx_sd_readl(card, SD_CTL) | SD_INT_COMPLETE);
- #endif
  pds_delay_10us(100);
 
  if(card->dac_node[0])
@@ -1480,6 +1519,17 @@ static void INTELHD_start(struct mpxplay_audioout_info_s *aui)
  //azx_writeb(card, INTCTL, azx_readb(card, INTCTL) | (1 << stream_index)); // enable SIE
  //azx_sd_writeb(card, SD_CTL, azx_sd_readb(card, SD_CTL) | SD_CTL_DMA_START | SD_INT_MASK); // start DMA
 
+#ifdef SBEMU
+ //azx_writel(card, INTCTL, ICH6_INT_CTRL_EN | ICH6_INT_GLOBAL_EN | ICH6_INT_ALL_STREAM ); //precise SIE bit used below
+ //SIE bits are ordered: inputs, outputs, bidirectionals
+ azx_writel(card, INTCTL, ICH6_INT_CTRL_EN | ICH6_INT_GLOBAL_EN | (1<<card->is_count)); //enable stream interrupts
+ azx_sd_writeb(card, SD_CTL, azx_sd_readb(card, SD_CTL) | SD_INT_COMPLETE); //enable IOC for SD
+#endif
+#if SBEMU_USE_CORB
+ //not necessary. but we don't write corb on playback, disble interrupt to save a little CPU power
+ azx_writeb(card, RIRBCTL, azx_sd_readb(card, RIRBCTL)&~RINTCTL);
+#endif
+
  azx_sd_writeb(card, SD_CTL, azx_sd_readb(card, SD_CTL) | SD_CTL_DMA_START); // start DMA
 
  timeout = 500;
@@ -1504,6 +1554,9 @@ static void INTELHD_stop(struct mpxplay_audioout_info_s *aui)
 
  //azx_sd_writeb(card, SD_STS, SD_INT_MASK); // to be sure
  //azx_writeb(card, INTCTL,azx_readb(card, INTCTL) & ~(1 << stream_index));
+#if SBEMU_USE_CORB
+ azx_writeb(card, RIRBCTL, azx_sd_readb(card, RIRBCTL)|RINTCTL);
+#endif
 }
 
 static long INTELHD_getbufpos(struct mpxplay_audioout_info_s *aui)
@@ -1561,7 +1614,10 @@ static int INTELHD_IRQRoutine(mpxplay_audioout_info_s* aui)
     azx_writew(card, GSTS, gsts);
   if(statests)
     azx_writew(card, STATESTS, statests);
-  return status | corbsts | rirbsts | gsts | statests;
+  int intsts = azx_readl(card, INTSTS);
+  if(intsts)
+    azx_writel(card, INTSTS, intsts);
+  return status | corbsts | rirbsts | gsts | statests | intsts;
 }
 #endif
 
