@@ -885,7 +885,7 @@ static unsigned int snd_ihd_buffer_init(struct mpxplay_audioout_info_s *aui,stru
 {
  unsigned int bytes_per_sample=(aui->bits_set>16)? 4:2;
 #if SBEMU_USE_CORB
- unsigned long allbufsize=BDL_SIZE+1024 + (HDA_CORB_MAXSIZE+HDA_CORB_ALIGN+HDA_RIRB_MAXSIZE+HDA_RIRB_ALGIN);
+ unsigned long allbufsize=BDL_SIZE+1024 + (HDA_CORB_MAXSIZE+HDA_CORB_ALIGN+HDA_RIRB_MAXSIZE+HDA_RIRB_ALIGN);
 #else
  unsigned long allbufsize=BDL_SIZE+1024;
 #endif
@@ -905,8 +905,8 @@ static unsigned int snd_ihd_buffer_init(struct mpxplay_audioout_info_s *aui,stru
  card->corb_buffer = (long*)((uintptr_t)beginmem_aligned + BDL_SIZE);
  card->rirb_buffer = (long long*)((uintptr_t)card->corb_buffer + HDA_CORB_MAXSIZE);
  card->pcmout_buffer=(char *)((uintptr_t)card->rirb_buffer+HDA_RIRB_MAXSIZE);
- assert(((uint32_t)card->corb_buffer)&(HDA_CORB_ALIGN-1) == 0);
- assert(((uint32_t)card->rirb_buffer)&(HDA_RIRB_ALGIN-1) == 0);
+ assert((((uint32_t)card->corb_buffer)&(HDA_CORB_ALIGN-1)) == 0);
+ assert((((uint32_t)card->rirb_buffer)&(HDA_RIRB_ALIGN-1)) == 0);
 #else
   card->pcmout_buffer=(char *)(beginmem_aligned+BDL_SIZE);
 #endif

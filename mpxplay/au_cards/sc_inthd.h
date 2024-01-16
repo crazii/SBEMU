@@ -491,7 +491,7 @@ enum {
 #define HDA_CORB_MAXSIZE 1024
 #define HDA_CORB_ALIGN 128
 #define HDA_RIRB_MAXSIZE 2048
-#define HDA_RIRB_ALGIN 128
+#define HDA_RIRB_ALIGN 128
 
 /* PCI space */
 #define ICH6_PCIREG_TCSEL    0x44
