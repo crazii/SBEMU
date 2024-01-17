@@ -1,10 +1,12 @@
 #ifndef _DBGUTIL_H_
 #define _DBGUTIL_H_
 #include <stdlib.h>
+#include <string.h>
 #include <stdarg.h>
 #include "dpmi.h"
 
 #define DUMP_BUFF_SIZE 1024U
+#define LOG_WITH_FUNCTION 0
 
 #ifndef DEBUG
 #define DEBUG 0
@@ -23,8 +25,19 @@ extern "C"
 {
 #endif
 
+static inline const char* DBG_FileName(const char* pathname)
+{
+    const char* s = strrchr(pathname, '/');
+    return s ? s+1 : pathname;
+}
+
 void DBG_Logv(const char* fmt, va_list aptr);
-void DBG_Log(const char* fmt, ...);
+void DBG_Logi(const char* fmt, ...);
+#if LOG_WITH_FUNCTION
+#define DBG_Log(...) do { DBG_Logi("%-10s(%04d) %s:\n", DBG_FileName(__FILE__), __LINE__, __func__); DBG_Logi(__VA_ARGS__); } while(0) //old code compatibility
+#else
+#define DBG_Log(...) do { DBG_Logi("%-10s(%04d):", DBG_FileName(__FILE__), __LINE__); DBG_Logi(__VA_ARGS__); } while(0) //old code compatibility
+#endif
 
 //_LOG() can be called in interrupt handler. DO NOT use sys calls, i.e. printf/INT10h in interrupt handler.
 #if _LOG_ENABLE
