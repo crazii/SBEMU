@@ -24,6 +24,7 @@
 
 #include "au_base.h"
 #include "pcibios.h"
+#include "dmairq.h"
 
 #define PCIDEVNUM(bParam)      (bParam >> 3)
 #define PCIFUNCNUM(bParam)     (bParam & 0x07)
@@ -362,10 +363,12 @@ typedef struct
 #pragma pack()
 _Static_assert(sizeof(IRQRoutingTable) == 16, "size error");
 
+#include "../../sbemu/dpmi/dbgutil.h"
 //copied & modified from usbddos
 uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
 {
     uint8_t INTPIN = pcibios_ReadConfig_Byte(ppkey, PCIR_INTR_PIN);
+    _LOG("INTPIN: INT%c#, bdf: %d %d %d\n", 'A'+INTPIN-1, ppkey->bBus, ppkey->bDev, ppkey->bFunc);
     if(INTPIN > 4 || INTPIN < 1) //[1,4]
     {
         assert(FALSE);
@@ -388,6 +391,7 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
     r.DS = 0xF000;
     r.ES = dosmem.segment;
     r.EDI = 0;
+    _LOG("PCI_GET_ROUTING: get size\n");
     pds_dpmi_realmodeint_call(PCI_SERVICE, &r); //get required size
 
     if(((r.EAX>>8)&0xFF) == PCI_BUFFER_SMALL) //intended, should return this
@@ -405,6 +409,7 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
         r.DS = 0xF000;
         r.ES = dosmem.segment;
         r.EDI = 0;
+        _LOG("PCI_GET_ROUTING: get data\n");
         pds_dpmi_realmodeint_call(PCI_SERVICE, &r); //get data
     }
     else
@@ -416,8 +421,9 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
         return 0xFF;
     }
     IRQRoutingTable* table = (IRQRoutingTable*)malloc(buf.size);
+    if(!table)
+        return 0xFF;
     dosget(table, dosmem.linearptr+sizeof(buf), buf.size);
-    pds_dpmi_dos_freemem(&dosmem);
 
     int count = buf.size/sizeof(IRQRoutingTable);
     uint16_t map = 0;
@@ -426,33 +432,54 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
     {
         if(table[i].bus == ppkey->bBus && (table[i].dev>>3) == ppkey->bDev)
         {
-            //printf("b d: %d %d\n", table[i].bus, table[i].dev);
-            //for(int j = 0; j < 4; ++j) printf("link: %d map:%x\n", table[i].intpins[j].link, table[i].intpins[j].map);
+            for(int j = 0; j < 4; ++j) _LOG("link: %d map:%x\n", table[i].intpins[j].link, table[i].intpins[j].map);
             link = table[i].intpins[INTPIN-1].link;
             map = table[i].intpins[INTPIN-1].map;
             break;
         }
     }
+    assert(map != 0 && link != 0); //should be in the table
    
     uint8_t linkedIRQ = 0xFF;
+    uint16_t originalmap = map;
     pci_config_s cfg;
-    if(map)
+    if(map && link)
     {
-        assert(link != 0);
         //iterate all devices to find devices with the same link (wire-ORed)
-        for(int i = 0; i < count; ++i)
+        for(int i = 0; (i < count) && (map != 0); ++i)
         {
             cfg.bBus = table[i].bus;
             cfg.bDev = table[i].dev>>3;
-            for(int j = 0; (j < 4) && (linkedIRQ == 0xFF); ++j)
+            for(int j = 0; (j < 4) && (linkedIRQ == 0xFF) && (map != 0); ++j)
             {
                 if( table[i].intpins[j].link != link)
                     continue;
+                #if 1
+                map &= table[i].intpins[j].map;
+                if(map == 0) //IRQ routing options conflict: same link value but routing options have no intersection
+                {
+                    break;
+                }
+                #endif
                 for(cfg.bFunc = 0; (cfg.bFunc < 8) && (linkedIRQ == 0xFF); ++cfg.bFunc)
                 {
                     uint8_t intpin = pcibios_ReadConfig_Byte(&cfg, PCIR_INTR_PIN);
                     if(intpin-1 == j)
+                    {
                         linkedIRQ = pcibios_ReadConfig_Byte(&cfg, PCIR_INTR_LN);
+                        assert(linkedIRQ == 0xFF || ((1<<linkedIRQ)&&table[i].intpins[j].map) != 0);
+                        if(linkedIRQ != 0xFF)
+                        {
+                            _LOG("Found shared IRQ: %d, pin: INT%c# on bdf %d %d %d\n", linkedIRQ, 'A'+j, cfg.bBus, cfg.bDev, cfg.bFunc);
+                            #if 0
+                            map &= table[i].intpins[j].map;
+                            if(((1<<linkedIRQ)&map) == 0) //not in target map
+                                linkedIRQ = 0xFF;
+                            if(map == 0) //IRQ routing options conflict: same link value but routing options have no intersection
+                                break;
+                            #endif
+                        }
+                    }
                 }
             }
             if(linkedIRQ != 0xFF)
@@ -463,7 +490,7 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
     uint8_t irq = linkedIRQ;
     if(irq != 0xFF)
         pcibios_WriteConfig_Byte(ppkey, PCIR_INTR_LN, irq); //found a shared IRQ, it's gonna work.
-    else
+    else if(map != 0) //no conflict
     {
         if(map&(uint16_t)r.EBX)
             map &= (uint16_t)r.EBX; //prefer PCI dedicated IRQ
@@ -473,48 +500,99 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
             map>>=1;
             ++irq;
         }
+        assert(irq > 2 && irq <= 15);
 
-        if(irq != 0xFF)
+        ENTER_CRITICAL;
+
+        pcibios_clear_regs(r);
+        r.EAX = (PCI_FUNCTION_ID<<8)|PCI_SET_INTERRUPT;
+        r.ECX = (((uint32_t)irq)<<8) | (0xA + INTPIN - 1); //cl=INTPIN (0xA~0xD), ch=IRQ
+        r.EBX = (((uint32_t)ppkey->bBus)<<8) | ((ppkey->bDev<<3)&0xFF) | (ppkey->bFunc&0x7); //bh=bus, bl=dev|func
+        r.DS = 0xF000;
+        _LOG("PCI_SET_INTERRUPT INT%c#->%d\n", 'A'+INTPIN-1, irq);
+        pds_dpmi_realmodeint_call(PCI_SERVICE, &r);
+
+        if(((r.EAX>>8)&0xFF) == PCI_SUCCESSFUL)
         {
-            assert(irq > 2 && irq <= 15);
+            //set PCI_SET_INTERRUPT done, it's gonna work too, but the pci bios 2.1 spec require us to update the IRQ_LINE
+            //for all linked devices (shared INTPIN)
+            //assign to all wire-ORed pin, including input (ppkey)
 
-            pcibios_clear_regs(r);
-            r.EAX = (PCI_FUNCTION_ID<<8)|PCI_SET_INTERRUPT;
-            r.ECX = ((uint32_t)irq<<8) | (0xA + INTPIN - 1); //cl=INTPIN (0xA~0xD), ch=IRQ
-            r.EBX = ((uint32_t)ppkey->bBus<<8) | (ppkey->bDev<<3) | (ppkey->bFunc&0x7); //bh=bus, bl=dev|func
+            #if 0
+            //update link info (previous link could be unassigned - 0? - not gonna happen)
+            buf.off = sizeof(buf);
+            buf.seg = dosmem.segment;
+            dosput(dosmem.linearptr, &buf, sizeof(buf));
+            r.EAX = (PCI_FUNCTION_ID<<8)|PCI_GET_ROUTING;
+            r.EBX = 0;
             r.DS = 0xF000;
-            pds_dpmi_realmodeint_call(PCI_SERVICE, &r);
-
-            if(((r.EAX>>8)&0xFF) == PCI_SUCCESSFUL)
+            r.ES = dosmem.segment;
+            r.EDI = 0;
+            pds_dpmi_realmodeint_call(PCI_SERVICE, &r); //get data again
+            if(((r.EAX>>8)&0xFF) != PCI_SUCCESSFUL) 
             {
-                //set PCI_SET_INTERRUPT done, it's gonna work too, but the pci bios 2.1 spec require us to update the IRQ_LINE
-                //for all linked devices (shared INTPIN)
-                //assign to all wire-ORed pin, including input (ppkey)
-                for(int i = 0; i < count; ++i)
+                pds_dpmi_dos_freemem(&dosmem);
+                free(table);
+                return 0xFF;
+            }
+            dosget(table, dosmem.linearptr+sizeof(buf), buf.size);
+            for(int i = 0; i < count; ++i)
+            {
+                if(table[i].bus == ppkey->bBus && (table[i].dev>>3) == ppkey->bDev)
                 {
-                    cfg.bBus = table[i].bus;
-                    cfg.bDev = table[i].dev>>3;
-                    for(int j = 0; j < 4; ++j)
+                    link = table[i].intpins[INTPIN-1].link;
+                    break;
+                }
+            }
+            assert(link != 0);
+            #endif
+
+            _LOG("set INTLINE for all\n");
+            for(int i = 0; i < count; ++i)
+            {
+                cfg.bBus = table[i].bus;
+                cfg.bDev = table[i].dev>>3;
+                for(int j = 0; j < 4; ++j)
+                {
+                    if(table[i].intpins[j].link != link || (table[i].intpins[j].map&(1<<irq)) == 0)
+                        continue;
+                    for(cfg.bFunc = 0; cfg.bFunc < 8; ++cfg.bFunc)
                     {
-                        if(table[i].intpins[j].link != link)
-                            continue;
-                        for(cfg.bFunc = 0; cfg.bFunc < 8; ++cfg.bFunc)
+                        uint8_t intpin = pcibios_ReadConfig_Byte(&cfg, PCIR_INTR_PIN);
+                        if(intpin-1 == j)
                         {
-                            uint8_t intpin = pcibios_ReadConfig_Byte(&cfg, PCIR_INTR_PIN);
-                            if(intpin-1 == j)
-                            {
-                                assert(pcibios_ReadConfig_Byte(&cfg, PCIR_INTR_LN) == 0xFF);
-                                pcibios_WriteConfig_Byte(&cfg, PCIR_INTR_LN, irq);
-                            }
+                            assert(pcibios_ReadConfig_Byte(&cfg, PCIR_INTR_LN) == 0xFF);
+                            pcibios_WriteConfig_Byte(&cfg, PCIR_INTR_LN, irq);
                         }
                     }
                 }
             }
-            else //TODO: if PCI_SET_INTERRUPT failed, just return the one in routing options, it might work (in test cases of usbddos it will work)
-                irq = 0xFF; //pcibios_WriteConfig_Byte(ppkey, PCIR_INTR_LN, irq);
         }
+        else
+        {
+            _LOG("PCI_SET_INTERRUPT failed\n");
+            irq = 0xFF;
+        }
+
+        LEAVE_CRITICAL;
+    }
+    else if(originalmap != 0) //there's conflict, cannot set irq via pci bios.
+    {
+        map = originalmap;
+        if(map&(uint16_t)r.EBX)
+            map &= (uint16_t)r.EBX; //prefer PCI dedicated IRQ
+        //find the highset available
+        while(map)
+        {
+            map>>=1;
+            ++irq;
+        }
+        assert(irq > 2 && irq <= 15);
+        _LOG("warning: IRQ conflict, set pci config space intline only\n");
+        pcibios_WriteConfig_Byte(ppkey, PCIR_INTR_LN, irq); //only set pci config space irq, tested work in cases of usbddos, but may not work on ther platforms
     }
 
+    pds_dpmi_dos_freemem(&dosmem);
     free(table);
     return irq;
 }
