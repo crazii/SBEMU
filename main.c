@@ -481,7 +481,7 @@ static void MAIN_Cleanup()
     AU_close(&aui);
     if(OPLRMInstalled)
         QEMM_Uninstall_IOPortTrap(&OPL3IOPT);
-    if(OPLPMInstalled);
+    if(OPLPMInstalled)
         HDPMIPT_Uninstall_IOPortTrap(&OPL3IOPT_PM);
     if(MPURMInstalled)
         QEMM_Uninstall_IOPortTrap(&MPUIOPT);
