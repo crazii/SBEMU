@@ -518,8 +518,8 @@ uint16_t DPMI_UninstallISR(DPMI_ISR_HANDLE* inputp handle)
 
 #if RAW_HOOK
     CLIS();
-    DPMI_StoreW(i*4, handle->old_rm_offset);
-    DPMI_StoreW(i*4+2, handle->old_rm_cs);
+    DPMI_StoreW(handle->n*4, handle->old_rm_offset);
+    DPMI_StoreW(handle->n*4+2, handle->old_rm_cs);
     STIL();
 #else
     __dpmi_raddr ra;
