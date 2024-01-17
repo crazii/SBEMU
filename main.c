@@ -474,6 +474,21 @@ update_serial_mpu_output()
     return err;
 }
 
+static BOOL OPLRMInstalled, OPLPMInstalled, MPURMInstalled, MPUPMInstalled;
+static void MAIN_Cleanup()
+{
+    AU_stop(&aui);
+    AU_close(&aui);
+    if(OPLRMInstalled)
+        QEMM_Uninstall_IOPortTrap(&OPL3IOPT);
+    if(OPLPMInstalled);
+        HDPMIPT_Uninstall_IOPortTrap(&OPL3IOPT_PM);
+    if(MPURMInstalled)
+        QEMM_Uninstall_IOPortTrap(&MPUIOPT);
+    if(MPUPMInstalled)
+        HDPMIPT_Uninstall_IOPortTrap(&MPUIOPT_PM);
+}
+
 int main(int argc, char* argv[])
 {
     MAIN_CPrintf(CYAN, "\r\n%s ", PROGNAME);
@@ -660,23 +675,8 @@ int main(int argc, char* argv[])
     AU_init(&aui);
     if(!aui.card_handler)
         return 1;
-    if(aui.card_irq == MAIN_Options[OPT_IRQ].value)
-    {
-        printf("Sound card IRQ conflict, abort.\n");
-        printf("Please try use /i5 or /i7 switch, or disable some onboard devices in the BIOS settings to release IRQs.\n");
-        return 1;
-    }
-    if(aui.card_irq <= 0x07) //SBPCI/CMI use irq 5/7 to gain DOS compatility?
-    {
-        printf("WARNING: Low IRQ %d on master PIC, higher IRQ number is recommended.\nTrying to enable Level triggered mode.\n");
-        //TODO: do we need to do this? 
-        if(aui.card_irq > 2) //don't use level triggering for legacy ISA IRQ (timer/kbd etc)
-        {
-            uint16_t elcr = inpw(0x4D0); //edge level control reg
-            elcr |= (aui.card_irq<<1);
-            outpw(0x4D0, elcr);
-        }
-    }
+    atexit(&MAIN_Cleanup);
+
     if(aui.card_irq > 15)
     {
         printf("Invalid Sound card IRQ: ");
@@ -691,6 +691,23 @@ int main(int argc, char* argv[])
         printf("Sound card IRQ assigned: ");
         MAIN_CPrintf(LIGHTGREEN, "%d", aui.card_irq);
         printf(".\n");
+    }
+    if(aui.card_irq == MAIN_Options[OPT_IRQ].value)
+    {
+        printf("Sound card IRQ %d conflict with options /i%d, abort.\n", aui.card_irq, aui.card_irq);
+        printf("Please try use /i5 or /i7 switch, or disable some onboard devices in the BIOS settings to release IRQs.\n");
+        return 1;
+    }
+    if(aui.card_irq <= 0x07) //SBPCI/CMI use irq 5/7 to gain DOS compatility?
+    {
+        printf("WARNING: Low IRQ %d used for sound card, higher IRQ number(8~15) is recommended.\nTrying to enable Level triggered mode.\n", aui.card_irq);
+        //TODO: do we need to do this? 
+        if(aui.card_irq > 2) //don't use level triggering for legacy ISA IRQ (timer/kbd etc)
+        {
+            uint16_t elcr = inpw(0x4D0); //edge level control reg
+            elcr |= (1<<aui.card_irq);
+            outpw(0x4D0, elcr);
+        }
     }
     pcibios_enable_interrupt(aui.card_pci_dev);
 
@@ -713,15 +730,14 @@ int main(int argc, char* argv[])
 
     if(MAIN_Options[OPT_OPL].value)
     {
-        if(enableRM && !QEMM_Install_IOPortTrap(MAIN_OPL3IODT, 4, &OPL3IOPT))
+        if(enableRM && !(OPLRMInstalled=QEMM_Install_IOPortTrap(MAIN_OPL3IODT, 4, &OPL3IOPT)))
         {
             printf("Error: Failed installing IO port trap for QEMM.\n");
             return 1;
         }
-        if(enablePM && !HDPMIPT_Install_IOPortTrap(0x388, 0x38B, MAIN_OPL3IODT, 4, &OPL3IOPT_PM))
+        if(enablePM && !(OPLPMInstalled=HDPMIPT_Install_IOPortTrap(0x388, 0x38B, MAIN_OPL3IODT, 4, &OPL3IOPT_PM)))
         {
             printf("Error: Failed installing IO port trap for HDPMI.\n");
-            if(enableRM) QEMM_Uninstall_IOPortTrap(&OPL3IOPT);
             return 1;          
         }
 
@@ -733,15 +749,14 @@ int main(int argc, char* argv[])
     if(MAIN_Options[OPT_MPUADDR].value && MAIN_Options[OPT_MPUCOMPORT].value)
     {
         for(int i = 0; i < countof(MAIN_MPUIODT); ++i) MAIN_MPUIODT[i].port = MAIN_Options[OPT_MPUADDR].value+i;
-        if(enableRM && !QEMM_Install_IOPortTrap(MAIN_MPUIODT, 2, &MPUIOPT))
+        if(enableRM && !(MPURMInstalled=QEMM_Install_IOPortTrap(MAIN_MPUIODT, 2, &MPUIOPT)))
         {
             printf("Error: Failed installing MPU-401 IO port trap for QEMM.\n");
             return 1;
         }
-        if(enablePM && !HDPMIPT_Install_IOPortTrap(MAIN_Options[OPT_MPUADDR].value, MAIN_Options[OPT_MPUADDR].value+1, MAIN_MPUIODT, 2, &MPUIOPT_PM))
+        if(enablePM && !(MPUPMInstalled=HDPMIPT_Install_IOPortTrap(MAIN_Options[OPT_MPUADDR].value, MAIN_Options[OPT_MPUADDR].value+1, MAIN_MPUIODT, 2, &MPUIOPT_PM)))
         {
             printf("Error: Failed installing MPU-401 IO port trap for HDPMI.\n");
-            if(enableRM) QEMM_Uninstall_IOPortTrap(&MPUIOPT);
             return 1;
         }
 
@@ -860,12 +875,6 @@ int main(int argc, char* argv[])
     || !HDPMIInstalledVIRQ1 || !HDPMIInstalledVIRQ2 || !HDPMIInstalledSB
     || !(TSR=DPMI_TSR()))
     {
-        if(MAIN_Options[OPT_OPL].value)
-        {
-            if(enableRM) QEMM_Uninstall_IOPortTrap(&OPL3IOPT);
-            if(enablePM) HDPMIPT_Uninstall_IOPortTrap(&OPL3IOPT_PM);
-        }
-
         if(!QEMMInstalledVDMA || !QEMMInstalledVIRQ || !QEMMInstalledSB)
             printf("Error: Failed installing IO port trap for QEMM.\n");
         if(enableRM && QEMMInstalledVDMA) QEMM_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT);
@@ -892,10 +901,10 @@ int main(int argc, char* argv[])
             printf("Error: Failed installing sound card ISR.\n");
         if(!RM_ISR)
             printf("Error: Failed installing sound card ISR.\n");
-        if(PM_ISR) DPMI_UninstallISR(&MAIN_IntHandlePM);
         #if MAIN_INSTALL_RM_ISR
-        if(RM_ISR) DPMI_UninstallISR(&MAIN_IntHandleRM);
+        if(RM_ISR) DPMI_UninstallISR(&MAIN_IntHandleRM); //note: orders are important: reverse order of installation
         #endif
+        if(PM_ISR) DPMI_UninstallISR(&MAIN_IntHandlePM);
         if(!TSR_ISR)
             printf("Error: Failed installing TSR interrupt.\n");
         if(TSR_ISR) DPMI_UninstallISR(&MAIN_TSRIntHandle);
