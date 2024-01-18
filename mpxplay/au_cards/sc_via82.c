@@ -424,10 +424,10 @@ static long VIA82XX_getbufpos(struct mpxplay_audioout_info_s *aui)
  if(card->pci_dev->device_id==PCI_DEVICE_ID_VT82C686){
   count = inl(baseport + VIA_REG_PLAYBACK_CURR_COUNT);
   idx   = inl(baseport + VIA_REG_OFFSET_CURR_PTR);
-  if(idx<=(unsigned long)card->virtualpagetable)
+  if(idx<=(unsigned long)pds_cardmem_physicalptr(card->dm, card->virtualpagetable))
    idx=0;
   else{
-   idx = idx - (unsigned long)card->virtualpagetable;
+   idx = idx - (unsigned long)pds_cardmem_physicalptr(card->dm, card->virtualpagetable);
    idx = idx >> 3; // 2 * 4 bytes
    idx = idx - 1;
    idx = idx % card->pcmout_pages;
