@@ -65,21 +65,61 @@ static const char MAIN_ISR_DOSID_String[] = "Crazii  SBEMU   Sound Blaster emula
 static void MAIN_TSR_InstallationCheck();
 static void MAIN_TSR_Interrupt();
 
+uint16_t main_hw_fmport = 0;
+#define hw_fm_outb(reg,data) outp(main_hw_fmport+reg,data)
+#define hw_fm_inb(reg) inp(main_hw_fmport+reg)
+
+uint16_t main_hw_mpuport = 0;
+#define hw_mpu_outb(reg,data) outp(main_hw_mpuport+reg,data)
+#define hw_mpu_inb(reg) inp(main_hw_mpuport+reg)
+
 static uint32_t MAIN_OPL3_388(uint32_t port, uint32_t val, uint32_t out)
 {
-    return out ? OPL3EMU_PrimaryWriteIndex(val) : OPL3EMU_PrimaryRead(val);
+  if (main_hw_fmport) {
+    if (out) {
+      hw_fm_outb(0, val & 0xff);
+      return val;
+    } else {
+      return hw_fm_inb(0);
+    }
+  }
+  return out ? OPL3EMU_PrimaryWriteIndex(val) : OPL3EMU_PrimaryRead(val);
 }
 static uint32_t MAIN_OPL3_389(uint32_t port, uint32_t val, uint32_t out)
 {
-    return out ? OPL3EMU_PrimaryWriteData(val) : OPL3EMU_PrimaryRead(val);
+  if (main_hw_fmport) {
+    if (out) {
+      hw_fm_outb(1, val & 0xff);
+      return val;
+    } else {
+      return hw_fm_inb(1);
+    }
+  }
+  return out ? OPL3EMU_PrimaryWriteData(val) : OPL3EMU_PrimaryRead(val);
 }
 static uint32_t MAIN_OPL3_38A(uint32_t port, uint32_t val, uint32_t out)
 {
-    return out ? OPL3EMU_SecondaryWriteIndex(val) : OPL3EMU_SecondaryRead(val);
+  if (main_hw_fmport) {
+    if (out) {
+      hw_fm_outb(2, val & 0xff);
+      return val;
+    } else {
+      return hw_fm_inb(2);
+    }
+  }
+  return out ? OPL3EMU_SecondaryWriteIndex(val) : OPL3EMU_SecondaryRead(val);
 }
 static uint32_t MAIN_OPL3_38B(uint32_t port, uint32_t val, uint32_t out)
 {
-    return out ? OPL3EMU_SecondaryWriteData(val) : OPL3EMU_SecondaryRead(val);
+  if (main_hw_fmport) {
+    if (out) {
+      hw_fm_outb(3, val & 0xff);
+      return val;
+    } else {
+      return hw_fm_inb(3);
+    }
+  }
+  return out ? OPL3EMU_SecondaryWriteData(val) : OPL3EMU_SecondaryRead(val);
 }
 
 static uint32_t MAIN_DMA(uint32_t port, uint32_t val, uint32_t out)
@@ -148,18 +188,29 @@ static uint32_t MAIN_MPU_330(uint32_t port, uint32_t val, uint32_t out)
   }
 #endif
   if (out) {
+    if (main_hw_mpuport) {
+      hw_mpu_outb(0, (unsigned char)(val & 0xff));
+    }
     ser_putbyte((int)(val & 0xff));
     return 0;
   } else {
+    uint8_t val, hwval;
+    if (main_hw_mpuport) {
+      hwval = hw_mpu_inb(0);
+    }
     if (mpu_state == 1) {
       mpu_state = 0;
-      return 0xfe;
+      val = 0xfe;
     } else if (mpu_state == 2) {
       mpu_state = 4;
-      return 0xfe;
+      val = 0xfe;
     } else {
-      return 0;
+      val = 0;
     }
+    if (main_hw_mpuport) {
+      val = hwval;
+    }
+    return val;
   }
 }
 static uint32_t MAIN_MPU_331(uint32_t port, uint32_t val, uint32_t out)
@@ -177,6 +228,9 @@ static uint32_t MAIN_MPU_331(uint32_t port, uint32_t val, uint32_t out)
   }
 #endif
   if (out) {
+    if (main_hw_mpuport) {
+      hw_mpu_outb(1, (unsigned char)(val & 0xff));
+    }
     if (val == 0xff) { // Reset
 #if MPU_DEBUG
       mpu_dbg_ctr = 0;
@@ -189,6 +243,10 @@ static uint32_t MAIN_MPU_331(uint32_t port, uint32_t val, uint32_t out)
       mpu_state = 2;
     }
     return 0;
+  }
+  if (main_hw_mpuport) {
+    uint8_t hwval = hw_mpu_inb(1);
+    return hwval;
   }
   if ((mpu_state & 3) == 0) {
     return 0x80;
@@ -331,7 +389,7 @@ struct MAIN_OPT
     "/SC", "Select sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN,
     "/R", "Reset sound card driver", 0, MAIN_SETCMD_HIDDEN,
     "/P", "UART mode MPU-401 IO address (default 330) [*]", 0x330, 0,
-    "/MCOM", "UART mode MPU-401 COM port (1=COM1, 2=COM2, 3=COM3, 4=COM4, otherwise base address)", 0, 0,
+    "/MCOM", "UART mode MPU-401 COM port (1=COM1, 2=COM2, 3=COM3, 4=COM4, 9:HW MPU only, otherwise base address)", 0, 0,
     "/COML", "List installed COM ports", 0, MAIN_SETCMD_HIDDEN,
 #if MPU_DEBUG
     "/MDBG", "Enable MPU-401 debugging (0 to disable, 1 or 2 to enable)", 0, 0,
