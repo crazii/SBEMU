@@ -311,9 +311,9 @@ void pcibios_WriteConfig_Dword(pci_config_s * ppkey, uint16_t wAdr, uint32_t dwD
 void pcibios_set_master(pci_config_s *ppkey)
 {
  unsigned int cmd;
- cmd=pcibios_ReadConfig_Byte(ppkey, PCIR_PCICMD);
+ cmd=pcibios_ReadConfig_Word(ppkey, PCIR_PCICMD);
  cmd|=0x01|0x04;
- pcibios_WriteConfig_Byte(ppkey, PCIR_PCICMD, cmd);
+ pcibios_WriteConfig_Word(ppkey, PCIR_PCICMD, cmd);
 }
 
 void pcibios_enable_memmap_set_master(pci_config_s *ppkey)
@@ -322,15 +322,23 @@ void pcibios_enable_memmap_set_master(pci_config_s *ppkey)
  cmd=pcibios_ReadConfig_Byte(ppkey, PCIR_PCICMD);
  cmd&=~0x01;     // disable io-port mapping
  cmd|=0x02|0x04; // enable memory mapping and set master
- pcibios_WriteConfig_Byte(ppkey, PCIR_PCICMD, cmd);
+ pcibios_WriteConfig_Word(ppkey, PCIR_PCICMD, cmd);
+}
+
+void pcibios_enable_memmap_set_master_all(pci_config_s *ppkey)
+{
+ unsigned int cmd;
+ cmd=pcibios_ReadConfig_Word(ppkey, PCIR_PCICMD);
+ cmd|=0x01|0x02|0x04; // enable io-port mapping and memory mapping and set master
+ pcibios_WriteConfig_Word(ppkey, PCIR_PCICMD, cmd);
 }
 
 void pcibios_enable_interrupt(pci_config_s* ppkey)
 {
  unsigned int cmd;
- cmd=pcibios_ReadConfig_Byte(ppkey, PCIR_PCICMD);
+ cmd=pcibios_ReadConfig_Word(ppkey, PCIR_PCICMD);
  cmd &= ~(1<<10);
- pcibios_WriteConfig_Byte(ppkey, PCIR_PCICMD, cmd);
+ pcibios_WriteConfig_Word(ppkey, PCIR_PCICMD, cmd);
 }
 
 typedef struct
