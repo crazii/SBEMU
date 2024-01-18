@@ -166,6 +166,7 @@ typedef struct au_cardconfig_v0154_s{
   #define AU_CARDS_LINK_IHD     1
   #define AU_CARDS_LINK_SBLIVE  1
   #define AU_CARDS_LINK_VIA82XX 1
+  #define AU_CARDS_LINK_YMF     1
  #endif
  #ifdef AU_CARDS_LINK_WIN
   #define AU_CARDS_LINK_WINDSOUND 1
@@ -187,6 +188,7 @@ typedef struct au_cardconfig_v0154_s{
   #define AU_CARDS_LINK_IHD     1
   #define AU_CARDS_LINK_SBLIVE  1
   #define AU_CARDS_LINK_VIA82XX 1
+  #define AU_CARDS_LINK_YMF     1
  #endif
 #endif
 
