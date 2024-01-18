@@ -364,7 +364,7 @@ typedef struct
 _Static_assert(sizeof(IRQRoutingTable) == 16, "size error");
 
 #include "../../sbemu/dpmi/dbgutil.h"
-#include "../../sbemu/pic.h"
+//#include "../../sbemu/pic.h"
 //copied & modified from usbddos
 //https://people.freebsd.org/~jhb/papers/bsdcan/2007/article/node4.html
 //https://people.freebsd.org/~jhb/papers/bsdcan/2007/article/node5.html
@@ -378,10 +378,18 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
         assert(FALSE);
         return FALSE;
     }
+
+    const int STACK_SIZE = 1024;
+    dosmem_t rmstack = {0};
+    if(!pds_dpmi_dos_allocmem(&rmstack, STACK_SIZE)) //PCI BIOS require a 1K stack but DPMI host may not reserve enough space if ss:sp=0
+        return 0xFF;
     
     dosmem_t dosmem = {0};
     if(!pds_dpmi_dos_allocmem(&dosmem, sizeof(IRQRoutingOptionBuffer)))
+    {
+        pds_dpmi_dos_freemem(&rmstack);
         return 0xFF;
+    }
 
     IRQRoutingOptionBuffer buf;
     buf.size = 0; //get actually size with size=0
@@ -395,6 +403,8 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
     r.DS = 0xF000;
     r.ES = dosmem.segment;
     r.EDI = 0;
+    r.SS = rmstack.segment;
+    r.SP = STACK_SIZE;
     _LOG("PCI_GET_ROUTING: get size\n");
     pds_dpmi_realmodeint_call(PCI_SERVICE, &r); //get required size
 
@@ -402,7 +412,10 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
     {
         dosget(&buf, dosmem.linearptr, sizeof(buf));
         if(buf.size == 0 || !pds_dpmi_dos_allocmem(&dosmem, sizeof(buf) + buf.size)) //buf.size==0 means no PCI devices in the system
+        {
+            pds_dpmi_dos_freemem(&rmstack);
             return 0xFF;
+        }
 
         buf.off = sizeof(buf);
         buf.seg = dosmem.segment;
@@ -413,6 +426,8 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
         r.DS = 0xF000;
         r.ES = dosmem.segment;
         r.EDI = 0;
+        r.SS = rmstack.segment;
+        r.SP = STACK_SIZE;
         _LOG("PCI_GET_ROUTING: get data\n");
         pds_dpmi_realmodeint_call(PCI_SERVICE, &r); //get data
     }
@@ -421,12 +436,17 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
     
     if(((r.EAX>>8)&0xFF) != PCI_SUCCESSFUL) 
     {
+        pds_dpmi_dos_freemem(&rmstack);
         pds_dpmi_dos_freemem(&dosmem);
         return 0xFF;
     }
     IRQRoutingTable* table = (IRQRoutingTable*)malloc(buf.size);
     if(!table)
+    {
+        pds_dpmi_dos_freemem(&rmstack);
+        pds_dpmi_dos_freemem(&dosmem);
         return 0xFF;
+    }
     dosget(table, dosmem.linearptr+sizeof(buf), buf.size);
 
     int count = buf.size/sizeof(IRQRoutingTable);
@@ -502,7 +522,7 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
             map &= ~ATAIRQ;
         if(map&~mouseIRQ) //mask out mouse
             map &= ~mouseIRQ;
-        _LOG("IRQ map: %x", map);
+        _LOG("IRQ map: %x\n", map);
 
         //find the highset available
         while(map)
@@ -515,13 +535,15 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
         //ENTER_CRITICAL;
         //mask out the IRQ incase it's not handled by BIOS by deafult, and system will be overwhelmed by the IRQ
         //code outside is responsible to unmask it.
-        PIC_MaskIRQ(irq); 
+        //PIC_MaskIRQ(irq);
 
         pcibios_clear_regs(r);
         r.EAX = (PCI_FUNCTION_ID<<8)|PCI_SET_INTERRUPT;
         r.ECX = (((uint32_t)irq)<<8) | (0xA + INTPIN - 1); //cl=INTPIN (0xA~0xD), ch=IRQ
         r.EBX = (((uint32_t)ppkey->bBus)<<8) | ((ppkey->bDev<<3)&0xFF) | (ppkey->bFunc&0x7); //bh=bus, bl=dev|func
         r.DS = 0xF000;
+        r.SS = rmstack.segment;
+        r.SP = STACK_SIZE;
         _LOG("PCI_SET_INTERRUPT INT%c#->%d\n", 'A'+INTPIN-1, irq);
         pds_dpmi_realmodeint_call(PCI_SERVICE, &r);
 
@@ -566,7 +588,7 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
         map = originalmap;
         if(map&(uint16_t)r.EBX)
             map &= (uint16_t)r.EBX; //prefer PCI dedicated IRQ
-        _LOG("PCI dedicated IRQ map: %x", map);
+        _LOG("PCI dedicated IRQ map: %x\n", map);
 
         if(map&~ATAIRQ) //mask out ATA
             map &= ~ATAIRQ;
@@ -584,6 +606,7 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
         pcibios_WriteConfig_Byte(ppkey, PCIR_INTR_LN, irq); //only set pci config space irq, tested work in cases of usbddos, but may not work on all PCs
     }
 
+    pds_dpmi_dos_freemem(&rmstack);
     pds_dpmi_dos_freemem(&dosmem);
     free(table);
     return irq;
