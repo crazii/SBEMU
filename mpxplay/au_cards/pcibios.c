@@ -364,7 +364,11 @@ typedef struct
 _Static_assert(sizeof(IRQRoutingTable) == 16, "size error");
 
 #include "../../sbemu/dpmi/dbgutil.h"
+#include "../../sbemu/pic.h"
 //copied & modified from usbddos
+//https://people.freebsd.org/~jhb/papers/bsdcan/2007/article/node4.html
+//https://people.freebsd.org/~jhb/papers/bsdcan/2007/article/node5.html
+//PCI BIOS SPECIFICATION Revision 2.1
 uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
 {
     uint8_t INTPIN = pcibios_ReadConfig_Byte(ppkey, PCIR_INTR_PIN);
@@ -454,13 +458,9 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
             {
                 if( table[i].intpins[j].link != link)
                     continue;
-                #if 1
                 map &= table[i].intpins[j].map;
                 if(map == 0) //IRQ routing options conflict: same link value but routing options have no intersection
-                {
                     break;
-                }
-                #endif
                 for(cfg.bFunc = 0; (cfg.bFunc < 8) && (linkedIRQ == 0xFF); ++cfg.bFunc)
                 {
                     uint8_t intpin = pcibios_ReadConfig_Byte(&cfg, PCIR_INTR_PIN);
@@ -486,14 +486,24 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
                 break;
         }
     }
+    const int mouseIRQ = (1<<12);
+    const int ATAIRQ = (1<<15) | (1<<14);
 
     uint8_t irq = linkedIRQ;
     if(irq != 0xFF)
         pcibios_WriteConfig_Byte(ppkey, PCIR_INTR_LN, irq); //found a shared IRQ, it's gonna work.
     else if(map != 0) //no conflict
     {
+        _LOG("PCI dedicated IRQ map: %x", (uint16_t)r.EBX);
         if(map&(uint16_t)r.EBX)
             map &= (uint16_t)r.EBX; //prefer PCI dedicated IRQ
+
+        if(map&~ATAIRQ) //mask out ATA
+            map &= ~ATAIRQ;
+        if(map&~mouseIRQ) //mask out mouse
+            map &= ~mouseIRQ;
+        _LOG("IRQ map: %x", map);
+
         //find the highset available
         while(map)
         {
@@ -502,7 +512,10 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
         }
         assert(irq > 2 && irq <= 15);
 
-        ENTER_CRITICAL;
+        //ENTER_CRITICAL;
+        //mask out the IRQ incase it's not handled by BIOS by deafult, and system will be overwhelmed by the IRQ
+        //code outside is responsible to unmask it.
+        PIC_MaskIRQ(irq); 
 
         pcibios_clear_regs(r);
         r.EAX = (PCI_FUNCTION_ID<<8)|PCI_SET_INTERRUPT;
@@ -517,36 +530,8 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
             //set PCI_SET_INTERRUPT done, it's gonna work too, but the pci bios 2.1 spec require us to update the IRQ_LINE
             //for all linked devices (shared INTPIN)
             //assign to all wire-ORed pin, including input (ppkey)
-
-            #if 0
-            //update link info (previous link could be unassigned - 0? - not gonna happen)
-            buf.off = sizeof(buf);
-            buf.seg = dosmem.segment;
-            dosput(dosmem.linearptr, &buf, sizeof(buf));
-            r.EAX = (PCI_FUNCTION_ID<<8)|PCI_GET_ROUTING;
-            r.EBX = 0;
-            r.DS = 0xF000;
-            r.ES = dosmem.segment;
-            r.EDI = 0;
-            pds_dpmi_realmodeint_call(PCI_SERVICE, &r); //get data again
-            if(((r.EAX>>8)&0xFF) != PCI_SUCCESSFUL) 
-            {
-                pds_dpmi_dos_freemem(&dosmem);
-                free(table);
-                return 0xFF;
-            }
-            dosget(table, dosmem.linearptr+sizeof(buf), buf.size);
-            for(int i = 0; i < count; ++i)
-            {
-                if(table[i].bus == ppkey->bBus && (table[i].dev>>3) == ppkey->bDev)
-                {
-                    link = table[i].intpins[INTPIN-1].link;
-                    break;
-                }
-            }
-            assert(link != 0);
-            #endif
-
+            int irqmask = (1<<irq);
+            
             _LOG("set INTLINE for all\n");
             for(int i = 0; i < count; ++i)
             {
@@ -554,7 +539,7 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
                 cfg.bDev = table[i].dev>>3;
                 for(int j = 0; j < 4; ++j)
                 {
-                    if(table[i].intpins[j].link != link || (table[i].intpins[j].map&(1<<irq)) == 0)
+                    if(table[i].intpins[j].link != link || (table[i].intpins[j].map&irqmask) == 0)
                         continue;
                     for(cfg.bFunc = 0; cfg.bFunc < 8; ++cfg.bFunc)
                     {
@@ -570,17 +555,24 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
         }
         else
         {
-            _LOG("PCI_SET_INTERRUPT failed\n");
+            _LOG("PCI_SET_INTERRUPT failed %x\n", ((r.EAX>>8)&0xFF));
             irq = 0xFF;
         }
 
-        LEAVE_CRITICAL;
+        //LEAVE_CRITICAL;
     }
     else if(originalmap != 0) //there's conflict, cannot set irq via pci bios.
     {
         map = originalmap;
         if(map&(uint16_t)r.EBX)
             map &= (uint16_t)r.EBX; //prefer PCI dedicated IRQ
+        _LOG("PCI dedicated IRQ map: %x", map);
+
+        if(map&~ATAIRQ) //mask out ATA
+            map &= ~ATAIRQ;
+        if(map&~mouseIRQ) //mask out mouse
+            map &= ~mouseIRQ;
+
         //find the highset available
         while(map)
         {
@@ -589,7 +581,7 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
         }
         assert(irq > 2 && irq <= 15);
         _LOG("warning: IRQ conflict, set pci config space intline only\n");
-        pcibios_WriteConfig_Byte(ppkey, PCIR_INTR_LN, irq); //only set pci config space irq, tested work in cases of usbddos, but may not work on ther platforms
+        pcibios_WriteConfig_Byte(ppkey, PCIR_INTR_LN, irq); //only set pci config space irq, tested work in cases of usbddos, but may not work on all PCs
     }
 
     pds_dpmi_dos_freemem(&dosmem);

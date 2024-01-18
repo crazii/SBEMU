@@ -376,7 +376,7 @@ static void VIA82XX_setrate(struct mpxplay_audioout_info_s *aui)
   if(aui->freq_card==48000)
    rbits = 0xfffff;
   else
-  #ifndef SBEMU
+  #if !defined(SBEMU) || 1 //this one takes fraction into account
    rbits = (0x100000 / 48000) * aui->freq_card + ((0x100000 % 48000) * aui->freq_card) / 48000;
   #else
    rbits = (0x100000 / 48000) * aui->freq_card; //according to datasheet
@@ -392,14 +392,14 @@ static void VIA82XX_start(struct mpxplay_audioout_info_s *aui)
  struct via82xx_card *card=aui->card_private_data;
  if(card->pci_dev->device_id==PCI_DEVICE_ID_VT82C686)
  {
-  #ifdef SBEMU
+  #ifdef SBEMU //enable interrupt
   outb(card->iobase+VIA_REG_OFFSET_TYPE, inb(card->iobase+VIA_REG_OFFSET_TYPE) | VIA_REG_TYPE_INT_LSAMPLE | VIA_REG_TYPE_INT_EOL | VIA_REG_TYPE_INT_FLAG);
   #endif
   outb(card->iobase + VIA_REG_OFFSET_CONTROL, VIA_REG_CTRL_START);
  }
  else
  #ifdef SBEMU
-  outb(card->iobase + VIA_REG_OFFSET_CONTROL, VIA_REG_CTRL_START | VIA_REG_CTRL_AUTOSTART | VIA_REG_CTRL_INT_FLAG | VIA_REG_CTRL_INT_EOL); //enable EOL & FLAG interrupt
+  outb(card->iobase + VIA_REG_OFFSET_CONTROL, VIA_REG_CTRL_START | VIA_REG_CTRL_AUTOSTART | VIA_REG_CTRL_INT_FLAG | VIA_REG_CTRL_INT_EOL | VIA_REG_CTRL_INT_STOP_IDX); //enable EOL & FLAG interrupt
  #else
   outb(card->iobase + VIA_REG_OFFSET_CONTROL, VIA_REG_CTRL_START | VIA_REG_CTRL_AUTOSTART);
  #endif
