@@ -439,7 +439,7 @@ static long VIA82XX_getbufpos(struct mpxplay_audioout_info_s *aui)
  count &= 0xffffff;
 
 #ifdef SBEMU
- if(card->pci_dev->device_id!=PCI_DEVICE_ID_VT82C686 || (count && (count<=PCMBUFFERPAGESIZE))) { //VT8233/8235/8237 's count can be 0 on interrupt
+ if((card->pci_dev->device_id!=PCI_DEVICE_ID_VT82C686 || count) && (count<=PCMBUFFERPAGESIZE)) { //VT8233/8235/8237 's count can be 0 on interrupt
 #else
  if(count && (count<=PCMBUFFERPAGESIZE)) {
 #endif
