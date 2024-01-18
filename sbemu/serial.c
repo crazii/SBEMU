@@ -73,7 +73,7 @@ ser_setup(int stype, unsigned int sdev)
 
     if (iobase == 0) {
         if (sdev != 0) {
-            printf("Invalid COM port %d", sdev);
+            printf("Invalid COM port %d\n", sdev);
             return 1;
         } else {
             return 0;
@@ -113,7 +113,7 @@ ser_putbyte(int c)
 static void
 ser_putchar(int c)
 {
-    if (c == '\n') {
+    if (0==1 && c == '\n') {
         ser_putchar('\r');
     }
 
