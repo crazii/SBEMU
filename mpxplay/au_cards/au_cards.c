@@ -152,6 +152,7 @@ unsigned int is_lfn_support,uselfn,iswin9x;
 #endif
 
 static aucards_writedata_t aucards_writedata_func;
+unsigned char au_cards_fallback_to_null = 0;
 
 void AU_init(struct mpxplay_audioout_info_s *aui)
 {
@@ -341,8 +342,17 @@ auinit_retry:
    goto err_out_auinit;
   }
   if(!aui->card_handler && !(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_SILENT)){
-   pds_textdisplay_printf("No supported soundcard found!");
-   goto err_out_auinit;
+   if (au_cards_fallback_to_null) {
+    static one_sndcard_info *no_sndcard_info[]={&NON_sndcard_info};
+    asip=&no_sndcard_info[0];
+    aui->card_handler=*asip;
+    aui->card_test_index = 1;
+    carddetect(aui,0);
+    pds_textdisplay_printf("Using NULL driver");
+   } else {
+    pds_textdisplay_printf("No supported soundcard found!");
+    goto err_out_auinit;
+   }
   }
  }
 

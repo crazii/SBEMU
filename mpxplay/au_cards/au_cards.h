@@ -292,6 +292,10 @@ extern unsigned int AU_cardbuf_space(struct mpxplay_audioout_info_s *aui);
 #endif
 extern int  AU_writedata(struct mpxplay_audioout_info_s *);
 
+#ifdef SBEMU
+extern unsigned char au_cards_fallback_to_null;
+#endif
+
 #ifdef __cplusplus
 }
 #endif
