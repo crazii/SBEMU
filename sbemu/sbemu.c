@@ -224,6 +224,27 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                 SBEMU_TriggerIRQ = 1;
                 SBEMU_DSPCMD = SBEMU_DSPCMD_INVALID;
                 //SBEMU_ExtFuns->RaiseIRQ(SBEMU_GetIRQ());
+
+                //the client(game) code may use those (similar) code to detect sound blaster:
+                //
+                //static volatile int interrupt_working = 0;
+                //void irq_detect() {interrupt_working = 1; }
+                //...
+                //STI
+                //install_irq_handler(irq_detect);
+                //out(0x220, 0xF2) <---- POINT A, trigger IRQ
+                //if(!interrupt_working) <-----POINT B, check IRQ happens
+                //{ fail: sb not found}
+                //else
+                //{ continue detection }
+                //
+                //for a real sound blaster, irq is trigger imemediately on POINT A, like we directly call SBEMU_ExtFuns->RaiseIRQ(SBEMU_GetIRQ()); here
+                //but SBEMU_ExtFuns->RaiseIRQ(SBEMU_GetIRQ()) will not work because we need a right context 
+                //(i.e. QEMM_GetIOPrtTrap_Context but it is not the original context, and still another context is needed for HDPMI)
+                //so we trigger the SB IRQ in PCI sound card interrupt, but it doesn't happen immediately, only periodically
+                //so when PCI sound card interrupt happens, the client may already exec pass the POINT B
+                //that's why the delay is used here, at POINT A, to wait PCI sound card interrupt so the ISR will issue a virtual SB IRQ before POINT B
+
                 SBEMU_DELAY_FOR_IRQ; //hack: add CPU delay so that sound interrupt raises virtual IRQ when games handler is installed (timing issue)
             }
             break;

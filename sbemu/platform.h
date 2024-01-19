@@ -316,6 +316,12 @@ union REGS {
 
 #define countof(x) (sizeof(x)/sizeof(x[0]))
 
+#ifdef TRUE
+#undef TRUE
+#endif
+#ifdef FALSE
+#undef FALSE
+#endif
 typedef enum {FALSE, TRUE}BOOLEAN;
 typedef int BOOL;
 

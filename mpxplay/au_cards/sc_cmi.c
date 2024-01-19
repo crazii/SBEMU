@@ -606,12 +606,14 @@ static int CMI8X38_adetect(struct mpxplay_audioout_info_s *aui)
   goto err_adetect;
 
  pcibios_set_master(card->pci_dev);
- pcibios_enable_interrupt(card->pci_dev);
 
  card->iobase = pcibios_ReadConfig_Dword(card->pci_dev, PCIR_NAMBAR)&0xfff0;
  if(!card->iobase)
   goto err_adetect;
  aui->card_irq = card->irq = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
+#ifdef SBEMU
+ aui->card_pci_dev = card->pci_dev;
+#endif
  card->chiprev=pcibios_ReadConfig_Byte(card->pci_dev, PCIR_RID);
  card->model  =pcibios_ReadConfig_Word(card->pci_dev, PCIR_SSID);
 

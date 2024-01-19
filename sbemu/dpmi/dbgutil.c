@@ -24,6 +24,7 @@ extern BOOL DPMI_IsInProtectedMode();
 #define VGA_MAX_ROWS 25 //TODO: read VGA mode in BIOS data area and decide rows/cols
 #define VGA_MAX_COLS 80
 #define VGA_ATTR_WHITE_ON_BLACK 0x0F
+#define VGA_ATTR_LIGHTGRAY_ON_BLACK 0x07
 static void VGA_SetCursor(uint32_t offset)
 {
     outp(VGA_CTRL_REGISTER, VGA_OFFSET_HIGH);
@@ -43,7 +44,7 @@ static uint32_t VGA_GetCursor()
     return offset;
 }
 
-static void VGA_SetChar(char character, uint32_t offset)
+static void VGA_SetCharWithAttr(char character, uint32_t offset, char attr)
 {
     #if defined(__BC__)
     if(!DPMI_IsInProtectedMode())
@@ -52,8 +53,13 @@ static void VGA_SetChar(char character, uint32_t offset)
     #endif
     {
         DPMI_StoreB(VGA_VIDEO_ADDRESS + offset*2, (uint8_t)character);
-        DPMI_StoreB(VGA_VIDEO_ADDRESS + offset*2+1, VGA_ATTR_WHITE_ON_BLACK);
+        DPMI_StoreB(VGA_VIDEO_ADDRESS + offset*2+1, attr);
     }
+}
+
+static void VGA_SetChar(char character, uint32_t offset)
+{
+    VGA_SetCharWithAttr(character, offset, VGA_ATTR_WHITE_ON_BLACK);
 }
 
 static uint32_t VGA_GetOffset(uint32_t col, uint32_t row)
@@ -83,7 +89,7 @@ static uint32_t VGA_Scroll(uint32_t offset)
     }
 
     for(uint32_t i = 0; i < VGA_MAX_COLS; ++i)
-        VGA_SetChar(' ', VGA_MAX_COLS * (VGA_MAX_ROWS - 1) + i);
+        VGA_SetCharWithAttr(' ', VGA_MAX_COLS * (VGA_MAX_ROWS - 1) + i, VGA_ATTR_LIGHTGRAY_ON_BLACK);
 
     return offset - VGA_MAX_COLS;
 }
@@ -163,7 +169,7 @@ void DBG_Logv(const char* fmt, va_list aptr)
     #undef SIZE
 }
 
-void DBG_Log(const char* fmt, ...)
+void DBG_Logi(const char* fmt, ...)
 {
     va_list aptr;
     va_start(aptr, fmt);

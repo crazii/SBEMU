@@ -472,16 +472,9 @@ static int INTELICH_adetect(struct mpxplay_audioout_info_s *aui)
  if(!card->baseport_codec)
   goto err_adetect;
  aui->card_irq = card->irq = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
- #ifdef SBEMU
- //on some PC the irq is not well-configured, seen on a 855PM laptop
- if(aui->card_irq == 0xFF || aui->card_irq == 0)
- {
-     aui->card_irq = pcibios_GetIRQ(card->pci_dev);
-     if(aui->card_irq == 0xFF) aui->card_irq = 11; //this does always work
-     pcibios_WriteConfig_Byte(card->pci_dev, PCIR_INTR_LN, aui->card_irq);
-     aui->card_irq = card->irq = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
- }
-  #endif
+#ifdef SBEMU
+ aui->card_pci_dev = card->pci_dev;
+#endif
  
  card->device_type=card->pci_dev->device_type;
 

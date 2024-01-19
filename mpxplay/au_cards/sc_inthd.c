@@ -181,7 +181,6 @@ static void azx_init_pci(struct intelhd_card_s *card)
  }
 
  pcibios_enable_memmap_set_master(card->pci_dev); // Intel HDA chips uses memory mapping only
- pcibios_enable_interrupt(card->pci_dev);
 
  if(card->pci_dev->vendor_id != 0x1002) // != ATI
   update_pci_byte(card->pci_dev, ICH6_PCIREG_TCSEL, 0x07, 0);
@@ -1446,6 +1445,7 @@ static int INTELHD_adetect(struct mpxplay_audioout_info_s *aui)
  aui->card_DMABUFF=card->pcmout_buffer;
 #ifdef SBEMU
  aui->card_irq = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
+ aui->card_pci_dev = card->pci_dev;
  aui->card_samples_per_int = AZX_PERIOD_SIZE / 4;
 #endif
 
@@ -1596,28 +1596,36 @@ static int INTELHD_IRQRoutine(mpxplay_audioout_info_s* aui)
 {
   struct intelhd_card_s *card=aui->card_private_data;
 
-  int status = azx_sd_readb(card, SD_STS)&SD_INT_MASK;
-  if(status)
-    azx_sd_writeb(card, SD_STS, status); //ack all
+  int sdsts = azx_sd_readb(card, SD_STS)&SD_INT_MASK;
+  if(sdsts)
+    azx_sd_writeb(card, SD_STS, sdsts); //ack all
+  sdsts &= azx_sd_readb(card, SD_CTL); //if sdsts is masked by sdctl, then it  is not a valid interrupt (false report when IRQ is shared will cause problems)
 
   //ack CORB/RIRB status
+  #if 0 //TODO: this needs a controller reset
   int corbsts = azx_readb(card, CORBSTS)&0x1;
-  int rirbsts = azx_readb(card, RIRBSTS)&RIRB_INT_MASK;
   if(corbsts)
     azx_writeb(card, CORBSTS, corbsts);
+  #endif
+
+  int rirbsts = azx_readb(card, RIRBSTS)&RIRB_INT_MASK;
   if(rirbsts)
     azx_writeb(card, RIRBSTS, rirbsts);
+  rirbsts &= azx_readb(card, RIRBCTL); //if rirb sts is masked by rirb ctl then it is not a valid interrupt
+
   //ack gsts & statests ?
+  #if 0 //gsts is not an interrupt
   int gsts = azx_readw(card, GSTS);
-  int statests = azx_readw(card, STATESTS);
   if(gsts)
     azx_writew(card, GSTS, gsts);
+  #endif
+
+  int statests = azx_readw(card, STATESTS);
   if(statests)
     azx_writew(card, STATESTS, statests);
-  int intsts = azx_readl(card, INTSTS);
-  if(intsts)
-    azx_writel(card, INTSTS, intsts);
-  return status | corbsts | rirbsts | gsts | statests | intsts;
+  statests &= azx_readw(card, WAKEEN); //same as above
+
+  return sdsts | rirbsts | statests;
 }
 #endif
 

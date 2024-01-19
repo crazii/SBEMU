@@ -278,16 +278,11 @@ static int VIA82XX_adetect(struct mpxplay_audioout_info_s *aui)
  // init chip
  via82xx_chip_init(card);
 
- #ifdef SBEMU
+#ifdef SBEMU
  aui->card_irq = card->irq;
- //printf("VT82 irq: %d\n",aui->card_irq);
- if(aui->card_irq == 0 || aui->card_irq == 0xFF)
- {
-     aui->card_irq = card->irq = pcibios_GetIRQ(card->pci_dev);
-     //pcibios_WriteConfig_Byte(card->pci_dev, PCIR_INTR_LN, aui->card_irq); //RW //delayed in VIA82XX_start
- }
+ aui->card_pci_dev = card->pci_dev;
  aui->card_samples_per_int = PCMBUFFERPAGESIZE / 4;
- #endif
+#endif
 
  return 1;
 
@@ -381,7 +376,7 @@ static void VIA82XX_setrate(struct mpxplay_audioout_info_s *aui)
   if(aui->freq_card==48000)
    rbits = 0xfffff;
   else
-  #ifndef SBEMU
+  #if !defined(SBEMU) || 1 //this one takes fraction into account
    rbits = (0x100000 / 48000) * aui->freq_card + ((0x100000 % 48000) * aui->freq_card) / 48000;
   #else
    rbits = (0x100000 / 48000) * aui->freq_card; //according to datasheet
@@ -397,14 +392,14 @@ static void VIA82XX_start(struct mpxplay_audioout_info_s *aui)
  struct via82xx_card *card=aui->card_private_data;
  if(card->pci_dev->device_id==PCI_DEVICE_ID_VT82C686)
  {
-  #ifdef SBEMU
+  #ifdef SBEMU //enable interrupt
   outb(card->iobase+VIA_REG_OFFSET_TYPE, inb(card->iobase+VIA_REG_OFFSET_TYPE) | VIA_REG_TYPE_INT_LSAMPLE | VIA_REG_TYPE_INT_EOL | VIA_REG_TYPE_INT_FLAG);
   #endif
   outb(card->iobase + VIA_REG_OFFSET_CONTROL, VIA_REG_CTRL_START);
  }
  else
  #ifdef SBEMU
-  outb(card->iobase + VIA_REG_OFFSET_CONTROL, VIA_REG_CTRL_START | VIA_REG_CTRL_AUTOSTART | VIA_REG_CTRL_INT_FLAG | VIA_REG_CTRL_INT_EOL); //enable EOL & FLAG interrupt
+  outb(card->iobase + VIA_REG_OFFSET_CONTROL, VIA_REG_CTRL_START | VIA_REG_CTRL_AUTOSTART | VIA_REG_CTRL_INT_FLAG | VIA_REG_CTRL_INT_EOL | VIA_REG_CTRL_INT_STOP_IDX); //enable EOL & FLAG interrupt
  #else
   outb(card->iobase + VIA_REG_OFFSET_CONTROL, VIA_REG_CTRL_START | VIA_REG_CTRL_AUTOSTART);
  #endif
@@ -429,10 +424,10 @@ static long VIA82XX_getbufpos(struct mpxplay_audioout_info_s *aui)
  if(card->pci_dev->device_id==PCI_DEVICE_ID_VT82C686){
   count = inl(baseport + VIA_REG_PLAYBACK_CURR_COUNT);
   idx   = inl(baseport + VIA_REG_OFFSET_CURR_PTR);
-  if(idx<=(unsigned long)card->virtualpagetable)
+  if(idx<=(unsigned long)pds_cardmem_physicalptr(card->dm, card->virtualpagetable))
    idx=0;
   else{
-   idx = idx - (unsigned long)card->virtualpagetable;
+   idx = idx - (unsigned long)pds_cardmem_physicalptr(card->dm, card->virtualpagetable);
    idx = idx >> 3; // 2 * 4 bytes
    idx = idx - 1;
    idx = idx % card->pcmout_pages;
@@ -444,7 +439,7 @@ static long VIA82XX_getbufpos(struct mpxplay_audioout_info_s *aui)
  count &= 0xffffff;
 
 #ifdef SBEMU
- if(card->pci_dev->device_id!=PCI_DEVICE_ID_VT82C686 || (count && (count<=PCMBUFFERPAGESIZE))) { //VT8233/8235/8237 's count can be 0 on interrupt
+ if((card->pci_dev->device_id!=PCI_DEVICE_ID_VT82C686 || count) && (count<=PCMBUFFERPAGESIZE)) { //VT8233/8235/8237 's count can be 0 on interrupt
 #else
  if(count && (count<=PCMBUFFERPAGESIZE)) {
 #endif

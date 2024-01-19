@@ -71,7 +71,7 @@ typedef unsigned long    uint32_t;
 #define PCI_DEVICE_NOTFOUND    0x86
 #define PCI_BAD_REGNUMBER    0x87
 #define PCI_SET_FAILED        0x88
-#define PCI_BUFFER_SMALL    0x98
+#define PCI_BUFFER_SMALL    0x89
 
 #define PCIR_VID        0x00 // vendor id
 #define    PCIR_DID        0x02 // device id
@@ -118,6 +118,6 @@ void     pcibios_enable_interrupt(pci_config_s*);
 void     pcibios_enable_memmap_set_master(pci_config_s *);
 void     pcibios_enable_memmap_set_master_all(pci_config_s *);
 
-uint8_t  pcibios_GetIRQ(pci_config_s*); //get highset IRQ from PCI IRQ routing options.
+uint8_t  pcibios_AssignIRQ(pci_config_s*); //try to assign IRQ from PCI IRQ routing options.
 
 #endif
