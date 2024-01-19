@@ -146,7 +146,7 @@ void DBG_Logv(const char* fmt, va_list aptr)
     }
     else
     { //direct VGA mode will mess other tools, i.e. SCROLLit, normally use BIOS function
-        #if 1
+        #if 0
         DPMI_REG r = {0};
         for(int i = 0; i < len; ++i)
         {
@@ -161,9 +161,12 @@ void DBG_Logv(const char* fmt, va_list aptr)
             }
         }
         #else //debug out. not used (crashed)
-        textcolor(WHITE);
+        textcolor(DARKGRAY);
+        int crlf = buf[len-1] == '\n';
+        buf[len-1] = crlf ? '\0' : buf[len-1];
         cputs(buf);
         textcolor(LIGHTGRAY);
+        if(crlf) cputs("\r\n");
         #endif
     }
     #undef SIZE
