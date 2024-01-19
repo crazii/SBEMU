@@ -96,16 +96,32 @@ static uint32_t PLTFM_BSF(uint32_t x) { uint32_t i; __asm {bsf eax, x; mov i, ea
 #define _ASM_BEGIN32 _ASM_BEGIN
 #define _ASM_END32 _ASM_END
 #define _ASM_MOVP(x,y) ".att_syntax noprefix\n\t" "mov "#y","#x"\n\t" ".intel_syntax noprefix\n\t"
-#define _ASM_P :
-#define _ASM_OP(x) "=m"(x)
-#define _ASM_IP(x) "m"(x)
-#define _ASM_OP2(x) ,"=m"(x)
-#define _ASM_IP2(x) ,"m"(x)
-#define _ASM_CLOBBER(x) #x
-#define _ASM_CLOBBER2(x) ,#x
-#define _ASM_PLIST ".att_syntax noprefix\n\t"
 #define _ASM_BEGINP _ASM_BEGIN
 #define _ASM_ENDP );
+
+#define _ASM_CONCAT2(arg1, arg2)  arg1##arg2
+#define _ASM_CONCAT1(arg1, arg2)  _ASM_CONCAT2(arg1, arg2)
+#define _ASM_CONCAT(arg1, arg2)   _ASM_CONCAT1(arg1, arg2)
+
+#define _ASM_P1(x, ...) "+m"(x)
+#define _ASM_P2(x, ...) "+m"(x), _ASM_P1(__VA_ARGS__)
+#define _ASM_P3(x, ...) "+m"(x), _ASM_P2(__VA_ARGS__)
+#define _ASM_P4(x, ...) "+m"(x), _ASM_P3(__VA_ARGS__)
+#define _ASM_P5(x, ...) "+m"(x), _ASM_P4(__VA_ARGS__)
+#define _ASM_P6(x, ...) "+m"(x), _ASM_P5(__VA_ARGS__)
+#define _ASM_P7(x, ...) "+m"(x), _ASM_P6(__VA_ARGS__)
+#define _ASM_P8(x, ...) "+m"(x), _ASM_P7(__VA_ARGS__)
+#define _ASM_P9(x, ...) "+m"(x), _ASM_P8(__VA_ARGS__)
+#define _ASM_P10(x, ...) "+m"(x), _ASM_P9(__VA_ARGS__)
+
+#define _ASM_LIST_ARG_N(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, N, ...) N 
+#define _ASM_LIST_RSEQ_N() 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0
+#define _ASM_LIST_NARG_(...) _ASM_LIST_ARG_N(__VA_ARGS__) 
+#define _ASM_LIST_NARG(...) _ASM_LIST_NARG_(__VA_ARGS__, _ASM_LIST_RSEQ_N())
+#define _ASM_PLIST_(N, ...) _ASM_CONCAT(_ASM_P, N)(__VA_ARGS__)
+#define _ASM_PLIST(...) ".att_syntax noprefix\n\t" : _ASM_PLIST_(_ASM_LIST_NARG(__VA_ARGS__), __VA_ARGS__)
+
+//#define _ASM_PLIST ".att_syntax noprefix\n\t" :
 
 #define NOP() asm __volatile__("nop")
 #define CLI() asm __volatile__("cli")
@@ -180,14 +196,7 @@ static inline uint16_t PLTFM_CPU_FLAGS() { uint16_t (* volatile VFN)(void) = &PL
 #define _ASM_SIDT(x) 
 #define _ASM_SGDT(x)
 
-#define _ASM_PLIST
-#define _ASM_P
-#define _ASM_OP(x)
-#define _ASM_IP(x)
-#define _ASM_OP2(x)
-#define _ASM_IP2(x)
-#define _ASM_CLOBBER(x)
-#define _ASM_CLOBBER2(x)
+#define _ASM_PLIST(...)
 #define _ASM_MOVP(x,y)
 #define _ASM_BEGINP {
 #define _ASM_ENDP }
@@ -209,6 +218,10 @@ extern void outpd(uint16_t port, uint32_t val);
 extern int _dos_open(const char* file, int mode, int* fd);
 extern int _dos_close(int fd);
 extern int ioctl(int, int, int, void*);
+extern int _my_cs();
+extern int _my_es();
+extern int _my_ds();
+#define _dos_ds 0
 
 #define DOS_RCVDATA 2
 #define DOS_SNDDATA 3
