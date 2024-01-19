@@ -80,7 +80,7 @@ static uint32_t PLTFM_BSF(uint32_t x) { uint32_t i; __asm {bsf eax, x; mov i, ea
 
 //looks ugly. only if we can work preprocessing with raw string literals (R"()")
 //raw string can work with preprocessor using gcc -E or cpp in the triditional way. need a special pass for file with asm
-#define _ASM_BEGIN asm __volatile__(".intel_syntax noprefix\n\t" 
+#define _ASM_BEGIN __asm__ __volatile__(".intel_syntax noprefix\n\t" 
 #define _ASM_END ".att_syntax noprefix");
 #define _ASM(...) #__VA_ARGS__"\n\t"
 #define _ASMLBL _ASM
@@ -95,6 +95,17 @@ static uint32_t PLTFM_BSF(uint32_t x) { uint32_t i; __asm {bsf eax, x; mov i, ea
 #define _ASM_END16 ".code32\n\t" _ASM_END
 #define _ASM_BEGIN32 _ASM_BEGIN
 #define _ASM_END32 _ASM_END
+#define _ASM_MOVP(x,y) ".att_syntax noprefix\n\t" "mov "#y","#x"\n\t" ".intel_syntax noprefix\n\t"
+#define _ASM_P :
+#define _ASM_OP(x) "=m"(x)
+#define _ASM_IP(x) "m"(x)
+#define _ASM_OP2(x) ,"=m"(x)
+#define _ASM_IP2(x) ,"m"(x)
+#define _ASM_CLOBBER(x) #x
+#define _ASM_CLOBBER2(x) ,#x
+#define _ASM_PLIST ".att_syntax noprefix\n\t"
+#define _ASM_BEGINP _ASM_BEGIN
+#define _ASM_ENDP );
 
 #define NOP() asm __volatile__("nop")
 #define CLI() asm __volatile__("cli")
@@ -167,7 +178,19 @@ static inline uint16_t PLTFM_CPU_FLAGS() { uint16_t (* volatile VFN)(void) = &PL
 #define _ASM_LIDT(x) 
 #define _ASM_LGDT(x) 
 #define _ASM_SIDT(x) 
-#define _ASM_SGDT(x) 
+#define _ASM_SGDT(x)
+
+#define _ASM_PLIST
+#define _ASM_P
+#define _ASM_OP(x)
+#define _ASM_IP(x)
+#define _ASM_OP2(x)
+#define _ASM_IP2(x)
+#define _ASM_CLOBBER(x)
+#define _ASM_CLOBBER2(x)
+#define _ASM_MOVP(x,y)
+#define _ASM_BEGINP {
+#define _ASM_ENDP }
 
 //not defined
 extern void NOP();
