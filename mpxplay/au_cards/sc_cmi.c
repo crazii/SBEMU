@@ -527,10 +527,10 @@ static void cmi8x38_chip_init(struct cmi8x38_card *cm)
  query_chip(cm);
 
  /* initialize codec registers */
- //snd_cmipci_set_bit(cm, CM_REG_MISC_CTRL, CM_RESET); //reset DSP/Bus master
- //pds_delay_10us(10);
- //snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_RESET); //release reset
- //pds_delay_10us(10);
+ snd_cmipci_set_bit(cm, CM_REG_MISC_CTRL, CM_RESET); //reset DSP/Bus master
+ pds_delay_10us(10);
+ snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_RESET); //release reset
+ pds_delay_10us(10);
  //choose the right mixerset based on chip_version
  CMI8X38_choose_mixerset(cm);
 
@@ -746,8 +746,8 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
  // set format
  val = snd_cmipci_read_32(card, CM_REG_CHFORMAT);
  
- //val &= CM_ADCDACLEN_MASK;
- //val |= CM_ADCDACLEN_130; //adc sample resolution
+ val &= CM_ADCDACLEN_MASK;
+ val |= CM_ADCDACLEN_130; //adc sample resolution
 
  val &= ~CM_CH0FMT_MASK;
  val |= card->fmt << CM_CH0FMT_SHIFT;
@@ -854,19 +854,11 @@ static int CMI8X38_IRQRoutine(mpxplay_audioout_info_s* aui)
   }
   unsigned int mask = CM_TDMA_INT_EN;
   if (status & CM_CHINT0)
-  {
-    if(card->chip_version <= 37) //reset counter? don't know if it auto-loops
-    {
-      unsigned int counter = snd_cmipci_read_16(card, CM_REG_CH0_FRAME2);
-      if(counter >= card->dma_size-1)
-        snd_cmipci_write_16(card, CM_REG_CH0_FRAME2, card->dma_size-1);
-    }
     mask |= CM_CH0_INT_EN;
-  }
   if (status & CM_CHINT1)
     mask |= CM_CH1_INT_EN;
-  snd_cmipci_write_32(card, CM_REG_INT_HLDCLR, 0);
-  snd_cmipci_write_32(card, CM_REG_INT_HLDCLR, mask); //re-enable hold
+  snd_cmipci_clear_bit(card, CM_REG_INT_HLDCLR, mask); //set to 0 will disable other interrupt. or write 0 and then with full ENs will work.
+  snd_cmipci_set_bit(card, CM_REG_INT_HLDCLR, mask); //re-enable hold
   return 1;
 }
 #endif
