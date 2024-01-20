@@ -7,4 +7,4 @@ jobs:
         # With thanks to https://stackoverflow.com/a/66358721
         uses: docker://ghcr.io/volkertb/cicd-qemu-dos-docker:v1.6
         with:
-          args: --device=/dev/kvm
+          args: --device=/dev/whatever
