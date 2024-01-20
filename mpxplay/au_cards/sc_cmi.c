@@ -524,10 +524,10 @@ static void cmi8x38_chip_init(struct cmi8x38_card *cm)
  query_chip(cm);
 
  /* initialize codec registers */
- snd_cmipci_set_bit(cm, CM_REG_MISC_CTRL, CM_RESET); //reset DSP/Bus master
- pds_delay_10us(10);
- snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_RESET); //release reset
- pds_delay_10us(10);
+ //snd_cmipci_set_bit(cm, CM_REG_MISC_CTRL, CM_RESET); //reset DSP/Bus master
+ //pds_delay_10us(10);
+ //snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_RESET); //release reset
+ //pds_delay_10us(10);
  //choose the right mixerset based on chip_version
  CMI8X38_choose_mixerset(cm);
 
@@ -684,7 +684,6 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
 
  //reset dac, disable ch
  card->ctrl &= ~CM_CHEN0;
- card->ctrl &= ~CM_CHADC0;
  snd_cmipci_write_32(card, CM_REG_FUNCTRL0, card->ctrl | CM_RST_CH0);
  do{ pds_delay_10us(10);} while(!(snd_cmipci_read_32(card, CM_REG_FUNCTRL0)&CM_RST_CH0));
  snd_cmipci_write_32(card, CM_REG_FUNCTRL0, card->ctrl & ~CM_RST_CH0);
