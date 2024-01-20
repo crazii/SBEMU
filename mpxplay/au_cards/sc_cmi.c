@@ -461,15 +461,13 @@ static int set_dac_channels(cmi8x38_card *cm, int channels)
    snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_ENCENTER);
   }
  }else{*/
-  if(cm->can_multi_ch && cm->chip_version > 37 /*CMI-8738/PCI-SX (037) doesn't have those registers in datasheet*/ ){
+  if(cm->can_multi_ch){
    snd_cmipci_clear_bit(cm, CM_REG_LEGACY_CTRL, CM_NXCHG);
    snd_cmipci_clear_bit(cm, CM_REG_CHFORMAT, CM_CHB3D);
    snd_cmipci_clear_bit(cm, CM_REG_CHFORMAT, CM_CHB3D5C);
    snd_cmipci_clear_bit(cm, CM_REG_LEGACY_CTRL, CM_CHB3D6C);
    snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_ENCENTER);
   }
-  else
-    snd_cmipci_clear_bit(cm, CM_REG_CHFORMAT, CM_PLAYBACK_SRATE_176K | CM_CH0_SRATE_88K);
  //}
  return 0;
 }
@@ -539,8 +537,7 @@ static void cmi8x38_chip_init(struct cmi8x38_card *cm)
  snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, 0);    /* disable channels */
  snd_cmipci_write_32(cm, CM_REG_FUNCTRL1, 0);
 
- //snd_cmipci_write_32(cm, CM_REG_CHFORMAT, snd_cmipci_read_32(cm, CM_REG_CHFORMAT)&CM_CHIP_MASK1);
- snd_cmipci_write_32(cm, CM_REG_CHFORMAT, snd_cmipci_read_32(cm, CM_REG_CHFORMAT)&0xFF000000);
+ snd_cmipci_write_32(cm, CM_REG_CHFORMAT, 0);
  snd_cmipci_set_bit(cm, CM_REG_MISC_CTRL, CM_ENDBDAC|CM_N4SPK3D);
  snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_XCHGDAC);
  /* Set Bus Master Request */
