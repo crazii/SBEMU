@@ -432,9 +432,8 @@ static void snd_cmipci_ch_reset(cmi8x38_card *cm, int ch) //reset ADC
 {
  int reset = CM_RST_CH0 << ch;
  snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, CM_CHADC0 | reset);
- pds_delay_10us(10);
- snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, CM_CHADC0 | (~reset));
- pds_delay_10us(10);
+ snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, CM_CHADC0 & (~reset));
+ pds_delay_10us(1);
 }
 
 static int set_dac_channels(cmi8x38_card *cm, int channels)
@@ -688,10 +687,7 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
  //reset dac, disable ch
  card->ctrl &= ~CM_CHEN0;
  snd_cmipci_write_32(card, CM_REG_FUNCTRL0, card->ctrl | CM_RST_CH0);
- do{ pds_delay_10us(10);} while(!(snd_cmipci_read_32(card, CM_REG_FUNCTRL0)&CM_RST_CH0));
  snd_cmipci_write_32(card, CM_REG_FUNCTRL0, card->ctrl & ~CM_RST_CH0);
- do{ pds_delay_10us(10);} while((snd_cmipci_read_32(card, CM_REG_FUNCTRL0)&CM_RST_CH0));
- pds_delay_10us(10);
 
  //format cfg
  card->fmt=0;
@@ -930,8 +926,8 @@ one_sndcard_info CMI8X38_sndcard_info={
 
 static void CMI8X38_choose_mixerset(struct cmi8x38_card *card)
 {
- if(card->chip_version <= 37)
-  CMI8X38_sndcard_info.card_mixerchans = &cmi8x38_037_mixerset[0];
+ //if(card->chip_version <= 37)
+  //CMI8X38_sndcard_info.card_mixerchans = &cmi8x38_037_mixerset[0];
 }
 
 #endif
