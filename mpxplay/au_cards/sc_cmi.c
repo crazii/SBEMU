@@ -255,6 +255,8 @@
  */
 #define CM_REG_FM_PCI        0x50
 
+#define CM_REG_EXT_MISC		0x90
+
 /*
  * for CMI-8338 .. this is not valid for CMI-8738.
  */
@@ -277,9 +279,10 @@
  * extended registers
  */
 #define CM_REG_CH0_FRAME1    0x80    /* base address */
-#define CM_REG_CH0_FRAME2    0x84
-#define CM_REG_CH1_FRAME1    0x88    /* 0-15: count of samples at bus master; buffer size */
-#define CM_REG_CH1_FRAME2    0x8C    /* 16-31: count of samples at codec; fragment size */
+#define CM_REG_CH0_FRAME2    0x84    /* 0-15: count of samples at bus master; buffer size */
+                                     /* 16-31: count of samples at codec; fragment size */
+#define CM_REG_CH1_FRAME1    0x88
+#define CM_REG_CH1_FRAME2    0x8C
 
 /*
  * size of i/o region
@@ -295,6 +298,8 @@
 /*
  * pci ids
  */
+#define PCI_DEVICE_ID_CMEDIA_CM8338A	0x0100
+#define PCI_DEVICE_ID_CMEDIA_CM8338B	0x0101
 #define PCI_DEVICE_ID_CMEDIA_CM8738  0x0111
 #define PCI_DEVICE_ID_CMEDIA_CM8738B 0x0112
 
@@ -429,11 +434,11 @@ static unsigned int snd_cmipci_rate_freq(unsigned int rate)
  return 7; // 48k
 }
 
-static void snd_cmipci_ch_reset(cmi8x38_card *cm, int ch) //reset ADC
+static void snd_cmipci_ch_reset(cmi8x38_card *cm, int ch) //reset ADC channel 1
 {
  int reset = CM_RST_CH0 << ch;
- snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, CM_CHADC0 | reset);
- snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, CM_CHADC0 & (~reset));
+ snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, CM_CHADC1 | reset);
+ snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, CM_CHADC1 & (~reset));
  pds_delay_10us(1);
 }
 
@@ -522,9 +527,13 @@ static void query_chip(cmi8x38_card *cm)
 static void cmi8x38_chip_init(struct cmi8x38_card *cm)
 {
  unsigned int val;
- cm->ctrl  = 0; // ch0 playback
+ cm->ctrl = 0; // ch0 playback
 
- query_chip(cm);
+ cm->chip_version = 0;
+ cm->max_channels = 2;
+ if (cm->pci_dev->device_id != PCI_DEVICE_ID_CMEDIA_CM8338A &&
+	    cm->pci_dev->device_id != PCI_DEVICE_ID_CMEDIA_CM8338B)
+  query_chip(cm);
 
  /* initialize codec registers */
  snd_cmipci_set_bit(cm, CM_REG_MISC_CTRL, CM_RESET); //reset DSP/Bus master
@@ -533,6 +542,8 @@ static void cmi8x38_chip_init(struct cmi8x38_card *cm)
  pds_delay_10us(10);
  //choose the right mixerset based on chip_version
  CMI8X38_choose_mixerset(cm);
+ if(cm->chip_version <= 37)
+  pcibios_WriteConfig_Dword(cm->pci_dev, 0x40, 0); //disable DMA slave
 
  snd_cmipci_write_32(cm, CM_REG_INT_HLDCLR, 0);    /* disable ints */
  snd_cmipci_ch_reset(cm, CM_CH_PLAY);
@@ -543,6 +554,14 @@ static void cmi8x38_chip_init(struct cmi8x38_card *cm)
  snd_cmipci_write_32(cm, CM_REG_CHFORMAT, 0);
  snd_cmipci_set_bit(cm, CM_REG_MISC_CTRL, CM_ENDBDAC|CM_N4SPK3D);
  snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_XCHGDAC);
+
+ //magic from Linux source
+ if (cm->chip_version) {
+  snd_cmipci_write_8(cm, CM_REG_EXT_MISC, 0x20); /* magic */
+  snd_cmipci_write_8(cm, CM_REG_EXT_MISC + 1, 0x09); /* more magic */
+ }
+ snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_SPD32SEL|CM_AC3EN2); //disable 32bit PCM/AC3
+
  /* Set Bus Master Request */
  snd_cmipci_set_bit(cm, CM_REG_FUNCTRL1, CM_BREQ);
 
@@ -686,9 +705,9 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
  //hw config
 
  //reset dac, disable ch
- card->ctrl &= ~CM_CHEN0;
- snd_cmipci_write_32(card, CM_REG_FUNCTRL0, card->ctrl | CM_RST_CH0);
- snd_cmipci_write_32(card, CM_REG_FUNCTRL0, card->ctrl & ~CM_RST_CH0);
+ //card->ctrl &= ~CM_CHEN0;
+ //snd_cmipci_write_32(card, CM_REG_FUNCTRL0, card->ctrl | CM_RST_CH0);
+ //snd_cmipci_write_32(card, CM_REG_FUNCTRL0, card->ctrl & ~CM_RST_CH0);
 
  //format cfg
  card->fmt=0;
@@ -746,8 +765,8 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
  // set format
  val = snd_cmipci_read_32(card, CM_REG_CHFORMAT);
  
- val &= CM_ADCDACLEN_MASK;
- val |= CM_ADCDACLEN_130; //adc sample resolution
+ //val &= CM_ADCDACLEN_MASK;
+ //val |= CM_ADCDACLEN_130; //adc sample resolution, also 00 will work (highest)
 
  val &= ~CM_CH0FMT_MASK;
  val |= card->fmt << CM_CH0FMT_SHIFT;
@@ -766,18 +785,25 @@ static void CMI8X38_start(struct mpxplay_audioout_info_s *aui)
 {
  struct cmi8x38_card *card=aui->card_private_data;
 #ifdef SBEMU
- snd_cmipci_write_32(card, CM_REG_INT_HLDCLR, CM_TDMA_INT_EN|CM_CH1_INT_EN|CM_CH0_INT_EN);    /* enable ints */
+ snd_cmipci_write_32(card, CM_REG_INT_HLDCLR, CM_CH0_INT_EN);    /* enable ints */
 #endif
  card->ctrl |= CM_CHEN0;
  card->ctrl &= ~CM_PAUSE0;
+ card->ctrl &= ~CM_CHADC0;
  snd_cmipci_write_32(card, CM_REG_FUNCTRL0, card->ctrl);
 }
 
 static void CMI8X38_stop(struct mpxplay_audioout_info_s *aui)
 {
  struct cmi8x38_card *card=aui->card_private_data;
+#ifdef SBEMU
+ snd_cmipci_write_32(card, CM_REG_INT_HLDCLR, 0);    /* disable ints */
+#endif
+ card->ctrl &= ~CM_CHEN0;
  card->ctrl |= CM_PAUSE0;
  snd_cmipci_write_32(card, CM_REG_FUNCTRL0, card->ctrl);
+ snd_cmipci_write_32(card, CM_REG_FUNCTRL0, card->ctrl | CM_RST_CH0);
+ snd_cmipci_write_32(card, CM_REG_FUNCTRL0, card->ctrl & ~CM_RST_CH0);
 }
 
 static long CMI8X38_getbufpos(struct mpxplay_audioout_info_s *aui)
