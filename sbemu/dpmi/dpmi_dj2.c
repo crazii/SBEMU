@@ -547,7 +547,7 @@ uint32_t DPMI_CallOldISR(DPMI_ISR_HANDLE* inputp handle)
     return 0;
 }
 
-uint32_t DPMI_CallOldISRWithContext(DPMI_ISR_HANDLE* inputp handle, DPMI_REG* regs)
+uint32_t DPMI_CallOldISRWithContext(DPMI_ISR_HANDLE* inputp handle, const DPMI_REG* regs)
 {
     DPMI_REG r = *regs; /*make sure regs on the stack, accessed with ebp, not esi/edi/ebx */
     DPMI_ISR_HANDLE h = *handle;
@@ -573,7 +573,6 @@ uint32_t DPMI_CallOldISRWithContext(DPMI_ISR_HANDLE* inputp handle, DPMI_REG* re
 
 uint32_t DPMI_CallRealModeOldISR(DPMI_ISR_HANDLE* inputp handle, DPMI_REG* regs)
 {
-    //DPMI_REG regs = {0};
     DPMI_REG* r = regs;
     r->w.cs = handle->old_rm_cs;
     r->w.ip = handle->old_rm_offset;

@@ -328,6 +328,8 @@ union REGS {
 #define CYAN 0
 #define LIGHTCYAN 0
 #define WHITE 0
+#define LIGHTGRAY 0
+#define DARKGRAY 0
 
 #endif //compiler specific preprossor directive
 
