@@ -52,7 +52,7 @@ jobs:
           ls -lh /dev/kvm
           ls -lh .
           echo "HDPMI32i.EXE" > CICD_DOS.BAT
-          echo "output/sbemu" >> CICD_DOS.BAT
+          echo "output\\sbemu" >> CICD_DOS.BAT
           echo "cd test" >> CICD_DOS.BAT
           echo "stp32 dtmf_src.wav a32sbpdg.dll" >> CICD_DOS.BAT
           /usr/local/bin/run_cicd_dos.sh
