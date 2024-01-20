@@ -2,12 +2,15 @@ on: push
 jobs:
   test:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/volkertb/cicd-qemu-dos-docker:v1.6
+#    container:
+#      image: ghcr.io/volkertb/cicd-qemu-dos-docker:v1.6
     steps:
       - name: Test KVM
         # With thanks to https://github.com/actions/runner-images/discussions/7191#discussioncomment-8184408
         run: |
+          sudo useradd test1
+          sudo usermod -a -G libvirt test1
+          sudo -E bash -c 'exec su -l 'test1
           id
           apt install -y cpu-checker
           kvm-ok
