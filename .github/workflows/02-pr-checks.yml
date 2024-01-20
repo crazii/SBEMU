@@ -7,6 +7,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
       - name: shellcheck build-release-artifacts.sh
         run: |
           shellcheck scripts/build-release-artifacts.sh
@@ -29,6 +31,7 @@ jobs:
             output/sbemu.exe
           retention-days: 1
   test:
+    needs: build
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/volkertb/cicd-qemu-dos-docker:v1.7
