@@ -428,12 +428,12 @@ static unsigned int snd_cmipci_rate_freq(unsigned int rate)
  return 7; // 48k
 }
 
-static void snd_cmipci_ch_reset(cmi8x38_card *cm, int ch)
+static void snd_cmipci_ch_reset(cmi8x38_card *cm, int ch) //reset ADC
 {
  int reset = CM_RST_CH0 << ch;
- snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, reset);
+ snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, CM_CHADC0 | reset);
  pds_delay_10us(10);
- snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, (~reset));
+ snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, CM_CHADC0 | (~reset));
  pds_delay_10us(10);
 }
 
