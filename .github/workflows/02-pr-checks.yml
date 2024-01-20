@@ -41,8 +41,14 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: compiled-sbemu-executable
+      - name: 'Download dependencies'
+        run: |
+          wget https://github.com/crazii/HX/releases/download/v0.1-beta3/HDPMI32i.zip
+          echo "4b7fc576d6c5dfd3fe7290fd1d0c0229118d01a55c8325d487452c2d6e0c3bbd  HDPMI32i.zip" | sha256sum -c
+          unzip HDPMI32i.zip
       - name: Test executable
         run: |
           ls -lh /dev/kvm
-          echo "sbemu /?" > CICD_DOS.BAT
+          echo "HDPMI32i.EXE" > CICD_DOS.BAT
+          echo "sbemu /?" >> CICD_DOS.BAT
           /usr/local/bin/run_cicd_dos.sh
