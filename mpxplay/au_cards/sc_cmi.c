@@ -489,8 +489,11 @@ static void query_chip(cmi8x38_card *cm)
    //else
    // cm->can_ac3_hw = 1;
    //cm->has_dual_dac = 1;
-  }else{ //CMI-8738/PCI-SX, 4 chnannel, bit 31-24 in CM_REG_CHFORMAT VER[0,7]: PCI Audio subversion for internal indentification. "01"
+  }else if(detect == CM_CHIP_037) { //CMI-8738/PCI-SX, 4 chnannel, bit 31-24 in CM_REG_CHFORMAT VER[0,7]: PCI Audio subversion for internal indentification. "01"
    cm->chip_version = 37;
+   cm->max_channels = 2;
+  }else{
+   cm->chip_version = 39;
    cm->max_channels = 2;
    //cm->can_ac3_hw = 1;
    //cm->has_dual_dac = 1;
@@ -746,8 +749,8 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
  // set format
  val = snd_cmipci_read_32(card, CM_REG_CHFORMAT);
  
- val &= CM_ADCDACLEN_MASK;
- val |= CM_ADCDACLEN_130; //adc sample resolution
+ //val &= CM_ADCDACLEN_MASK;
+ //val |= CM_ADCDACLEN_130; //adc sample resolution
 
  val &= ~CM_CH0FMT_MASK;
  val |= card->fmt << CM_CH0FMT_SHIFT;
@@ -770,7 +773,6 @@ static void CMI8X38_start(struct mpxplay_audioout_info_s *aui)
 #endif
  card->ctrl |= CM_CHEN0;
  card->ctrl &= ~CM_PAUSE0;
- card->ctrl &= ~CM_CHADC0;
  snd_cmipci_write_32(card, CM_REG_FUNCTRL0, card->ctrl);
 }
 
