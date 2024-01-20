@@ -23,3 +23,25 @@ jobs:
         run: |
           make CC=gcc CXX=g++
           objdump -x output/sbemu.exe
+      - name: 'Upload built EXE'
+        uses: actions/upload-artifact@v4
+        with:
+          name: compiled-sbemu-executable
+          path: |
+            output/sbemu.exe
+          retention-days: 1
+  test:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/volkertb/cicd-qemu-dos-docker:v1.7
+      options: --device=/dev/kvm --cpus 1
+    steps:
+      - name: 'Download built EXE'
+        uses: actions/download-artifact@v4
+        with:
+          name: compiled-sbemu-executable
+      - name: Test executable
+        run: |
+          ls -lh /dev/kvm
+          echo "sbemu /?" > CICD_DOS.BAT
+          /usr/local/bin/run_cicd_dos.sh
