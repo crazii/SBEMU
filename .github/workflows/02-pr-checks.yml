@@ -23,12 +23,13 @@ jobs:
         run: |
           make CC=gcc CXX=g++
           objdump -x output/sbemu.exe
-      - name: 'Upload built EXE'
+      - name: 'Upload test files'
         uses: actions/upload-artifact@v4
         with:
           name: compiled-sbemu-executable
           path: |
             output/sbemu.exe
+            test/*
           retention-days: 1
   test:
     needs: build
@@ -37,7 +38,7 @@ jobs:
       image: ghcr.io/volkertb/cicd-qemu-dos-docker:v1.7
       options: --device=/dev/kvm --cpus 1
     steps:
-      - name: 'Download built EXE'
+      - name: 'Download test files'
         uses: actions/download-artifact@v4
         with:
           name: compiled-sbemu-executable
@@ -51,6 +52,5 @@ jobs:
           ls -lh /dev/kvm
           echo "HDPMI32i.EXE" > CICD_DOS.BAT
           echo "sbemu" >> CICD_DOS.BAT
-          echo "cd test" >> CICD_DOS.BAT
           echo "stp32 dtmf_src.wav a32sbpdg.dll" >> CICD_DOS.BAT
           /usr/local/bin/run_cicd_dos.sh
