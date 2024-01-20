@@ -2,9 +2,10 @@ on: push
 jobs:
   test:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/volkertb/cicd-qemu-dos-docker:v1.6
+      options: --device=/dev/kvm --cpus 1
     steps:
       - name: Test KVM
-        # With thanks to https://stackoverflow.com/a/66358721
-        uses: docker://ghcr.io/volkertb/cicd-qemu-dos-docker:v1.6
-        with:
-          args: --device=/dev/whatever
+        run: |
+          ls -lh /dev/kvm
