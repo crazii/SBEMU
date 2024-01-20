@@ -28,7 +28,7 @@ jobs:
       - name: 'Upload test files'
         uses: actions/upload-artifact@v4
         with:
-          name: compiled-sbemu-executable
+          name: sbemu-test-files
           path: |
             output/sbemu.exe
             test/*
@@ -43,7 +43,7 @@ jobs:
       - name: 'Download test files'
         uses: actions/download-artifact@v4
         with:
-          name: compiled-sbemu-executable
+          name: sbemu-test-files
       - name: 'Download dependencies'
         run: |
           wget https://github.com/crazii/HX/releases/download/v0.1-beta3/HDPMI32i.zip
@@ -52,6 +52,7 @@ jobs:
       - name: Test executable
         run: |
           ls -lh /dev/kvm
+          ls -lh .
           echo "HDPMI32i.EXE" > CICD_DOS.BAT
           echo "sbemu" >> CICD_DOS.BAT
           echo "stp32 dtmf_src.wav a32sbpdg.dll" >> CICD_DOS.BAT
