@@ -5,3 +5,8 @@ jobs:
     container:
       image: ghcr.io/volkertb/cicd-qemu-dos-docker:v1.6
       options: --device=/dev/kvm
+    steps:
+      - name: Test KVM
+        # With thanks to https://github.com/actions/runner-images/discussions/7191#discussioncomment-8184408
+        run: |
+          ls -lh
