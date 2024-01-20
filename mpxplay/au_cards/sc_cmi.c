@@ -88,7 +88,7 @@
 #define CM_ADCDACLEN_MASK    0x00003000
 #define CM_ADCDACLEN_060    0x00000000
 #define CM_ADCDACLEN_066    0x00001000
-#define CM_ADCDACLEN_130    0x00002000
+#define CM_ADCDACLEN_130    0x00002000 //default
 #define CM_ADCDACLEN_280    0x00003000
 
 #define CM_CH1_SRATE_176K    0x00000800
@@ -372,6 +372,7 @@ typedef struct cmi8x38_card
 
 static void cmi8x38_ac97_write(unsigned int baseport,unsigned int reg, unsigned int value);
 static unsigned int cmi8x38_ac97_read(unsigned int baseport, unsigned int reg);
+static void CMI8X38_choose_mixerset(struct cmi8x38_card *card);
 
 extern unsigned int intsoundconfig,intsoundcontrol;
 
@@ -430,9 +431,10 @@ static unsigned int snd_cmipci_rate_freq(unsigned int rate)
 static void snd_cmipci_ch_reset(cmi8x38_card *cm, int ch)
 {
  int reset = CM_RST_CH0 << ch;
- snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, CM_CHADC0 | reset);
- snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, CM_CHADC0 & (~reset));
- pds_delay_10us(1);
+ snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, reset);
+ pds_delay_10us(10);
+ snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, (~reset));
+ pds_delay_10us(10);
 }
 
 static int set_dac_channels(cmi8x38_card *cm, int channels)
@@ -459,13 +461,15 @@ static int set_dac_channels(cmi8x38_card *cm, int channels)
    snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_ENCENTER);
   }
  }else{*/
-  if(cm->can_multi_ch){
+  if(cm->can_multi_ch && cm->chip_version > 37 /*CMI-8738/PCI-SX (037) doesn't have those registers in datasheet*/ ){
    snd_cmipci_clear_bit(cm, CM_REG_LEGACY_CTRL, CM_NXCHG);
    snd_cmipci_clear_bit(cm, CM_REG_CHFORMAT, CM_CHB3D);
    snd_cmipci_clear_bit(cm, CM_REG_CHFORMAT, CM_CHB3D5C);
    snd_cmipci_clear_bit(cm, CM_REG_LEGACY_CTRL, CM_CHB3D6C);
    snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_ENCENTER);
   }
+  else
+    snd_cmipci_clear_bit(cm, CM_REG_CHFORMAT, CM_PLAYBACK_SRATE_176K | CM_CH0_SRATE_88K);
  //}
  return 0;
 }
@@ -487,7 +491,7 @@ static void query_chip(cmi8x38_card *cm)
    //else
    // cm->can_ac3_hw = 1;
    //cm->has_dual_dac = 1;
-  }else{
+  }else{ //CMI-8738/PCI-SX, 4 chnannel, bit 31-24 in CM_REG_CHFORMAT VER[0,7]: PCI Audio subversion for internal indentification. "01"
    cm->chip_version = 37;
    cm->max_channels = 2;
    //cm->can_ac3_hw = 1;
@@ -522,13 +526,21 @@ static void cmi8x38_chip_init(struct cmi8x38_card *cm)
  query_chip(cm);
 
  /* initialize codec registers */
+ snd_cmipci_set_bit(cm, CM_REG_MISC_CTRL, CM_RESET); //reset DSP/Bus master
+ pds_delay_10us(10);
+ snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_RESET); //release reset
+ pds_delay_10us(10);
+ //choose the right mixerset based on chip_version
+ CMI8X38_choose_mixerset(cm);
+
  snd_cmipci_write_32(cm, CM_REG_INT_HLDCLR, 0);    /* disable ints */
  snd_cmipci_ch_reset(cm, CM_CH_PLAY);
  snd_cmipci_ch_reset(cm, CM_CH_CAPT);
  snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, 0);    /* disable channels */
  snd_cmipci_write_32(cm, CM_REG_FUNCTRL1, 0);
 
- snd_cmipci_write_32(cm, CM_REG_CHFORMAT, 0);
+ //snd_cmipci_write_32(cm, CM_REG_CHFORMAT, snd_cmipci_read_32(cm, CM_REG_CHFORMAT)&CM_CHIP_MASK1);
+ snd_cmipci_write_32(cm, CM_REG_CHFORMAT, snd_cmipci_read_32(cm, CM_REG_CHFORMAT)&0xFF000000);
  snd_cmipci_set_bit(cm, CM_REG_MISC_CTRL, CM_ENDBDAC|CM_N4SPK3D);
  snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_XCHGDAC);
  /* Set Bus Master Request */
@@ -675,8 +687,12 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
 
  //reset dac, disable ch
  card->ctrl &= ~CM_CHEN0;
+ card->ctrl &= ~CM_CHADC0;
  snd_cmipci_write_32(card, CM_REG_FUNCTRL0, card->ctrl | CM_RST_CH0);
+ do{ pds_delay_10us(10);} while(!(snd_cmipci_read_32(card, CM_REG_FUNCTRL0)&CM_RST_CH0));
  snd_cmipci_write_32(card, CM_REG_FUNCTRL0, card->ctrl & ~CM_RST_CH0);
+ do{ pds_delay_10us(10);} while((snd_cmipci_read_32(card, CM_REG_FUNCTRL0)&CM_RST_CH0));
+ pds_delay_10us(10);
 
  //format cfg
  card->fmt=0;
@@ -733,6 +749,10 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
 
  // set format
  val = snd_cmipci_read_32(card, CM_REG_CHFORMAT);
+ 
+ val &= CM_ADCDACLEN_MASK;
+ val |= CM_ADCDACLEN_130; //adc sample resolution
+
  val &= ~CM_CH0FMT_MASK;
  val |= card->fmt << CM_CH0FMT_SHIFT;
  snd_cmipci_write_32(card, CM_REG_CHFORMAT, val);
@@ -754,6 +774,7 @@ static void CMI8X38_start(struct mpxplay_audioout_info_s *aui)
 #endif
  card->ctrl |= CM_CHEN0;
  card->ctrl &= ~CM_PAUSE0;
+ card->ctrl &= ~CM_CHADC0;
  snd_cmipci_write_32(card, CM_REG_FUNCTRL0, card->ctrl);
 }
 
@@ -867,6 +888,20 @@ static aucards_allmixerchan_s cmi8x38_mixerset[]={
  NULL
 };
 
+//8338/8738/PCI-SX. they don't have SB16 compatible mixers on datasheet, but SBPro compatible mixers
+//like SBPro
+static aucards_onemixerchan_s cmi8x38_037_master_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_MASTER,AU_MIXCHANFUNC_VOLUME),2,{{0x22,15,4,0},{0x22,15,0,0}}};
+static aucards_onemixerchan_s cmi8x38_037_pcm_vol   ={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_PCM,AU_MIXCHANFUNC_VOLUME)   ,2,{{0x04,15,4,0},{0x04,15,0,0}}};
+static aucards_onemixerchan_s cmi8x38_037_synth_vol   ={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_SYNTH,AU_MIXCHANFUNC_VOLUME)   ,2,{{0x26,15,4,0},{0x26,15,0,0}}};
+
+static aucards_allmixerchan_s cmi8x38_037_mixerset[]={
+ &cmi8x38_037_master_vol,
+ &cmi8x38_037_pcm_vol,
+ &cmi8x38_037_synth_vol,
+ NULL
+};
+
+
 one_sndcard_info CMI8X38_sndcard_info={
  "CMI 8338/8738",
  SNDCARD_LOWLEVELHAND|SNDCARD_INT08_ALLOWED,
@@ -894,5 +929,11 @@ one_sndcard_info CMI8X38_sndcard_info={
  &CMI8X38_readMIXER,
  &cmi8x38_mixerset[0]
 };
+
+static void CMI8X38_choose_mixerset(struct cmi8x38_card *card)
+{
+ if(card->chip_version <= 37)
+  CMI8X38_sndcard_info.card_mixerchans = &cmi8x38_037_mixerset[0];
+}
 
 #endif
