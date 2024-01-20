@@ -184,7 +184,8 @@
 
     /* byte */
 #define CM_REG_MIXER0        0x20
-
+#define CM_REG_MIXERC       0x21
+#define  CM_X_SB16          0x01
 #define CM_REG_SB16_DATA    0x22
 #define CM_REG_SB16_ADDR    0x23
 
@@ -853,7 +854,15 @@ static int CMI8X38_IRQRoutine(mpxplay_audioout_info_s* aui)
   }
   unsigned int mask = CM_TDMA_INT_EN;
   if (status & CM_CHINT0)
+  {
+    if(card->chip_version <= 37) //reset counter? don't know if it auto-loops
+    {
+      unsigned int counter = snd_cmipci_read_16(card, CM_REG_CH0_FRAME2);
+      if(counter >= card->dma_size-1)
+        snd_cmipci_write_16(card, CM_REG_CH0_FRAME2, card->dma_size-1);
+    }
     mask |= CM_CH0_INT_EN;
+  }
   if (status & CM_CHINT1)
     mask |= CM_CH1_INT_EN;
   snd_cmipci_write_32(card, CM_REG_INT_HLDCLR, 0);
@@ -926,8 +935,12 @@ one_sndcard_info CMI8X38_sndcard_info={
 
 static void CMI8X38_choose_mixerset(struct cmi8x38_card *card)
 {
- //if(card->chip_version <= 37)
-  //CMI8X38_sndcard_info.card_mixerchans = &cmi8x38_037_mixerset[0];
+ if(card->chip_version <= 37)
+ {
+  snd_cmipci_write_8(card, CM_REG_MIXERC, snd_cmipci_read_8(card, CM_REG_MIXERC)&~CM_X_SB16); //disable sb16 compatible mode
+  snd_cmipci_write_8(card, CM_REG_MIXER1, snd_cmipci_read_8(card, CM_REG_MIXER1)&~(CM_FMMUTE|CM_WSMUTE)); //unmute FM/PCM
+  CMI8X38_sndcard_info.card_mixerchans = &cmi8x38_037_mixerset[0];
+ }
 }
 
 #endif
