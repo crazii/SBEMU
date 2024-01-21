@@ -16,7 +16,7 @@ jobs:
   release-job:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/volkertb/debian-djgpp:v0.2
+      image: ghcr.io/volkertb/debian-djgpp:v0.3
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
