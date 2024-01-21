@@ -11,6 +11,7 @@ jobs:
         uses: actions/checkout@v3
       - name: shellcheck shell scripts
         run: |
+          shellcheck scripts/build-in-container.sh
           shellcheck scripts/build-release-artifacts.sh
           shellcheck test/run_cicd_dos.sh
   build:

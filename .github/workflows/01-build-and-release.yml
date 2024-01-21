@@ -15,8 +15,6 @@ permissions:
 jobs:
   release-job:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/volkertb/debian-djgpp:v0.3
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -33,11 +31,9 @@ jobs:
           includeInvalidCommits: true
           excludeTypes: ""
       - name: Build project
-        run: |
-          cd $GITHUB_WORKSPACE/src
-          test -f main.c
-          make CC=gcc CXX=g++
-          test -f output/sbemu.exe
+        uses: docker://ghcr.io/volkertb/debian-djgpp:v0.2
+        with:
+          entrypoint: src/scripts/build-in-container.sh
       - name: Combine changelog and user instructions into release notes
         run: |
           cat $GITHUB_WORKSPACE/CHANGELOG.md $GITHUB_WORKSPACE/src/user_instructions.md > $GITHUB_WORKSPACE/RELEASE_NOTES.md
