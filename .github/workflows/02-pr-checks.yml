@@ -56,6 +56,7 @@ jobs:
           echo "output\\sbemu" >> CICD_DOS.BAT
           echo "cd test" >> CICD_DOS.BAT
           echo "ren dos32a.exe dos4gw.exe" >> CICD_DOS.BAT
+          echo "ECHO Current BLASTER variable: %BLASTER%" >> CICD_DOS.BAT
           echo "stp32 dtmf_src.wav a32sbpdg.dll" >> CICD_DOS.BAT
           cp -f test/run_cicd_dos.sh /usr/local/bin/
           chmod +x /usr/local/bin/run_cicd_dos.sh
