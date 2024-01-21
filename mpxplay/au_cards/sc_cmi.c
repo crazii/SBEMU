@@ -534,6 +534,8 @@ static void cmi8x38_chip_init(struct cmi8x38_card *cm)
 	    cm->pci_dev->device_id != PCI_DEVICE_ID_CMEDIA_CM8338B)
   query_chip(cm);
 
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "chip version: %d, multi_chan: %d" cm->chip_version, cm->can_multi_ch);
+
  /* initialize codec registers */
  snd_cmipci_set_bit(cm, CM_REG_MISC_CTRL, CM_RESET); //reset DSP/Bus master
  pds_delay_10us(10);
@@ -894,9 +896,9 @@ static int CMI8X38_IRQRoutine(mpxplay_audioout_info_s* aui)
 static aucards_onemixerchan_s cmi8x38_master_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_MASTER,AU_MIXCHANFUNC_VOLUME),2,{{0x30,31,3,0},{0x31,31,3,0}}};
 static aucards_onemixerchan_s cmi8x38_pcm_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_PCM,AU_MIXCHANFUNC_VOLUME),      2,{{0x32,31,3,0},{0x33,31,3,0}}};
 static aucards_onemixerchan_s cmi8x38_synth_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_SYNTH,AU_MIXCHANFUNC_VOLUME),  2,{{0x34,31,3,0},{0x35,31,3,0}}};
-static aucards_onemixerchan_s cmi8x38_cdin_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_CDIN,AU_MIXCHANFUNC_VOLUME),    2,{{0x36,31,3,0},{0x37,31,3,0}}};
-static aucards_onemixerchan_s cmi8x38_linein_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_LINEIN,AU_MIXCHANFUNC_VOLUME),2,{{0x38,31,3,0},{0x39,31,3,0}}};
-static aucards_onemixerchan_s cmi8x38_micin_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_MICIN,AU_MIXCHANFUNC_VOLUME),  1,{{0x3A,31,3,0}}};
+//static aucards_onemixerchan_s cmi8x38_cdin_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_CDIN,AU_MIXCHANFUNC_VOLUME),    2,{{0x36,31,3,0},{0x37,31,3,0}}};
+//static aucards_onemixerchan_s cmi8x38_linein_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_LINEIN,AU_MIXCHANFUNC_VOLUME),2,{{0x38,31,3,0},{0x39,31,3,0}}};
+//static aucards_onemixerchan_s cmi8x38_micin_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_MICIN,AU_MIXCHANFUNC_VOLUME),  1,{{0x3A,31,3,0}}};
 //FM for SBPro - don't write to it as in previous SBPro mixer test it might be reserved.
 //static aucards_onemixerchan_s cmi8x38_auxin_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_AUXIN,AU_MIXCHANFUNC_VOLUME),  2,{{0x26,15,4,0},{0x26,15,0,0}}}; //??? in or out?
 
@@ -904,9 +906,9 @@ static aucards_allmixerchan_s cmi8x38_mixerset[]={
  &cmi8x38_master_vol,
  &cmi8x38_pcm_vol,
  &cmi8x38_synth_vol,
- &cmi8x38_cdin_vol,
- &cmi8x38_linein_vol,
- &cmi8x38_micin_vol,
+ //&cmi8x38_cdin_vol,
+ //&cmi8x38_linein_vol,
+ //&cmi8x38_micin_vol,
  //&cmi8x38_auxin_vol,
  NULL
 };
