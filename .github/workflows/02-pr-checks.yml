@@ -61,3 +61,4 @@ jobs:
           cp -f test/run_cicd_dos.sh /usr/local/bin/
           chmod +x /usr/local/bin/run_cicd_dos.sh
           /usr/local/bin/run_cicd_dos.sh
+          ls -lh
