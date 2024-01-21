@@ -36,6 +36,7 @@
 #else
 #define PCMBUFFERPAGESIZE      4096
 #endif
+#define PCMBUFFERALIGNMENT     4096
 
 /*
  * CM8x38 registers definition
@@ -652,9 +653,9 @@ static int CMI8X38_adetect(struct mpxplay_audioout_info_s *aui)
  card->pcmout_bufsize=MDma_get_max_pcmoutbufsize(aui,0,PCMBUFFERPAGESIZE,2,0);
 
  card->dm=MDma_alloc_cardmem( card->pcmout_bufsize      // pcm output
-                            +PCMBUFFERPAGESIZE );      // to round
+                            +PCMBUFFERALIGNMENT );      // to round
 
- card->pcmout_buffer=(void *)(((uint32_t)card->dm->linearptr+PCMBUFFERPAGESIZE-1)&(~(PCMBUFFERPAGESIZE-1))); // buffer begins on page (4096 bytes) boundary
+ card->pcmout_buffer=(void *)(((uint32_t)card->dm->linearptr+PCMBUFFERALIGNMENT-1)&(~(PCMBUFFERALIGNMENT-1))); // buffer begins on page (4096 bytes) boundary
 
  aui->card_DMABUFF=card->pcmout_buffer;
 
