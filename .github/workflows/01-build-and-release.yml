@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - use-preinstalled-djgpp-image-in-workflows
+      - run-tests-in-qemu-in-github-action
 permissions:
   contents: write
 jobs:
