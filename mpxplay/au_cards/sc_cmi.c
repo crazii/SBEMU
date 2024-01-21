@@ -436,9 +436,10 @@ static void snd_cmipci_ch_reset(cmi8x38_card *cm, int ch) //reset channel ch
  int reset = CM_RST_CH0 << ch;
  snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, CM_CHADC1 | reset);
  snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, CM_CHADC1 & (~reset));
- //snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, reset);
- //snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, (~reset));
- pds_delay_10us(1);
+ pds_delay_10us(10);
+ snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, reset);
+ snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, (~reset));
+ pds_delay_10us(10);
 }
 
 static int set_dac_channels(cmi8x38_card *cm, int channels)
@@ -579,7 +580,7 @@ static void cmi8x38_chip_init(struct cmi8x38_card *cm)
  snd_cmipci_write_32(cm, CM_REG_LEGACY_CTRL, val);
  snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_FM_EN);
 
- //snd_cmipci_write_16(cm, CM_REG_MIXER1, snd_cmipci_read_16(cm, CM_REG_MIXER1)&~(CM_FMMUTE|CM_WSMUTE)); //unmute FM/PCM
+ snd_cmipci_write_16(cm, CM_REG_MIXER1, 0); //unmute FM/PCM, disable X3D for 8338
  /* reset mixer */
  snd_cmipci_mixer_write(cm, 0, 0);
 }
