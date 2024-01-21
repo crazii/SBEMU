@@ -436,8 +436,8 @@ static void snd_cmipci_ch_reset(cmi8x38_card *cm, int ch) //reset channel ch
  int reset = CM_RST_CH0 << ch;
  snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, CM_CHADC1 | reset);
  snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, CM_CHADC1 & (~reset));
- snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, reset);
- snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, (~reset));
+ //snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, reset);
+ //snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, (~reset));
  pds_delay_10us(1);
 }
 
@@ -854,14 +854,14 @@ static void CMI8X38_clearbuf(struct mpxplay_audioout_info_s *aui)
 static void CMI8X38_writeMIXER(struct mpxplay_audioout_info_s *aui,unsigned long reg, unsigned long val)
 {
  struct cmi8x38_card *card=aui->card_private_data;
- _LOG("write mixer: %x, %x->%x\n", reg, snd_cmipci_mixer_read(card,reg), val);
+ //_LOG("write mixer: %x, %x->%x\n", reg, snd_cmipci_mixer_read(card,reg), val);
  snd_cmipci_mixer_write(card,reg,val);
 }
 
 static unsigned long CMI8X38_readMIXER(struct mpxplay_audioout_info_s *aui,unsigned long reg)
 {
  struct cmi8x38_card *card=aui->card_private_data;
- _LOG("read mixer: %x, %x\n", reg, snd_cmipci_mixer_read(card,reg));
+ //_LOG("read mixer: %x, %x\n", reg, snd_cmipci_mixer_read(card,reg));
  return snd_cmipci_mixer_read(card,reg);
 }
 
