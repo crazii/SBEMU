@@ -5,6 +5,7 @@
 -m 256M \
 -rtc base=localtime \
 -nographic \
+-net none \
 -blockdev driver=file,node-name=fd0,filename=/media/x86BOOT.img -device floppy,drive=fd0 \
 -drive if=virtio,format=raw,file=fat:rw:"$(pwd)" \
 -boot order=a \
