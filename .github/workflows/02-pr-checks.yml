@@ -9,9 +9,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - name: shellcheck build-release-artifacts.sh
+      - name: shellcheck shell scripts
         run: |
           shellcheck scripts/build-release-artifacts.sh
+          shellcheck test/run_cicd_dos.sh
   build:
     runs-on: ubuntu-latest
     container:
@@ -58,4 +59,6 @@ jobs:
           echo "cd test" >> CICD_DOS.BAT
           echo "ren dos32a.exe dos4gw.exe" >> CICD_DOS.BAT
           echo "stp32 dtmf_src.wav a32sbpdg.dll" >> CICD_DOS.BAT
+          cp -f test/run_cicd_dos.sh /usr/local/bin/
+          chmod +x /usr/local/bin/run_cicd_dos.sh
           /usr/local/bin/run_cicd_dos.sh
