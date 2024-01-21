@@ -25,9 +25,10 @@ jobs:
           test -f output/sbemu.exe
       - name: Setup tools
         run: |
-          apt-get install -y wget
-          apt-get install -y libdigest-sha-perl
-          apt-get install -y unzip
+          apt-get install -y sudo
+          sudo apt-get install -y wget
+          sudo apt-get install -y libdigest-sha-perl
+          sudo apt-get install -y unzip
       - name: Build FreeDOS SBEMU USB image
         run: |
           $GITHUB_WORKSPACE/src/scripts/build-release-artifacts.sh $GITHUB_WORKSPACE/src/output/sbemu.exe $GITHUB_WORKSPACE/
