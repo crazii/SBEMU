@@ -431,11 +431,13 @@ static unsigned int snd_cmipci_rate_freq(unsigned int rate)
  return 7; // 48k
 }
 
-static void snd_cmipci_ch_reset(cmi8x38_card *cm, int ch) //reset ADC channel 1
+static void snd_cmipci_ch_reset(cmi8x38_card *cm, int ch) //reset channel ch
 {
  int reset = CM_RST_CH0 << ch;
  snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, CM_CHADC1 | reset);
  snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, CM_CHADC1 & (~reset));
+ snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, reset);
+ snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, (~reset));
  pds_delay_10us(1);
 }
 
@@ -575,6 +577,7 @@ static void cmi8x38_chip_init(struct cmi8x38_card *cm)
  snd_cmipci_write_32(cm, CM_REG_LEGACY_CTRL, val);
  snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_FM_EN);
 
+ snd_cmipci_write_16(cm, CM_REG_MIXER1, snd_cmipci_read_16(cm, CM_REG_MIXER1)&~(CM_FMMUTE|CM_WSMUTE)); //unmute FM/PCM
  /* reset mixer */
  snd_cmipci_mixer_write(cm, 0, 0);
 }
@@ -831,7 +834,6 @@ static long CMI8X38_getbufpos(struct mpxplay_audioout_info_s *aui)
  return aui->card_dma_lastgoodpos;
  ok:
   bufpos = (card->dma_size - (rem + 1)) << card->shift;
-  _LOG("buffpos:%u\n", bufpos);
 #endif
 
   if (bufpos < aui->card_dmasize)
@@ -850,12 +852,14 @@ static void CMI8X38_clearbuf(struct mpxplay_audioout_info_s *aui)
 static void CMI8X38_writeMIXER(struct mpxplay_audioout_info_s *aui,unsigned long reg, unsigned long val)
 {
  struct cmi8x38_card *card=aui->card_private_data;
+ _LOG("write mixer: %x, %x->%x", reg, snd_cmipci_mixer_read(card,reg), val);
  snd_cmipci_mixer_write(card,reg,val);
 }
 
 static unsigned long CMI8X38_readMIXER(struct mpxplay_audioout_info_s *aui,unsigned long reg)
 {
  struct cmi8x38_card *card=aui->card_private_data;
+ _LOG("read mixer: %x, %x", reg, snd_cmipci_mixer_read(card,reg));
  return snd_cmipci_mixer_read(card,reg);
 }
 
@@ -893,7 +897,8 @@ static aucards_onemixerchan_s cmi8x38_synth_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN
 static aucards_onemixerchan_s cmi8x38_cdin_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_CDIN,AU_MIXCHANFUNC_VOLUME),    2,{{0x36,31,3,0},{0x37,31,3,0}}};
 static aucards_onemixerchan_s cmi8x38_linein_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_LINEIN,AU_MIXCHANFUNC_VOLUME),2,{{0x38,31,3,0},{0x39,31,3,0}}};
 static aucards_onemixerchan_s cmi8x38_micin_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_MICIN,AU_MIXCHANFUNC_VOLUME),  1,{{0x3A,31,3,0}}};
-static aucards_onemixerchan_s cmi8x38_auxin_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_AUXIN,AU_MIXCHANFUNC_VOLUME),  2,{{0x26,15,4,0},{0x26,15,0,0}}}; //??? in or out?
+//FM for SBPro - don't write to it as in previous SBPro mixer test it might be reserved.
+//static aucards_onemixerchan_s cmi8x38_auxin_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_AUXIN,AU_MIXCHANFUNC_VOLUME),  2,{{0x26,15,4,0},{0x26,15,0,0}}}; //??? in or out?
 
 static aucards_allmixerchan_s cmi8x38_mixerset[]={
  &cmi8x38_master_vol,
@@ -902,7 +907,7 @@ static aucards_allmixerchan_s cmi8x38_mixerset[]={
  &cmi8x38_cdin_vol,
  &cmi8x38_linein_vol,
  &cmi8x38_micin_vol,
- &cmi8x38_auxin_vol,
+ //&cmi8x38_auxin_vol,
  NULL
 };
 
