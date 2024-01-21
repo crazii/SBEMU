@@ -26,7 +26,7 @@ jobs:
       - name: Setup tools
         run: |
           apt-get install -y wget
-          apt-get install libdigest-sha-perl
+          apt-get install -y libdigest-sha-perl
       - name: Build FreeDOS SBEMU USB image
         run: |
           $GITHUB_WORKSPACE/src/scripts/build-release-artifacts.sh $GITHUB_WORKSPACE/src/output/sbemu.exe $GITHUB_WORKSPACE/
