@@ -859,7 +859,7 @@ static void CMI8X38_writeMIXER(struct mpxplay_audioout_info_s *aui,unsigned long
 static unsigned long CMI8X38_readMIXER(struct mpxplay_audioout_info_s *aui,unsigned long reg)
 {
  struct cmi8x38_card *card=aui->card_private_data;
- _LOG("read mixer: %x, %\n", reg, snd_cmipci_mixer_read(card,reg));
+ _LOG("read mixer: %x, %x\n", reg, snd_cmipci_mixer_read(card,reg));
  return snd_cmipci_mixer_read(card,reg);
 }
 
