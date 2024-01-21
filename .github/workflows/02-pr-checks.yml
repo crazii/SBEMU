@@ -37,7 +37,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/volkertb/cicd-qemu-dos-docker:v1.7
+      image: ghcr.io/volkertb/cicd-qemu-dos-docker:v1.8
       options: --device=/dev/kvm --cpus 1
     steps:
       - name: 'Download test files'
