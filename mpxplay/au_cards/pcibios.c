@@ -347,15 +347,25 @@ void pcibios_enable_interrupt(pci_config_s* ppkey)
  pcibios_WriteConfig_Word(ppkey, PCIR_PCICMD, cmd);
 }
 
+#define USE_P32_CALL 1 //32bit protected mode call. if this doesn't work for some PCs, then the final solution should be programming the interrupt router.
+
+#pragma pack(1)
+
 typedef struct
 {
     uint16_t size;
+    #if USE_P32_CALL
+    uint32_t off;
+    #else
     uint16_t off;
+    #endif
     uint16_t seg;
+    #if !USE_P32_CALL
     uint16_t padding;
+    #endif
 }IRQRoutingOptionBuffer;
+_Static_assert(sizeof(IRQRoutingOptionBuffer) == 8, "size error");
 
-#pragma pack(1)
 typedef struct
 {
     uint8_t bus;
@@ -372,13 +382,203 @@ typedef struct
 _Static_assert(sizeof(IRQRoutingTable) == 16, "size error");
 
 #include "../../sbemu/dpmi/dbgutil.h"
-//#include "../../sbemu/pic.h"
+#include "../../sbemu/pic.h"
+#ifdef DJGPP
+#include <dpmi.h>
+#include <go32.h>
+#endif
 //copied & modified from usbddos
 //https://people.freebsd.org/~jhb/papers/bsdcan/2007/article/node4.html
 //https://people.freebsd.org/~jhb/papers/bsdcan/2007/article/node5.html
 //PCI BIOS SPECIFICATION Revision 2.1
+static int pcibios32cs = -1;
+static int pcibios32ds = -1;
+static uint32_t pcibios32entry = -1;
+static int pcibios_inited = 0;
+
+static void pcibios_FreeLDT(void)
+{
+    if(pcibios32cs != -1)
+        __dpmi_free_ldt_descriptor(pcibios32cs);
+    if(pcibios32ds != -1)
+        __dpmi_free_ldt_descriptor(pcibios32ds);
+}
+
+void pcibios_CallFunction32(rminfo* r)
+{
+    if(!pcibios_inited)
+    {
+        pcibios_inited = TRUE;
+
+        typedef struct 
+        {
+            char signature[4];
+            uint32_t entry; //physical addr
+            uint8_t reivision;
+            uint8_t len; //in paragraph
+            uint8_t checksum;
+            uint8_t zero[5];
+        }BIOS32SD;
+        _Static_assert(sizeof(BIOS32SD) == 16, "size error");
+
+        char* scanarea = (char*)malloc(0xFFFFF-0xE0000);
+        dosget(scanarea, 0xE0000, 0xFFFFF-0xE0000);
+        const BIOS32SD* sd = NULL;
+        int count = (0xFFFFF-0xE0000)/sizeof(BIOS32SD);
+        for(int i = 0; i < count; ++i)
+        {
+            const BIOS32SD* test = (const BIOS32SD*)(scanarea + i * sizeof(BIOS32SD));
+            if(memcmp(test->signature,"_32_", 4) == 0 && memcmp(test->zero,"\0\0\0\0\0", 5) == 0 && test->len == 1)
+            {
+                const char* bytes = (const char*)test;
+                uint8_t checksum = 0;
+                for(int i = 0; i < 16; i++)
+                    checksum += bytes[i];
+                if(checksum == 0)
+                {
+                    sd = test;
+                    break;
+                }
+            }
+        }
+
+        if(sd == NULL) //not found
+        {
+            free(scanarea);
+            r->EAX = PCI_NOT_SUPPORTED<<8;
+            return;
+        }
+        _LOG("Found BIOS32 Service Directory at %x, entry point %x\n", (uintptr_t)sd-(uintptr_t)scanarea + 0xE0000, sd->entry);
+        
+        int bios32cs = __dpmi_create_alias_descriptor(_my_cs());
+        int bios32ds = __dpmi_create_alias_descriptor(_my_ds());
+        __dpmi_set_descriptor_access_rights(bios32cs, __dpmi_get_descriptor_access_rights(bios32cs)|0x08); //code/exec
+
+        uint32_t base = sd->entry&~0xFFF; //although it is physical addr, should be under 1M, phyiscal mapping not needed
+        __dpmi_set_segment_base_address(bios32cs, base);
+        __dpmi_set_segment_base_address(bios32ds, base);
+        __dpmi_set_segment_limit(bios32cs, 8192-1); //spec required 2 pages
+        __dpmi_set_segment_limit(bios32ds, 8192-1);
+        uint32_t pci32entry = 0;
+        uint32_t size = 0;
+        uint32_t eip = sd->entry - base;
+        free(scanarea);
+
+        _ASM_BEGINP
+            _ASM(pushad)
+            _ASM(push ds)
+
+            _ASM_MOVP(eax, %4) //bios32cs
+            _ASM(push eax)
+            _ASM_MOVP(eax, %5) //eip
+            _ASM(push eax)
+
+            _ASM(mov eax, 0x049435024) //$PCI
+            _ASM(xor ebx, ebx)
+
+            _ASM_MOVP(edx, %3) //bios32ds
+            _ASM(mov ds, edx)
+            _ASM(mov edx, esp)
+            _ASM(call far ptr ss:[edx])
+            _ASM(add esp, 8)
+            _ASM(pop ds)
+
+            _ASM(test al, al)
+            _ASM(jnz failed)
+            _ASM_MOVP(%0, ebx)
+            _ASM_MOVP(%1, ecx)
+            _ASM_MOVP(%2, edx)
+        _ASMLBL(failed:)
+            _ASM(popad)
+            
+            _ASM_PLIST(base, size, pci32entry, bios32ds, bios32cs, eip)
+        _ASM_ENDP
+
+        if(base == 0 || size == 0)
+        {
+            _LOG("32bit PCI BIOS not found.\n");
+            r->EAX = PCI_NOT_SUPPORTED<<8;
+            return;
+        }
+        
+        _LOG("Found 32bit PCI BIOS, base: %x, entry %x, size: %x\n", base, pci32entry, size);
+        //const int CS_BASE = 0xF000; //spec required CS base //I think it's a typo in the spec
+        const int CS_BASE = 0xF0000;
+        assert(base >= CS_BASE);
+        if(base < CS_BASE) //spec require DS=CS=0xF0000
+        {
+            r->EAX = PCI_NOT_SUPPORTED<<8;        
+            return;
+        }
+        size += max(0, (int)(base - CS_BASE));
+        size = (size+0xFFF)&~0xFFF;
+        pci32entry += base;
+        base = CS_BASE;
+        pci32entry -= base;
+        __dpmi_set_segment_base_address(bios32cs, base);
+        __dpmi_set_segment_base_address(bios32ds, 0xF0000); //spec required DS base
+        __dpmi_set_segment_limit(bios32cs, size-1);
+        __dpmi_set_segment_limit(bios32ds, 64*1024-1); //spec required DS size
+
+        pcibios32cs = bios32cs;
+        pcibios32ds = bios32ds;
+        pcibios32entry = pci32entry;
+        atexit(&pcibios_FreeLDT);
+    }
+
+    if(pcibios32cs == -1 || pcibios32ds == -1 || pcibios32entry == -1)
+    {
+        r->EAX = PCI_NOT_SUPPORTED<<8;
+        return;
+    }
+
+    rminfo reg = *r; //access using EBP
+    _LOG("EAX: %08lx, ECX: %08lx, EBX: %08lx EDX: %08lx\n", reg.EAX, reg.ECX, reg.EBX, reg.EDX);
+    _LOG("ES: %04lx, EDI: %08lx\n", reg.ES, reg.EDI);
+    _ASM_BEGINP
+        _ASM(pushad)
+        _ASM(push ds)
+        _ASM(push es)
+
+        _ASM_MOVP(eax, %7) //pcibios32cs
+        _ASM(push eax)
+        _ASM_MOVP(eax, %8) //pcibios32entry
+        _ASM(push eax)
+
+        _ASM_MOVP(eax, %0)
+        _ASM_MOVP(ebx, %1)
+        _ASM_MOVP(ecx, %2)
+        _ASM_MOVP(edx, %3)
+        _ASM_MOVP(edi, %4)
+        _ASM_MOVP(si, %5)
+        _ASM_MOVP(es, si)
+
+        _ASM_MOVP(esi, %6) //pcibios32ds
+        _ASM(mov ds, esi)
+        _ASM(mov esi, esp)
+        _ASM(call far ptr ss:[esi])
+        _ASM(add esp, 8)
+
+        _ASM_MOVP(%0, eax)
+        _ASM_MOVP(%1, ebx)
+        _ASM_MOVP(%2, ecx)
+        _ASM_MOVP(%3, edx)
+        
+        _ASM(pop es)
+        _ASM(pop ds)
+        _ASM(popad)
+
+        _ASM_PLIST(reg.EAX, reg.EBX, reg.ECX, reg.EDX, reg.EDI, reg.ES,
+            pcibios32ds, pcibios32cs, pcibios32entry)
+    _ASM_ENDP
+    *r = reg;
+}
+
 uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
 {
+    if(!pcibios_GetBus())
+        return 0xFF;
+
     uint8_t INTPIN = pcibios_ReadConfig_Byte(ppkey, PCIR_INTR_PIN);
     _LOG("INTPIN: INT%c#, bdf: %d %d %d\n", 'A'+INTPIN-1, ppkey->bBus, ppkey->bDev, ppkey->bFunc);
     if(INTPIN > 4 || INTPIN < 1) //[1,4]
@@ -399,63 +599,83 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
         return 0xFF;
     }
 
-    IRQRoutingOptionBuffer buf;
+    IRQRoutingOptionBuffer buf = {0};
     buf.size = 0; //get actually size with size=0
-    buf.off = sizeof(buf);
-    buf.seg = dosmem.segment;
-    dosput(dosmem.linearptr, &buf, sizeof(buf));
+    dosput(dosmem.linearptr, &buf, sizeof(buf));    
 
+    _LOG("PCI_GET_ROUTING: get size\n");
     rminfo r = {0};
     r.EAX = (PCI_FUNCTION_ID<<8)|PCI_GET_ROUTING;
     r.EBX = 0;
-    r.DS = 0xF000;
-    r.ES = dosmem.segment;
+#if USE_P32_CALL
+    #if 0 //32 bit offset not working, some BIOS used DI not EDI
+    r.ES = _my_ds();
+    r.EDI = (uintptr_t)&buf;
+    #else
+    r.ES = dosmem.selector;
     r.EDI = 0;
+    #endif
+    pcibios_CallFunction32(&r);
+#else
+    r.DS = 0xF000;
     r.SS = rmstack.segment;
     r.SP = STACK_SIZE;
-    _LOG("PCI_GET_ROUTING: get size\n");
+    r.ES = dosmem.segment;
+    r.EDI = 0;
     pds_dpmi_realmodeint_call(PCI_SERVICE, &r); //get required size
+#endif
+    dosget(&buf, dosmem.linearptr, sizeof(buf));
 
+    IRQRoutingTable* table = NULL;
     if(((r.EAX>>8)&0xFF) == PCI_BUFFER_SMALL) //intended, should return this
     {
-        dosget(&buf, dosmem.linearptr, sizeof(buf));
+        _LOG("PCI_GET_ROUTING: get data %d\n", buf.size);
         if(buf.size == 0 || !pds_dpmi_dos_allocmem(&dosmem, sizeof(buf) + buf.size)) //buf.size==0 means no PCI devices in the system
         {
             pds_dpmi_dos_freemem(&rmstack);
             return 0xFF;
         }
 
-        buf.off = sizeof(buf);
-        buf.seg = dosmem.segment;
-        dosput(dosmem.linearptr, &buf, sizeof(buf));
+        table = (IRQRoutingTable*)malloc(buf.size);
+        if(!table)
+        {
+            pds_dpmi_dos_freemem(&rmstack);
+            pds_dpmi_dos_freemem(&dosmem);
+            return 0xFF;
+        }
 
         r.EAX = (PCI_FUNCTION_ID<<8)|PCI_GET_ROUTING;
         r.EBX = 0;
-        r.DS = 0xF000;
+#if USE_P32_CALL
+        #if 0 //32 bit offset not working, some BIOS used DI not EDI
+        buf.seg = _my_ds();
+        buf.off = (uintptr_t)table;
+        #else
+        buf.seg = dosmem.selector;
+        buf.off = sizeof(buf);
+        dosput(dosmem.linearptr, &buf, sizeof(buf));        
+        r.ES = dosmem.selector;
+        #endif
+        pcibios_CallFunction32(&r);
+#else
+        buf.off = sizeof(buf);
+        buf.seg = dosmem.segment;
+        dosput(dosmem.linearptr, &buf, sizeof(buf));
         r.ES = dosmem.segment;
-        r.EDI = 0;
-        r.SS = rmstack.segment;
-        r.SP = STACK_SIZE;
-        _LOG("PCI_GET_ROUTING: get data\n");
         pds_dpmi_realmodeint_call(PCI_SERVICE, &r); //get data
+#endif
+        dosget(table, dosmem.linearptr+sizeof(buf), buf.size);
     }
     else
         r.EAX = 0xFFFFFFFF; //make sure not successful
     
     if(((r.EAX>>8)&0xFF) != PCI_SUCCESSFUL) 
     {
+        free(table);
         pds_dpmi_dos_freemem(&rmstack);
         pds_dpmi_dos_freemem(&dosmem);
         return 0xFF;
     }
-    IRQRoutingTable* table = (IRQRoutingTable*)malloc(buf.size);
-    if(!table)
-    {
-        pds_dpmi_dos_freemem(&rmstack);
-        pds_dpmi_dos_freemem(&dosmem);
-        return 0xFF;
-    }
-    dosget(table, dosmem.linearptr+sizeof(buf), buf.size);
 
     int count = buf.size/sizeof(IRQRoutingTable);
     uint16_t map = 0;
@@ -522,7 +742,7 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
         pcibios_WriteConfig_Byte(ppkey, PCIR_INTR_LN, irq); //found a shared IRQ, it's gonna work.
     else if(map != 0) //no conflict
     {
-        _LOG("PCI dedicated IRQ map: %x", (uint16_t)r.EBX);
+        _LOG("PCI dedicated IRQ map: %x\n", (uint16_t)r.EBX);
         if(map&(uint16_t)r.EBX)
             map &= (uint16_t)r.EBX; //prefer PCI dedicated IRQ
 
@@ -541,19 +761,25 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
         assert(irq > 2 && irq <= 15);
 
         //ENTER_CRITICAL;
-        //mask out the IRQ incase it's not handled by BIOS by deafult, and system will be overwhelmed by the IRQ
+        //mask out the IRQ incase it's not handled by BIOS by deafult (not the default IRQ used by BIOS setup), and system will be overwhelmed by the IRQ
         //code outside is responsible to unmask it.
-        //PIC_MaskIRQ(irq);
+        uint16_t irqmask = PIC_GetIRQMask();
+        PIC_MaskIRQ(irq);
 
         pcibios_clear_regs(r);
         r.EAX = (PCI_FUNCTION_ID<<8)|PCI_SET_INTERRUPT;
         r.ECX = (((uint32_t)irq)<<8) | (0xA + INTPIN - 1); //cl=INTPIN (0xA~0xD), ch=IRQ
         r.EBX = (((uint32_t)ppkey->bBus)<<8) | ((ppkey->bDev<<3)&0xFF) | (ppkey->bFunc&0x7); //bh=bus, bl=dev|func
+        _LOG("PCI_SET_INTERRUPT INT%c#->%d\n", 'A'+INTPIN-1, irq);
+
+#if USE_P32_CALL
+        pcibios_CallFunction32(&r);
+#else
         r.DS = 0xF000;
         r.SS = rmstack.segment;
         r.SP = STACK_SIZE;
-        _LOG("PCI_SET_INTERRUPT INT%c#->%d\n", 'A'+INTPIN-1, irq);
         pds_dpmi_realmodeint_call(PCI_SERVICE, &r);
+#endif
 
         if(((r.EAX>>8)&0xFF) == PCI_SUCCESSFUL)
         {
@@ -586,6 +812,7 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
         else
         {
             _LOG("PCI_SET_INTERRUPT failed %x\n", ((r.EAX>>8)&0xFF));
+            PIC_SetIRQMask(irqmask);
             irq = 0xFF;
         }
 
@@ -619,4 +846,3 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
     free(table);
     return irq;
 }
-#undef BUFSIZE

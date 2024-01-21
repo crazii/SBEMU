@@ -44,7 +44,7 @@ static int16_t MAIN_PCM[MAIN_PCM_SAMPLESIZE+256];
 
 static DPMI_ISR_HANDLE MAIN_IntHandlePM;
 static DPMI_ISR_HANDLE MAIN_IntHandleRM;
-static DPMI_REG MAIN_IntREG;
+static DPMI_REG MAIN_RMIntREG;
 static INTCONTEXT MAIN_IntContext;
 static uint32_t MAIN_DMA_Addr = 0;
 static uint32_t MAIN_DMA_Size = 0;
@@ -917,7 +917,7 @@ int main(int argc, char* argv[])
     }
     HDPMIPT_InstallIRQACKHandler(aui.card_irq, MAIN_IntHandlePM.wrapper_cs, MAIN_IntHandlePM.wrapper_offset);
     #if MAIN_INSTALL_RM_ISR
-    BOOL RM_ISR = DPMI_InstallRealModeISR(PIC_IRQ2VEC(aui.card_irq), MAIN_InterruptRM, &MAIN_IntREG, &MAIN_IntHandleRM) == 0;
+    BOOL RM_ISR = DPMI_InstallRealModeISR(PIC_IRQ2VEC(aui.card_irq), MAIN_InterruptRM, &MAIN_RMIntREG, &MAIN_IntHandleRM) == 0;
     #else
     BOOL RM_ISR = TRUE;
     #endif
@@ -998,8 +998,8 @@ static void MAIN_InterruptRM()
 {
     if(!MAIN_InINT && aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
     {
-        MAIN_IntContext.regs = MAIN_IntREG;
-        MAIN_IntContext.EFLAGS = MAIN_IntREG.w.flags | CPU_VMFLAG;
+        MAIN_IntContext.regs = MAIN_RMIntREG;
+        MAIN_IntContext.EFLAGS = MAIN_RMIntREG.w.flags | CPU_VMFLAG;
         MAIN_Interrupt();
         PIC_SendEOIWithIRQ(aui.card_irq);
     }
@@ -1007,7 +1007,8 @@ static void MAIN_InterruptRM()
     {
         BOOL InInt = MAIN_InINT;
         MAIN_InINT = TRUE;
-        DPMI_CallRealModeOldISR(&MAIN_IntHandleRM, &MAIN_IntREG);
+        DPMI_REG r = MAIN_RMIntREG; //don't modify MAIN_RMIntREG on hardware interrupt
+        DPMI_CallRealModeOldISR(&MAIN_IntHandleRM, &r);
         PIC_UnmaskIRQ(aui.card_irq);
         MAIN_InINT = InInt;
     }

@@ -331,7 +331,7 @@ int pds_dpmi_xms_allocmem(xmsmem_t * mem,unsigned int size)
         pds_xms_free(mem->xms);
         mem->xms = 0;
     }
-    printf("Failed allocatee XMS.\n");
+    printf("Failed allocating XMS.\n");
     return 0;
 }
 
