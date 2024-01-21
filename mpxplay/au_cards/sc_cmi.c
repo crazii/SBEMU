@@ -377,10 +377,6 @@ typedef struct cmi8x38_card
 
 }cmi8x38_card;
 
-static void cmi8x38_ac97_write(unsigned int baseport,unsigned int reg, unsigned int value);
-static unsigned int cmi8x38_ac97_read(unsigned int baseport, unsigned int reg);
-static void CMI8X38_choose_mixerset(struct cmi8x38_card *card);
-
 extern unsigned int intsoundconfig,intsoundcontrol;
 
 //-------------------------------------------------------------------------
@@ -541,8 +537,6 @@ static void cmi8x38_chip_init(struct cmi8x38_card *cm)
  pds_delay_10us(10);
  snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_RESET); //release reset
  pds_delay_10us(10);
- //choose the right mixerset based on chip_version
- CMI8X38_choose_mixerset(cm);
  if(cm->chip_version <= 37)
   pcibios_WriteConfig_Dword(cm->pci_dev, 0x40, 0); //disable DMA slave
 
@@ -807,6 +801,7 @@ static void CMI8X38_stop(struct mpxplay_audioout_info_s *aui)
  snd_cmipci_write_32(card, CM_REG_FUNCTRL0, card->ctrl & ~CM_RST_CH0);
 }
 
+#include "../../sbemu/dpmi/dbgutil.h"
 static long CMI8X38_getbufpos(struct mpxplay_audioout_info_s *aui)
 {
  struct cmi8x38_card *card=aui->card_private_data;
@@ -836,6 +831,7 @@ static long CMI8X38_getbufpos(struct mpxplay_audioout_info_s *aui)
  return aui->card_dma_lastgoodpos;
  ok:
   bufpos = (card->dma_size - (rem + 1)) << card->shift;
+  _LOG("buffpos:%u\n", bufpos);
 #endif
 
   if (bufpos < aui->card_dmasize)
@@ -879,7 +875,7 @@ static int CMI8X38_IRQRoutine(mpxplay_audioout_info_s* aui)
   {
 
   }
-  unsigned int mask = CM_TDMA_INT_EN;
+  unsigned int mask = 0;
   if (status & CM_CHINT0)
     mask |= CM_CH0_INT_EN;
   if (status & CM_CHINT1)
@@ -910,20 +906,6 @@ static aucards_allmixerchan_s cmi8x38_mixerset[]={
  NULL
 };
 
-//8338/8738/PCI-SX. they don't have SB16 compatible mixers on datasheet, but SBPro compatible mixers
-//like SBPro
-static aucards_onemixerchan_s cmi8x38_037_master_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_MASTER,AU_MIXCHANFUNC_VOLUME),2,{{0x22,15,4,0},{0x22,15,0,0}}};
-static aucards_onemixerchan_s cmi8x38_037_pcm_vol   ={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_PCM,AU_MIXCHANFUNC_VOLUME)   ,2,{{0x04,15,4,0},{0x04,15,0,0}}};
-static aucards_onemixerchan_s cmi8x38_037_synth_vol   ={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_SYNTH,AU_MIXCHANFUNC_VOLUME)   ,2,{{0x26,15,4,0},{0x26,15,0,0}}};
-
-static aucards_allmixerchan_s cmi8x38_037_mixerset[]={
- &cmi8x38_037_master_vol,
- &cmi8x38_037_pcm_vol,
- &cmi8x38_037_synth_vol,
- NULL
-};
-
-
 one_sndcard_info CMI8X38_sndcard_info={
  "CMI 8338/8738",
  SNDCARD_LOWLEVELHAND|SNDCARD_INT08_ALLOWED,
@@ -951,15 +933,5 @@ one_sndcard_info CMI8X38_sndcard_info={
  &CMI8X38_readMIXER,
  &cmi8x38_mixerset[0]
 };
-
-static void CMI8X38_choose_mixerset(struct cmi8x38_card *card)
-{
- if(card->chip_version <= 37)
- {
-  snd_cmipci_write_8(card, CM_REG_MIXERC, snd_cmipci_read_8(card, CM_REG_MIXERC)&~CM_X_SB16); //disable sb16 compatible mode
-  snd_cmipci_write_8(card, CM_REG_MIXER1, snd_cmipci_read_8(card, CM_REG_MIXER1)&~(CM_FMMUTE|CM_WSMUTE)); //unmute FM/PCM
-  CMI8X38_sndcard_info.card_mixerchans = &cmi8x38_037_mixerset[0];
- }
-}
 
 #endif
