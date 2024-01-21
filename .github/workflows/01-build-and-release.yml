@@ -17,13 +17,14 @@ jobs:
         uses: actions/checkout@v3
         with:
           path: src
-          install: wget
       - name: Build project
         run: |
           cd $GITHUB_WORKSPACE/src
           test -f main.c
           make CC=gcc CXX=g++
           test -f output/sbemu.exe
+      - name: Install wget
+        run: sudo apt-get install -y wget
       - name: Build FreeDOS SBEMU USB image
         run: |
           $GITHUB_WORKSPACE/src/scripts/build-release-artifacts.sh $GITHUB_WORKSPACE/src/output/sbemu.exe $GITHUB_WORKSPACE/
