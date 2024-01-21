@@ -104,11 +104,12 @@ struct snd_ymfpci_voice {
 struct ymf_card_s {
   unsigned long pci_iobase;
   unsigned long iobase;
-  //unsigned long iobase2;
   unsigned long legacy_iobase;
   struct pci_config_s  *pci_dev;
   cardmem_t *dm;
   cardmem_t *dm2;
+  char *pcmout_buffer;
+  long pcmout_bufsize;
   unsigned int config_select;
   int irq;
   void *bank_base_playback;
@@ -128,7 +129,9 @@ struct ymf_card_s {
   struct snd_ymfpci_capture_bank *bank_capture[YDSXG_CAPTURE_VOICES][2];
   struct snd_ymfpci_effect_bank *bank_effect[YDSXG_EFFECT_VOICES][2];
   struct snd_ymfpci_voice voices[64];
-  unsigned short spdif_bits, spdif_pcm_bits;
+  uint32_t active_bank;
+  uint16_t spdif_bits, spdif_pcm_bits;
+  int start_count;
 };
 
 static pci_device_s ymf_devices[] = {
@@ -299,48 +302,14 @@ static void YMF_close (struct mpxplay_audioout_info_s *aui)
 #define linux_writeb(addr,value) *((unsigned char *)(addr))=value
 #define linux_readb(addr) PDS_GETB_8U((char *)(addr))
 
-#if 0
-static uint32_t regtab[128]; // 0x8000 / 0x100
-static unsigned int last_pg = 0;
-
-uint32_t g_iobase = 0;
-#endif
-
 static inline uint32_t mapreg (struct ymf_card_s *card, uint32_t offset) {
   return card->iobase + offset;
-#if 0
-  if (offset < 0x4000)
-    return card->iobase + offset;
-  else
-    return g_iobase - 0x4000 + offset;
-#endif
-#if 0
-  if (offset < 0x100) return card->iobase + offset;
-  if (offset < 0x200) return card->iobase2 + offset - 0x100;
-  unsigned int pg = offset / 0x100;
-  if (regtab[pg] == 0) {
-    regtab[pg] = pds_dpmi_map_physical_memory(card->pci_iobase + pg*0x100, 0x100);
-#if 1
-    if (regtab[pg] == 0) {
-      printf("failed to map page %u offset 0x%X\n", pg, offset);
-    } else {
-      //printf("mapped pg %u offset 0x%X to 0x%X\n", pg, offset, regtab[pg]);
-    }
-#endif
-    if (last_pg && pg != last_pg) {
-      pds_dpmi_unmap_physycal_memory(regtab[last_pg]);
-    }
-    last_pg = pg;
-  }
-  return regtab[pg] + offset - pg*0x100;
-#endif
 }
 
 static inline uint16_t snd_ymfpci_readw (struct ymf_card_s *card, uint32_t offset)
 {
   uint32_t addr = mapreg(card, offset);
   uint16_t r = linux_readw(addr);
-  //if (offset && offset != 0x66) printf("%4.4X: %8.8X\n", offset, r);
   return r;
 }
 
@@ -354,7 +323,6 @@ static inline uint32_t snd_ymfpci_readl (struct ymf_card_s *card, uint32_t offse
 {
   uint32_t addr = mapreg(card, offset);
   uint32_t r = linux_readl(addr);
-  //if (offset && offset != 0x100) printf("%4.4X: %8.8X\n", offset, r);
   return r;
 }
 
@@ -368,7 +336,6 @@ static inline uint8_t snd_ymfpci_readb (struct ymf_card_s *card, uint32_t offset
 {
   uint32_t addr = mapreg(card, offset);
   uint8_t r = linux_readb(addr);
-  //if (offset && offset != 0x100) printf("%4.4X: %8.8X\n", offset, r);
   return r;
 }
 
@@ -412,16 +379,9 @@ static void snd_ymfpci_disable_dsp(struct ymf_card_s *card)
   }
 }
 
-#if 0
-// Interrupt handler stuff
-unsigned int ymf_int_cnt = 0;
-static unsigned int xint_cnt = 0;
-static int wanted_irq = 0;
-static struct ymf_card_s *g_card = NULL;
-
-static int ymfirq (struct ymf_card_s *card)
+static int YMF_IRQRoutine(mpxplay_audioout_info_s* aui)
 {
-  ymf_int_cnt++;
+  struct ymf_card_s *card = aui->card_private_data;
   uint32_t status, nvoice, mode;
   struct snd_ymfpci_voice *voice;
   int handled = 0;
@@ -431,7 +391,7 @@ static int ymfirq (struct ymf_card_s *card)
   //  _LOG("%u status: %8.8X\n", ymf_int_cnt, status);
   if (status & 0x80000000) {
     handled = 1;
-    uint32_t active_bank = snd_ymfpci_readl(card, YDSXGR_CTRLSELECT) & 1;
+    card->active_bank = snd_ymfpci_readl(card, YDSXGR_CTRLSELECT) & 1;
     //if ((ymf_int_cnt % 10000) == 0)
     //  _LOG("bank: %8.8X\n", active_bank);
     //spin_lock(&card->voice_lock);
@@ -465,7 +425,67 @@ static int ymfirq (struct ymf_card_s *card)
     //  snd_timer_interrupt(card->timer, card->timer_ticks);
   }
   snd_ymfpci_writew(card, YDSXGR_INTFLAG, status);
+
+  //if (status==0xFFFFFFFF) return 0;
+  //if (card->rawmidi)
+  //  snd_mpu401_uart_interrupt(irq, card->rawmidi->private_data);
+  return handled;
+}
+
+#if 0
+// Interrupt handler stuff
+unsigned int ymf_int_cnt = 0;
+static unsigned int xint_cnt = 0;
+static int wanted_irq = 0;
+static struct ymf_card_s *g_card = NULL;
+
+static int ymfirq (struct ymf_card_s *card)
+{
+  ymf_int_cnt++;
+  uint32_t status, nvoice, mode;
+  struct snd_ymfpci_voice *voice;
+  int handled = 0;
+
+  status = snd_ymfpci_readl(card, YDSXGR_STATUS);
+  //if ((ymf_int_cnt % 100) == 0)
+  //  _LOG("%u status: %8.8X\n", ymf_int_cnt, status);
+  if (status & 0x80000000) {
+    handled = 1;
+    card->active_bank = snd_ymfpci_readl(card, YDSXGR_CTRLSELECT) & 1;
+    //if ((ymf_int_cnt % 10000) == 0)
+    //  _LOG("bank: %8.8X\n", active_bank);
+    //spin_lock(&card->voice_lock);
+    //for (nvoice = 0; nvoice < YDSXG_PLAYBACK_VOICES; nvoice++) {
+    //  voice = &card->voices[nvoice];
+    //  if (voice->interrupt)
+    //    voice->interrupt(card, voice);
+    //}
+    //for (nvoice = 0; nvoice < YDSXG_CAPTURE_VOICES; nvoice++) {
+    //  if (card->capture_substream[nvoice])
+    //    snd_ymfpci_pcm_capture_interrupt(card->capture_substream[nvoice]);
+    //}
+    //spin_unlock(&card->voice_lock);
+    //spin_lock(&card->reg_lock);
+    snd_ymfpci_writel(card, YDSXGR_STATUS, 0x80000000);
+    mode = snd_ymfpci_readl(card, YDSXGR_MODE) | 2;
+    snd_ymfpci_writel(card, YDSXGR_MODE, mode);
+    //spin_unlock(&card->reg_lock);
+    
+    //if (atomic_read(&card->interrupt_sleep_count)) {
+    //  atomic_set(&card->interrupt_sleep_count, 0);
+    //  wake_up(&card->interrupt_sleep);
+    //}
+  }
   
+  status = snd_ymfpci_readw(card, YDSXGR_INTFLAG);
+  //if ((ymf_int_cnt % 100) == 0)
+  //  _LOG("%u status2: %8.8X\n", ymf_int_cnt, status);
+  if (status & 1) {
+    //if (card->timer)
+    //  snd_timer_interrupt(card->timer, card->timer_ticks);
+  }
+  snd_ymfpci_writew(card, YDSXGR_INTFLAG, status);
+
   //if (status==0xFFFFFFFF) return 0;
   //if (card->rawmidi)
   //  snd_mpu401_uart_interrupt(irq, card->rawmidi->private_data);
@@ -497,20 +517,22 @@ static void __inthandlerPM () {
 #endif
 
 static int
-install_ucode (struct ymf_card_s *card, uint32_t addr, uint32_t *src, uint32_t len)
+install_firmware (struct ymf_card_s *card, uint32_t addr, uint32_t *src, uint32_t len)
 {
-  int i;
   int warned = 0;
-  for (i = 0; i < len; i++) {
+  uint32_t *end = src + (len >> 2);
+  uint32_t i;
+  while (src < end) {
     uint32_t val = *src;
-    //printf("write ucode to addr %8.8X val: %8.8X\n", addr, val);
     snd_ymfpci_writel(card, addr, val);
-    //printf("done\n");
+#if 0
+    // The Linux driver also fails to read back the same value
     uint32_t rval = snd_ymfpci_readl(card, addr);
     if (rval != val && !warned) {
-      printf("failed to write ucode addr %8.8X wrote %8.8X, read back %8.8X, ignoring.\n", addr, val, rval);
+      printf("failed to write firmware addr %8.8X wrote %8.8X, read back %8.8X, ignoring.\n", addr, val, rval);
       warned = 1;
     }
+#endif
     addr += 4;
     src++;
   }
@@ -534,7 +556,7 @@ static void snd_ymfpci_download_image (struct ymf_card_s *card)
   ctrl = snd_ymfpci_readw(card, YDSXGR_GLOBALCTRL);
   snd_ymfpci_writew(card, YDSXGR_GLOBALCTRL, ctrl & ~0x0007);
 
-  if (install_ucode(card, 0x1000, dsp, dsp_size))
+  if (install_firmware(card, 0x1000, dsp, dsp_size))
     printf("installed dsp FW\n");
 
 #if 0
@@ -553,12 +575,12 @@ static void snd_ymfpci_download_image (struct ymf_card_s *card)
   case 0x740C:
   case 0x744:
   case 0x754:
-    if (install_ucode(card, YDSXGR_CTRLINSTRAM, cntrl1E, cntrl1E_size) || 1==1) {
+    if (install_firmware(card, YDSXGR_CTRLINSTRAM, cntrl1E, cntrl1E_size) || 1==1) {
       printf("installed cntrl1E FW\n");
     }
     break;
   default:
-    if (install_ucode(card, YDSXGR_CTRLINSTRAM, cntrl, cntrl_size) || 1==1) {
+    if (install_firmware(card, YDSXGR_CTRLINSTRAM, cntrl, cntrl_size) || 1==1) {
       printf("installed cntrl FW\n");
     }
     break;
@@ -614,18 +636,18 @@ struct ac97_initial_values {
 static struct ac97_initial_values ac97_initial_values[] = {
     { AC97_RESET,             0x0000 },
     { AC97_MASTER_VOL_STEREO, 0x0000 }, // 0x0000 dflt
-    { AC97_HEADPHONE_VOL,     0x0606 }, // 0x8000
+    { AC97_HEADPHONE_VOL,     0x0808 }, // 0x8000
     { AC97_PCMOUT_VOL,        0x0000 }, // 0x0606
     { AC97_MASTER_VOL_MONO,   0x0000 }, // 0x0000
     { AC97_PCBEEP_VOL,        0x0000 }, // 0x0000
     { AC97_PHONE_VOL,         0x0008 }, // 0x0008
-    { AC97_MIC_VOL,           0x8000 }, // 0x8000
-    { AC97_LINEIN_VOL,        0x0808 }, // 0x8808
-    { AC97_CD_VOL,            0x0808 }, // 0x8808
-    { AC97_VIDEO_VOL,         0x8808 }, // 0x8808
-    { AC97_AUX_VOL,           0x8808 }, // 0x8808
-    { AC97_RECORD_SELECT,     0x0000 },
-    { AC97_RECORD_GAIN,       0x0B0B },
+    { AC97_MIC_VOL,           0x0505 }, // 0x8000
+    { AC97_LINEIN_VOL,        0x0505 }, // 0x8808
+    { AC97_CD_VOL,            0x0505 }, // 0x8808
+    { AC97_VIDEO_VOL,         0x0000 }, // 0x8808
+    { AC97_AUX_VOL,           0x0000 }, // 0x8808
+    { AC97_RECORD_SELECT,     0x0000 }, // 0x0000
+    { AC97_RECORD_GAIN,       0x0B0B }, // 0x0B0B
     { AC97_GENERAL_PURPOSE,   0x0000 }, // 0x0000
     { 0xffff, 0xffff }
 };
@@ -664,15 +686,12 @@ static int ac97_reset (struct ymf_card_s *card)
   return 0;
 }
 
-
-extern uint16_t ymfbase;
-extern uint16_t fmymfbase;
-
 #define ALIGN(x, a)		__ALIGN_KERNEL((x), (a))
 #define __ALIGN_KERNEL(x, a)		__ALIGN_KERNEL_MASK(x, (__typeof__(x))(a) - 1)
 #define __ALIGN_KERNEL_MASK(x, mask)	(((x) + (mask)) & ~(mask))
 
 #define cpu_to_le32(x) x // assumes Little Endian CPU
+#define le32_to_cpu(x) x // assumes Little Endian CPU
 
 static int snd_ymfpci_ac3_init (struct ymf_card_s *card)
 {
@@ -702,10 +721,10 @@ static int snd_ymfpci_ac3_init (struct ymf_card_s *card)
   return 0;
 }
 
-static int snd_ymfpci_memalloc(struct ymf_card_s *card)
+static int snd_ymfpci_memalloc (struct ymf_card_s *card)
 {
 	long size, playback_ctrl_size;
-	int voice, bank, reg;
+	int voice, bank;
 	uint8_t *ptr;
 	dma_addr_t ptr_addr;
 
@@ -790,7 +809,12 @@ static int snd_ymfpci_memalloc(struct ymf_card_s *card)
 	snd_ymfpci_writel(card, YDSXGR_EFFCTRLBASE, card->bank_base_effect_addr);
 	snd_ymfpci_writel(card, YDSXGR_WORKBASE, card->work_base_addr);
 	snd_ymfpci_writel(card, YDSXGR_WORKSIZE, card->work_size >> 2);
+	
+	return 0;
+}
 
+void YMF_mixer_init (struct ymf_card_s *card)
+{
 #define IEC958_AES0_CON_EMPHASIS_NONE   (0<<3) /* none emphasis */
 #define IEC958_AES1_CON_ORIGINAL   (1<<7) /* this bits depends on the category code */
 #define IEC958_AES1_CON_DIGDIGCONV_ID   0x02
@@ -800,28 +824,43 @@ static int snd_ymfpci_memalloc(struct ymf_card_s *card)
                                      (IEC958_AES1_CON_ORIGINAL<<8)|     \
                                      (IEC958_AES1_CON_PCM_CODER<<8)|    \
                                      (IEC958_AES3_CON_FS_48000<<24))
+  // $ iecset
+  // Mode: consumer
+  // Data: audio
+  // Rate: 48000 Hz
+  // Copyright: permitted
+  // Emphasis: none
+  // Category: PCM coder
+  // Original: original
+  // Clock: 1000 ppm
+  // $ iecset -x
+  // AES0=0x04,AES1=0x82,AES2=0x00,AES3=0x02
 
-	/* S/PDIF output initialization */
-	card->spdif_bits = card->spdif_pcm_bits = SNDRV_PCM_DEFAULT_CON_SPDIF & 0xffff;
-	snd_ymfpci_writew(card, YDSXGR_SPDIFOUTCTRL, 0);
-	snd_ymfpci_writew(card, YDSXGR_SPDIFOUTSTATUS, card->spdif_bits);
+  // S/PDIF output initialization
+  //card->spdif_bits = card->spdif_pcm_bits = (SNDRV_PCM_DEFAULT_CON_SPDIF & 0xffff);
 
-	/* S/PDIF input initialization */
-	snd_ymfpci_writew(card, YDSXGR_SPDIFINCTRL, 0);
+  // enable recording
+  //card->spdif_bits = card->spdif_pcm_bits = 0x02008204;
+  // Only set the first 16 bits. The sample rate (48KHz) bits in the fourth byte are set automatically in HW.
+  card->spdif_bits = card->spdif_pcm_bits = 0x8204;
 
-	/* digital mixer setup */
-	for (reg = 0x80; reg < 0xc0; reg += 4)
-		snd_ymfpci_writel(card, reg, 0);
-	snd_ymfpci_writel(card, YDSXGR_NATIVEDACOUTVOL, 0x3fff3fff);
-	snd_ymfpci_writel(card, YDSXGR_BUF441OUTVOL, 0x3fff3fff);
-	snd_ymfpci_writel(card, YDSXGR_ZVOUTVOL, 0x3fff3fff);
-	snd_ymfpci_writel(card, YDSXGR_SPDIFOUTVOL, 0x3fff3fff);
-	snd_ymfpci_writel(card, YDSXGR_NATIVEADCINVOL, 0x3fff3fff);
-	snd_ymfpci_writel(card, YDSXGR_NATIVEDACINVOL, 0x3fff3fff);
-	snd_ymfpci_writel(card, YDSXGR_PRIADCLOOPVOL, 0x3fff3fff);
-	snd_ymfpci_writel(card, YDSXGR_LEGACYOUTVOL, 0x3fff3fff);
-	
-	return 0;
+  snd_ymfpci_writel(card, YDSXGR_SPDIFOUTCTRL, 1); // S/PDIF on
+  snd_ymfpci_writew(card, YDSXGR_SPDIFOUTSTATUS, card->spdif_bits);
+
+  // S/PDIF input initialization
+  snd_ymfpci_writel(card, YDSXGR_SPDIFINCTRL, 0);
+
+  // digital mixer setup
+  for (unsigned int reg = 0x80; reg < 0xc0; reg += 4)
+    snd_ymfpci_writel(card, reg, 0);
+  snd_ymfpci_writel(card, YDSXGR_NATIVEDACOUTVOL, 0x3fff3fff);
+  snd_ymfpci_writel(card, YDSXGR_BUF441OUTVOL, 0x3fff3fff);
+  snd_ymfpci_writel(card, YDSXGR_ZVOUTVOL, 0x3fff3fff);
+  snd_ymfpci_writel(card, YDSXGR_SPDIFOUTVOL, 0x3fff3fff);
+  snd_ymfpci_writel(card, YDSXGR_NATIVEADCINVOL, 0x3fff3fff);
+  snd_ymfpci_writel(card, YDSXGR_NATIVEDACINVOL, 0x3fff3fff);
+  snd_ymfpci_writel(card, YDSXGR_PRIADCLOOPVOL, 0x3fff3fff);
+  snd_ymfpci_writel(card, YDSXGR_LEGACYOUTVOL, 0x3fff3fff);
 }
 
 static int YMF_adetect (struct mpxplay_audioout_info_s *aui)
@@ -869,7 +908,7 @@ static int YMF_adetect (struct mpxplay_audioout_info_s *aui)
   main_hw_fmport = fmport;
   legacy_ctrl |= YMFPCI_LEGACY_FMEN;
   pcibios_WriteConfig_Word(card->pci_dev, PCIR_DSXG_FMBASE, fmport);
-  printf("fmport: %x\n", fmport);
+  printf("FM port: %x\n", fmport);
 
   uint16_t mpuport = card->legacy_iobase + 0x20;
   main_hw_mpuport = mpuport;
@@ -885,7 +924,7 @@ static int YMF_adetect (struct mpxplay_audioout_info_s *aui)
   pcibios_WriteConfig_Word(card->pci_dev, PCIR_DSXG_LEGACY, legacy_ctrl);
   pcibios_WriteConfig_Word(card->pci_dev, PCIR_DSXG_ELEGACY, legacy_ctrl2);
   //printf("old: %x  new: %x\n", old_legacy_ctrl, legacy_ctrl);
-  printf("mpuport: %x\n", mpuport);
+  printf("MPU-401 port: %x\n", mpuport);
 
 #define PCI_CAPABILITY_LIST	0x34
 #define  PCI_CAP_ID_PM		0x01	/* Power Management */
@@ -941,11 +980,6 @@ static int YMF_adetect (struct mpxplay_audioout_info_s *aui)
   card->iobase = pds_dpmi_map_physical_memory(card->pci_iobase, 0x8000);
   if (!card->iobase)
     goto err_adetect;
-  //card->iobase2 = pds_dpmi_map_physical_memory(card->pci_iobase + 0x100, 0x100);
-  //printf("iobase2: %x\n", card->iobase2);
-#if 0
-  memset(regtab, 0, sizeof(regtab));
-#endif
   
   unsigned int cmd;
   pcibios_enable_memmap_set_master_all(card->pci_dev);
@@ -953,7 +987,7 @@ static int YMF_adetect (struct mpxplay_audioout_info_s *aui)
   cmd = pcibios_ReadConfig_Word(card->pci_dev, PCIR_PCICMD);
   printf("pci command word: %4.4X\n", cmd);
   
-  printf("Yamaha YMF sound card: %4.4X (%X) legacy_iobase: %4.4X  IRQ: %d\n",
+  printf("Yamaha YMF sound card: %4.4X (%X) legacy_iobase: %4.4X IRQ: %d\n",
          card->pci_dev->device_id, card->pci_dev->device_type, card->legacy_iobase, card->irq);
   printf("iobase: %8.8X -> %8.8X\n", card->pci_iobase, card->iobase);
 
@@ -978,7 +1012,7 @@ static int YMF_adetect (struct mpxplay_audioout_info_s *aui)
 
   snd_ymfpci_aclink_reset(card);
   int ready = snd_ymfpci_codec_ready(card, 0);
-  printf("ready: %d\n", ready);
+  //printf("ready: %d\n", ready);
 
   pds_delay_10us(1000);
   snd_ymfpci_download_image(card);
@@ -990,13 +1024,36 @@ static int YMF_adetect (struct mpxplay_audioout_info_s *aui)
   ac97_reset(card);
   printf("reset AC97\n");
   
-  snd_ymfpci_writew(card, YDSXGR_SPDIFOUTCTRL, 1); // SPDIF ON
-  snd_ymfpci_enable_dsp(card);
+  YMF_mixer_init(card);
+  printf("S/PDIF first 16 status bits: %4.4X\n", snd_ymfpci_readw(card, YDSXGR_SPDIFOUTSTATUS));
+
+  /////////snd_ymfpci_writel(card, YDSXGR_SPDIFOUTVOL, 0x3fff3fff);
+  // Line-in -> ADC -> SPDIF-out ???
+  snd_ymfpci_writel(card, YDSXGR_SPDIFLOOPVOL, 0x3fff3fff);
+  snd_ymfpci_writel(card, YDSXGR_NATIVEADCINVOL, 0x3fff3fff);
+  snd_ymfpci_writel(card, YDSXGR_NATIVEDACINVOL, 0x3fff3fff);
 
 #if 1
+  // Digitize analog inputs and output over S/PDIF
+  // 3fff is the maximum volume
+  snd_ymfpci_writel(card, YDSXGR_PRIADCOUTVOL, 0x3fff3fff);
+  snd_ymfpci_writel(card, YDSXGR_PRIADCOUTVOLL, 0x3fff3fff);
+  snd_ymfpci_writel(card, YDSXGR_PRIADCOUTVOLR, 0x3fff3fff);
+  snd_ymfpci_writel(card, YDSXGR_PRIADCLOOPVOL, 0x3fff3fff);
+  snd_ymfpci_writel(card, YDSXGR_PRIADCLOOPVOLL, 0x3fff3fff);
+  snd_ymfpci_writel(card, YDSXGR_PRIADCLOOPVOLR, 0x3fff3fff);
+  snd_ymfpci_writel(card, YDSXGR_SECADCOUTVOL, 0x3fff3fff);
+  snd_ymfpci_writel(card, YDSXGR_SECADCOUTVOLL, 0x3fff3fff);
+  snd_ymfpci_writel(card, YDSXGR_SECADCOUTVOLR, 0x3fff3fff);
+  snd_ymfpci_writel(card, YDSXGR_SECADCLOOPVOL, 0x3fff3fff);
+  snd_ymfpci_writel(card, YDSXGR_SECADCLOOPVOLL, 0x3fff3fff);
+  snd_ymfpci_writel(card, YDSXGR_SECADCLOOPVOLR, 0x3fff3fff);
+#endif
+  
+#if 0
   int sy, sx;
 #if 0
-  for (sy = 0; sy < 8; sy++) {
+  for (sy = 0; sy < 4; sy++) {
     for (sx = 0; sx < 16; sx++) {
       printf(" %2.2X", snd_ymfpci_readb(card, sy*16+sx));
     }
@@ -1038,6 +1095,134 @@ static int YMF_adetect (struct mpxplay_audioout_info_s *aui)
   return 0;
 }
 
+
+static void YMF_card_info (struct mpxplay_audioout_info_s *aui)
+{
+  struct ymf_card_s *card = aui->card_private_data;
+  char sout[100];
+  sprintf(sout, "Yamaha YMF sound card: %4.4X (%X) legacy_iobase: %4.4X IRQ: %d\n",
+          card->pci_dev->device_id, card->pci_dev->device_type, card->legacy_iobase, card->irq);
+  pds_textdisplay_printf(sout);
+}
+
+static void YMF_start (struct mpxplay_audioout_info_s *aui)
+{
+  struct ymf_card_s *card = aui->card_private_data;
+  if (card->start_count++ > 0)
+    goto __end;
+  snd_ymfpci_writel(card, YDSXGR_MODE,
+                    snd_ymfpci_readl(card, YDSXGR_MODE) | 3);
+  card->active_bank = snd_ymfpci_readl(card, YDSXGR_CTRLSELECT) & 1;
+ __end:
+  {}
+}
+
+static void YMF_stop (struct mpxplay_audioout_info_s *aui)
+{
+  struct ymf_card_s *card = aui->card_private_data;
+  long timeout = 1000;
+  if (--card->start_count > 0)
+    goto __end;
+  snd_ymfpci_writel(card, YDSXGR_MODE,
+                    snd_ymfpci_readl(card, YDSXGR_MODE) & ~3);
+  while (timeout-- > 0) {
+    if ((snd_ymfpci_readl(card, YDSXGR_STATUS) & 2) == 0)
+      break;
+  }
+ __end:
+        {}
+}
+
+static long YMF_getbufpos(struct mpxplay_audioout_info_s *aui)
+{
+  struct ymf_card_s *card = aui->card_private_data;
+  unsigned long bufpos;
+  struct snd_ymfpci_voice *voice = &card->voices[0];
+
+  bufpos = le32_to_cpu(voice->bank[card->active_bank].start);
+
+  if (bufpos < aui->card_dmasize)
+    aui->card_dma_lastgoodpos = bufpos;
+
+  return aui->card_dma_lastgoodpos;
+}
+
+#ifdef SBEMU
+#define PCMBUFFERPAGESIZE      512
+#else
+#define PCMBUFFERPAGESIZE      4096
+#endif
+
+static void YMF_setrate (struct mpxplay_audioout_info_s *aui)
+{
+  struct ymf_card_s *card = aui->card_private_data; 
+  if (aui->freq_card < 5000) {
+    aui->freq_card = 5000;
+  } else {
+    if (aui->freq_card > 48000) {
+      aui->freq_card = 48000;
+    }
+  }
+  aui->chan_card = 2;
+  aui->bits_card = 16;
+  aui->card_wave_id = MPXPLAY_WAVEID_PCM_SLE;
+  card->pcmout_bufsize = MDma_get_max_pcmoutbufsize(aui, 0, PCMBUFFERPAGESIZE, 2, 0);
+  unsigned int dmabufsize = MDma_init_pcmoutbuf(aui, card->pcmout_bufsize, PCMBUFFERPAGESIZE, 0);
+  snd_ymfpci_writel(card, YDSXGR_NATIVEDACOUTVOL, 0xffffffff);
+  //snd_ymfpci_writel(card, YDSXGR_NATIVEDACOUTVOL, 0x00000000); // AC3
+}
+
+
+static uint32_t snd_ymfpci_calc_delta(uint32_t rate)
+{
+	switch (rate) {
+	case 8000:	return 0x02aaab00;
+	case 11025:	return 0x03accd00;
+	case 16000:	return 0x05555500;
+	case 22050:	return 0x07599a00;
+	case 32000:	return 0x0aaaab00;
+	case 44100:	return 0x0eb33300;
+	default:	return ((rate << 16) / 375) << 5;
+	}
+}
+
+static const uint32_t def_rate[8] = {
+	100, 2000, 8000, 11025, 16000, 22050, 32000, 48000
+};
+
+static uint32_t snd_ymfpci_calc_lpfK(uint32_t rate)
+{
+	uint32_t i;
+	static const uint32_t val[8] = {
+		0x00570000, 0x06AA0000, 0x18B20000, 0x20930000,
+		0x2B9A0000, 0x35A10000, 0x3EAA0000, 0x40000000
+	};
+	
+	if (rate == 44100)
+		return 0x40000000;	/* FIXME: What's the right value? */
+	for (i = 0; i < 8; i++)
+		if (rate <= def_rate[i])
+			return val[i];
+	return val[0];
+}
+
+static uint32_t snd_ymfpci_calc_lpfQ(uint32_t rate)
+{
+	uint32_t i;
+	static const uint32_t val[8] = {
+		0x35280000, 0x34A70000, 0x32020000, 0x31770000,
+		0x31390000, 0x31C90000, 0x33D00000, 0x40000000
+	};
+	
+	if (rate == 44100)
+		return 0x370A0000;
+	for (i = 0; i < 8; i++)
+		if (rate <= def_rate[i])
+			return val[i];
+	return val[0];
+}
+
+
 one_sndcard_info YMF_sndcard_info={
   "Yamaha YMF",
   SNDCARD_LOWLEVELHAND|SNDCARD_INT08_ALLOWED,
@@ -1056,6 +1241,30 @@ one_sndcard_info YMF_sndcard_info={
   NULL,
   NULL,
   NULL,
+
+  NULL,
+  NULL,
+  NULL,
+};
+
+one_sndcard_info YMFSB_sndcard_info={
+  "Yamaha YMF SB",
+  SNDCARD_LOWLEVELHAND|SNDCARD_INT08_ALLOWED,
+
+  NULL,                  // card_config
+  NULL,                  // no init
+  &YMF_adetect,          // only autodetect
+  &YMF_card_info,
+  &YMF_start,
+  &YMF_stop,
+  &YMF_close,
+  &YMF_setrate,
+
+  &MDma_writedata,
+  &YMF_getbufpos,
+  &MDma_clearbuf,
+  &MDma_interrupt_monitor,
+  &YMF_IRQRoutine,
 
   NULL,
   NULL,
