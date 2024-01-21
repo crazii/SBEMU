@@ -534,7 +534,7 @@ static void cmi8x38_chip_init(struct cmi8x38_card *cm)
 	    cm->pci_dev->device_id != PCI_DEVICE_ID_CMEDIA_CM8338B)
   query_chip(cm);
 
- mpxplay_debugf(CMI_DEBUG_OUTPUT, "chip version: %d, multi_chan: %d" cm->chip_version, cm->can_multi_ch);
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "chip version: %d, multi_chan: %d", cm->chip_version, cm->can_multi_ch);
 
  /* initialize codec registers */
  snd_cmipci_set_bit(cm, CM_REG_MISC_CTRL, CM_RESET); //reset DSP/Bus master
