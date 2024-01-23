@@ -917,8 +917,9 @@ int main(int argc, char* argv[])
 
 static void MAIN_InterruptPM()
 {
+    if(MAIN_InINT) return;
     HDPMIPT_GetInterrupContext(&MAIN_IntContext);
-    if(!MAIN_InINT && aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
+    if(aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
     {
         MAIN_Interrupt();
         PIC_SendEOIWithIRQ(aui.card_irq);
@@ -938,7 +939,8 @@ static void MAIN_InterruptPM()
 
 static void MAIN_InterruptRM()
 {
-    if(!MAIN_InINT && aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
+    if(MAIN_InINT) return;
+    if(aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
     {
         MAIN_IntContext.regs = MAIN_RMIntREG;
         MAIN_IntContext.EFLAGS = MAIN_RMIntREG.w.flags | CPU_VMFLAG;
