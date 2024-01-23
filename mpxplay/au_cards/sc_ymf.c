@@ -1,9 +1,6 @@
 // YMF7xx driver for SBEMU
 // based on the Linux driver
 
-//#define MPXPLAY_USE_DEBUGF 1
-#define IHD_DEBUG_OUTPUT stdout
-
 #include "au_cards.h"
 
 #ifdef SBEMU
@@ -26,7 +23,49 @@ extern uint16_t main_hw_mpuport;
 #include <sys/nearptr.h>
 #include <sys/exceptn.h>
 
-#define YDSXG_PLAYBACK_VOICES		64
+#define YMF_DEBUG 0
+#if YMF_DEBUG
+#include "dpmi/dbgutil.h"
+#endif
+
+#ifdef SBEMU
+//#define PCMBUFFERPAGESIZE      512
+#define PCMBUFFERPAGESIZE      1024
+#else
+#define PCMBUFFERPAGESIZE      4096
+#endif
+
+#define ALIGN(x, a)		__ALIGN_KERNEL((x), (a))
+#define __ALIGN_KERNEL(x, a)		__ALIGN_KERNEL_MASK(x, (__typeof__(x))(a) - 1)
+#define __ALIGN_KERNEL_MASK(x, mask)	(((x) + (mask)) & ~(mask))
+
+#define cpu_to_le32(x) x // assumes Little Endian CPU
+#define le32_to_cpu(x) x // assumes Little Endian CPU
+
+#define spin_lock(x) // do nothing
+#define spin_unlock(x) // do nothing
+#define spin_lock_irq(x) // do nothing
+#define spin_unlock_irq(x) // do nothing
+#define spin_lock_irqsave(x,f) // do nothing
+#define spin_unlock_irqrestore(x,f) // do nothing
+
+#ifndef EINVAL
+#define EINVAL -2
+#endif
+#ifndef ENOMEM
+#define ENOMEM -3
+#endif
+
+inline int snd_BUG_ON (int _cond) { return _cond; }
+
+#define YMF_ENABLE_PCM 1
+
+one_sndcard_info YMF_sndcard_info;
+#if YMF_ENABLE_PCM
+one_sndcard_info YMFSB_sndcard_info;
+#endif
+
+#define YDSXG_PLAYBACK_VOICES		4 // In Linux this is 64
 #define YDSXG_CAPTURE_VOICES		2
 #define YDSXG_EFFECT_VOICES		5
 #define YDSXG_DSPLENGTH			0x0080
@@ -88,6 +127,8 @@ enum snd_ymfpci_voice_type {
 	YMFPCI_MIDI
 };
 
+struct ymf_card_s;
+
 struct snd_ymfpci_voice {
 	struct snd_ymfpci *chip;
 	int number;
@@ -97,8 +138,8 @@ struct snd_ymfpci_voice {
 	    midi: 1;
 	struct snd_ymfpci_playback_bank *bank;
 	dma_addr_t bank_addr;
-	void (*interrupt)(struct snd_ymfpci *chip, struct snd_ymfpci_voice *voice);
-	struct snd_ymfpci_pcm *ypcm;
+	void (*interrupt)(struct mpxplay_audioout_info_s *aui, struct snd_ymfpci_voice *voice);
+        //struct snd_ymfpci_pcm *ypcm;
 };
 
 struct ymf_card_s {
@@ -108,7 +149,12 @@ struct ymf_card_s {
   struct pci_config_s  *pci_dev;
   cardmem_t *dm;
   cardmem_t *dm2;
-  char *pcmout_buffer;
+  unsigned long dma_size;
+
+  unsigned long period_size;
+  unsigned long period_pos;
+  unsigned long last_pos;
+  uint8_t *pcmout_buffer;
   long pcmout_bufsize;
   unsigned int config_select;
   int irq;
@@ -129,9 +175,13 @@ struct ymf_card_s {
   struct snd_ymfpci_capture_bank *bank_capture[YDSXG_CAPTURE_VOICES][2];
   struct snd_ymfpci_effect_bank *bank_effect[YDSXG_EFFECT_VOICES][2];
   struct snd_ymfpci_voice voices[64];
+  int src441_used;
+  int use_441_slot;
   uint32_t active_bank;
   uint16_t spdif_bits, spdif_pcm_bits;
   int start_count;
+  int running;
+  int update_pcm_vol;
 };
 
 static pci_device_s ymf_devices[] = {
@@ -379,142 +429,64 @@ static void snd_ymfpci_disable_dsp(struct ymf_card_s *card)
   }
 }
 
-static int YMF_IRQRoutine(mpxplay_audioout_info_s* aui)
+#if YMF_DEBUG
+unsigned int ymf_int_cnt = 0;
+#endif
+
+static int YMF_IRQRoutine (mpxplay_audioout_info_s* aui)
 {
+#if YMF_DEBUG
+  if ((ymf_int_cnt % 500) == 0) DBG_Log("ymfirq %u\n", ymf_int_cnt);
+  ymf_int_cnt++;
+#endif
+
   struct ymf_card_s *card = aui->card_private_data;
   uint32_t status, nvoice, mode;
   struct snd_ymfpci_voice *voice;
   int handled = 0;
 
   status = snd_ymfpci_readl(card, YDSXGR_STATUS);
-  //if ((ymf_int_cnt % 100) == 0)
-  //  _LOG("%u status: %8.8X\n", ymf_int_cnt, status);
   if (status & 0x80000000) {
     handled = 1;
     card->active_bank = snd_ymfpci_readl(card, YDSXGR_CTRLSELECT) & 1;
-    //if ((ymf_int_cnt % 10000) == 0)
-    //  _LOG("bank: %8.8X\n", active_bank);
-    //spin_lock(&card->voice_lock);
-    //for (nvoice = 0; nvoice < YDSXG_PLAYBACK_VOICES; nvoice++) {
-    //  voice = &card->voices[nvoice];
-    //  if (voice->interrupt)
-    //    voice->interrupt(card, voice);
-    //}
+    //if ((ymf_int_cnt % 500) == 0) DBG_Log("bank: %8.8X\n", card->active_bank);
+    spin_lock(&card->voice_lock);
+    for (nvoice = 0; nvoice < YDSXG_PLAYBACK_VOICES; nvoice++) {
+      voice = &card->voices[nvoice];
+      if (voice->interrupt)
+        voice->interrupt(aui, voice);
+    }
     //for (nvoice = 0; nvoice < YDSXG_CAPTURE_VOICES; nvoice++) {
     //  if (card->capture_substream[nvoice])
     //    snd_ymfpci_pcm_capture_interrupt(card->capture_substream[nvoice]);
     //}
-    //spin_unlock(&card->voice_lock);
-    //spin_lock(&card->reg_lock);
+    spin_unlock(&card->voice_lock);
+    spin_lock(&card->reg_lock);
     snd_ymfpci_writel(card, YDSXGR_STATUS, 0x80000000);
     mode = snd_ymfpci_readl(card, YDSXGR_MODE) | 2;
     snd_ymfpci_writel(card, YDSXGR_MODE, mode);
-    //spin_unlock(&card->reg_lock);
+    spin_unlock(&card->reg_lock);
     
     //if (atomic_read(&card->interrupt_sleep_count)) {
     //  atomic_set(&card->interrupt_sleep_count, 0);
     //  wake_up(&card->interrupt_sleep);
     //}
   }
-  
-  status = snd_ymfpci_readw(card, YDSXGR_INTFLAG);
-  //if ((ymf_int_cnt % 100) == 0)
-  //  _LOG("%u status2: %8.8X\n", ymf_int_cnt, status);
-  if (status & 1) {
-    //if (card->timer)
-    //  snd_timer_interrupt(card->timer, card->timer_ticks);
-  }
-  snd_ymfpci_writew(card, YDSXGR_INTFLAG, status);
-
-  //if (status==0xFFFFFFFF) return 0;
-  //if (card->rawmidi)
-  //  snd_mpu401_uart_interrupt(irq, card->rawmidi->private_data);
-  return handled;
-}
 
 #if 0
-// Interrupt handler stuff
-unsigned int ymf_int_cnt = 0;
-static unsigned int xint_cnt = 0;
-static int wanted_irq = 0;
-static struct ymf_card_s *g_card = NULL;
-
-static int ymfirq (struct ymf_card_s *card)
-{
-  ymf_int_cnt++;
-  uint32_t status, nvoice, mode;
-  struct snd_ymfpci_voice *voice;
-  int handled = 0;
-
-  status = snd_ymfpci_readl(card, YDSXGR_STATUS);
-  //if ((ymf_int_cnt % 100) == 0)
-  //  _LOG("%u status: %8.8X\n", ymf_int_cnt, status);
-  if (status & 0x80000000) {
-    handled = 1;
-    card->active_bank = snd_ymfpci_readl(card, YDSXGR_CTRLSELECT) & 1;
-    //if ((ymf_int_cnt % 10000) == 0)
-    //  _LOG("bank: %8.8X\n", active_bank);
-    //spin_lock(&card->voice_lock);
-    //for (nvoice = 0; nvoice < YDSXG_PLAYBACK_VOICES; nvoice++) {
-    //  voice = &card->voices[nvoice];
-    //  if (voice->interrupt)
-    //    voice->interrupt(card, voice);
-    //}
-    //for (nvoice = 0; nvoice < YDSXG_CAPTURE_VOICES; nvoice++) {
-    //  if (card->capture_substream[nvoice])
-    //    snd_ymfpci_pcm_capture_interrupt(card->capture_substream[nvoice]);
-    //}
-    //spin_unlock(&card->voice_lock);
-    //spin_lock(&card->reg_lock);
-    snd_ymfpci_writel(card, YDSXGR_STATUS, 0x80000000);
-    mode = snd_ymfpci_readl(card, YDSXGR_MODE) | 2;
-    snd_ymfpci_writel(card, YDSXGR_MODE, mode);
-    //spin_unlock(&card->reg_lock);
-    
-    //if (atomic_read(&card->interrupt_sleep_count)) {
-    //  atomic_set(&card->interrupt_sleep_count, 0);
-    //  wake_up(&card->interrupt_sleep);
-    //}
-  }
-  
   status = snd_ymfpci_readw(card, YDSXGR_INTFLAG);
-  //if ((ymf_int_cnt % 100) == 0)
-  //  _LOG("%u status2: %8.8X\n", ymf_int_cnt, status);
   if (status & 1) {
     //if (card->timer)
     //  snd_timer_interrupt(card->timer, card->timer_ticks);
   }
   snd_ymfpci_writew(card, YDSXGR_INTFLAG, status);
+#endif
 
   //if (status==0xFFFFFFFF) return 0;
   //if (card->rawmidi)
   //  snd_mpu401_uart_interrupt(irq, card->rawmidi->private_data);
   return handled;
 }
-
-static INTCONTEXT MAIN_IntContext;
-static uint8_t MAIN_InINT;
-static DPMI_ISR_HANDLE __IntHandlePM;
-static void __inthandlerPM () {
-  xint_cnt++;
-    HDPMIPT_GetInterrupContext(&MAIN_IntContext);
-    if(!MAIN_InINT && ymfirq(g_card)) //check if the irq belong the sound card
-    {
-      PIC_SendEOIWithIRQ(wanted_irq);
-    }
-    else
-    {
-        BOOL InInt = MAIN_InINT;
-        MAIN_InINT = TRUE;
-        if(MAIN_IntContext.EFLAGS&CPU_VMFLAG)
-            DPMI_CallOldISR(&__IntHandlePM);
-        else
-            DPMI_CallOldISRWithContext(&__IntHandlePM, &MAIN_IntContext.regs);
-        PIC_UnmaskIRQ(wanted_irq);
-        MAIN_InINT = InInt;
-    }
-}
-#endif
 
 static int
 install_firmware (struct ymf_card_s *card, uint32_t addr, uint32_t *src, uint32_t len)
@@ -686,132 +658,132 @@ static int ac97_reset (struct ymf_card_s *card)
   return 0;
 }
 
-#define ALIGN(x, a)		__ALIGN_KERNEL((x), (a))
-#define __ALIGN_KERNEL(x, a)		__ALIGN_KERNEL_MASK(x, (__typeof__(x))(a) - 1)
-#define __ALIGN_KERNEL_MASK(x, mask)	(((x) + (mask)) & ~(mask))
-
-#define cpu_to_le32(x) x // assumes Little Endian CPU
-#define le32_to_cpu(x) x // assumes Little Endian CPU
-
+#if YMF_ENABLE_PCM
 static int snd_ymfpci_ac3_init (struct ymf_card_s *card)
 {
-  /***
-  if (snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, snd_dma_pci_data(card->pci),
-                          4096, &card->ac3_tmp_base) < 0)
-    return -ENOMEM;
-  ***/
+#if YMF_DEBUG
+  DBG_Log("ac3_init...\n");
+#endif
   unsigned int size = 4096;
   card->dm2 = MDma_alloc_cardmem(size);
   if (!card->dm2)
-    return 0;
+    return -1;
+  memset(card->dm2->linearptr, 0, size);
+  
   uint32_t addr = (uint32_t)pds_cardmem_physicalptr(card->dm2, card->dm2->linearptr);
   card->bank_effect[3][0]->base =
     card->bank_effect[3][1]->base = cpu_to_le32((uint32_t)addr);
   card->bank_effect[3][0]->loop_end =
-    card->bank_effect[3][1]->loop_end = cpu_to_le32(1024);
+    card->bank_effect[3][1]->loop_end = cpu_to_le32(1024 >> 0);
+  addr = (uint32_t)pds_cardmem_physicalptr(card->dm2, card->dm2->linearptr + 2048);
   card->bank_effect[4][0]->base =
-    card->bank_effect[4][1]->base = cpu_to_le32((uint32_t)addr + 2048);
+    card->bank_effect[4][1]->base = cpu_to_le32((uint32_t)addr);
   card->bank_effect[4][0]->loop_end =
-    card->bank_effect[4][1]->loop_end = cpu_to_le32(1024);
+    card->bank_effect[4][1]->loop_end = cpu_to_le32(1024 >> 0);
 
-  //spin_lock_irq(&chip->reg_lock);
-  snd_ymfpci_writel(card, YDSXGR_MAPOFEFFECT,
-                    snd_ymfpci_readl(card, YDSXGR_MAPOFEFFECT) | 3 << 3);
-  //spin_unlock_irq(&chip->reg_lock);
+  spin_lock_irq(&chip->reg_lock);
+  snd_ymfpci_writel(card, YDSXGR_MAPOFEFFECT, snd_ymfpci_readl(card, YDSXGR_MAPOFEFFECT) | 3 << 3);
+  spin_unlock_irq(&chip->reg_lock);
+#if YMF_DEBUG
+  DBG_Log("did ac3_init...\n");
+#endif
   return 0;
 }
 
-static int snd_ymfpci_memalloc (struct ymf_card_s *card)
+//#define YMF_PCMBUFSIZE 4096
+//#define YMF_PCMBUFSIZE 2048
+
+static int snd_ymfpci_memalloc (struct mpxplay_audioout_info_s *aui)
 {
-	long size, playback_ctrl_size;
-	int voice, bank;
-	uint8_t *ptr;
-	dma_addr_t ptr_addr;
+  struct ymf_card_s *card = aui->card_private_data;
+  long size, playback_ctrl_size;
+  int voice, bank;
+  uint8_t *ptr;
+  dma_addr_t ptr_addr;
 
-	playback_ctrl_size = 4 + 4 * YDSXG_PLAYBACK_VOICES;
-	card->bank_size_playback = snd_ymfpci_readl(card, YDSXGR_PLAYCTRLSIZE) << 2;
-	card->bank_size_capture = snd_ymfpci_readl(card, YDSXGR_RECCTRLSIZE) << 2;
-	card->bank_size_effect = snd_ymfpci_readl(card, YDSXGR_EFFCTRLSIZE) << 2;
-	card->bank_size_playback = 0x1000;
-	card->bank_size_capture = 1024;
-	card->bank_size_effect = 2 * 8192;
-	card->work_size = YDSXG_DEFAULT_WORK_SIZE;
-        printf("sizes: %u %u %u %u\n", card->bank_size_playback, card->bank_size_capture, card->bank_size_effect, card->work_size);
-	
-	size = ALIGN(playback_ctrl_size, 0x100) +
-	       ALIGN(card->bank_size_playback * 2 * YDSXG_PLAYBACK_VOICES, 0x100) +
-	       ALIGN(card->bank_size_capture * 2 * YDSXG_CAPTURE_VOICES, 0x100) +
-	       ALIGN(card->bank_size_effect * 2 * YDSXG_EFFECT_VOICES, 0x100) +
-	       card->work_size;
-        printf("DMA size: 0x%X (%u)\n", size, size);
-        card->dm = MDma_alloc_cardmem(size);
-        if (!card->dm)
-          return 0;
-	/* work_ptr must be aligned to 256 bytes, but it's already
-	   covered with the kernel page allocation mechanism */
-	//if (snd_dma_alloc_pages(SNDRV_DMA_TYPE_DEV, snd_dma_pci_data(card->pci),
-	//			size, &card->work_ptr) < 0) 
-	//	return -ENOMEM;
-	//ptr = card->work_ptr.area;
-	//ptr_addr = card->work_ptr.addr;
-	//memset(ptr, 0, size);	/* for sure */
-        memset(card->dm->linearptr, 0, size);
+  playback_ctrl_size = 4 + 4 * YDSXG_PLAYBACK_VOICES;
+  card->bank_size_playback = snd_ymfpci_readl(card, YDSXGR_PLAYCTRLSIZE) << 2;
+  card->bank_size_capture = snd_ymfpci_readl(card, YDSXGR_RECCTRLSIZE) << 2;
+  card->bank_size_effect = snd_ymfpci_readl(card, YDSXGR_EFFCTRLSIZE) << 2;
+  card->bank_size_playback = 0x1000;
+  card->bank_size_capture = 1024;
+  card->bank_size_effect = 2 * 8192;
+  card->work_size = YDSXG_DEFAULT_WORK_SIZE;
+  //card->pcmout_bufsize = YMF_PCMBUFSIZE;
+  card->pcmout_bufsize = MDma_get_max_pcmoutbufsize(aui,0,PCMBUFFERPAGESIZE,2,0);
+  //printf("pcmout_bufsize: 0x%X (%u)\n", card->pcmout_bufsize, card->pcmout_bufsize);
+  //printf("sizes: %u %u %u %u\n", card->bank_size_playback, card->bank_size_capture, card->bank_size_effect, card->work_size);
 
-	card->bank_base_playback = ptr;
-        //ptr_addr = (((unsigned long)card->dm->linearptr+1023)&(~1023));
-        ptr = card->dm->linearptr;
-        ptr_addr = (((unsigned long)ptr));
-	card->bank_base_playback_addr = (uint32_t)pds_cardmem_physicalptr(card->dm, ptr_addr);
-	card->ctrl_playback = (uint32_t *)ptr;
-	card->ctrl_playback[0] = cpu_to_le32(YDSXG_PLAYBACK_VOICES);
-	ptr += ALIGN(playback_ctrl_size, 0x100);
-	ptr_addr += ALIGN(playback_ctrl_size, 0x100);
-	for (voice = 0; voice < YDSXG_PLAYBACK_VOICES; voice++) {
-		card->voices[voice].number = voice;
-		card->voices[voice].bank = (struct snd_ymfpci_playback_bank *)ptr;
-		card->voices[voice].bank_addr = ptr_addr;
-		for (bank = 0; bank < 2; bank++) {
-			card->bank_playback[voice][bank] = (struct snd_ymfpci_playback_bank *)ptr;
-			ptr += card->bank_size_playback;
-			ptr_addr += card->bank_size_playback;
-		}
-	}
-	ptr = (char *)ALIGN((unsigned long)ptr, 0x100);
-	ptr_addr = ALIGN(ptr_addr, 0x100);
-	card->bank_base_capture = ptr;
-	card->bank_base_capture_addr = ptr_addr;
-	for (voice = 0; voice < YDSXG_CAPTURE_VOICES; voice++)
-		for (bank = 0; bank < 2; bank++) {
-			card->bank_capture[voice][bank] = (struct snd_ymfpci_capture_bank *)ptr;
-			ptr += card->bank_size_capture;
-			ptr_addr += card->bank_size_capture;
-		}
-	ptr = (char *)ALIGN((unsigned long)ptr, 0x100);
-	ptr_addr = ALIGN(ptr_addr, 0x100);
-	card->bank_base_effect = ptr;
-	card->bank_base_effect_addr = ptr_addr;
-	for (voice = 0; voice < YDSXG_EFFECT_VOICES; voice++)
-		for (bank = 0; bank < 2; bank++) {
-			card->bank_effect[voice][bank] = (struct snd_ymfpci_effect_bank *)ptr;
-			ptr += card->bank_size_effect;
-			ptr_addr += card->bank_size_effect;
-		}
-	ptr = (char *)ALIGN((unsigned long)ptr, 0x100);
-	ptr_addr = ALIGN(ptr_addr, 0x100);
-	card->work_base = ptr;
-	card->work_base_addr = ptr_addr;
-	
-	//snd_BUG_ON(ptr + card->work_size !=
-	//	   card->work_ptr.area + card->work_ptr.bytes);
+  size = ALIGN(playback_ctrl_size, 0x100) +
+    ALIGN(card->bank_size_playback * 2 * YDSXG_PLAYBACK_VOICES, 0x100) +
+    ALIGN(card->bank_size_capture * 2 * YDSXG_CAPTURE_VOICES, 0x100) +
+    ALIGN(card->bank_size_effect * 2 * YDSXG_EFFECT_VOICES, 0x100) +
+    card->work_size + card->pcmout_bufsize + 1024;
+  //printf("DMA size: 0x%X (%u)\n", size, size);
+  card->dm = MDma_alloc_cardmem(size);
+  if (!card->dm)
+    return 0;
+  // work_ptr must be aligned to 256 bytes
+  memset(card->dm->linearptr, 0, size);
+  ptr = card->dm->linearptr;
+  //ptr_addr = (((unsigned long)ptr));
+  ptr_addr = (((unsigned long)card->dm->linearptr+1023)&(~1023));
+  card->bank_base_playback = ptr;
+  card->bank_base_playback_addr = (uint32_t)pds_cardmem_physicalptr(card->dm, ptr_addr);
+  card->ctrl_playback = (uint32_t *)ptr;
+  card->ctrl_playback[0] = cpu_to_le32(YDSXG_PLAYBACK_VOICES);
+  ptr += ALIGN(playback_ctrl_size, 0x100);
+  ptr_addr += ALIGN(playback_ctrl_size, 0x100);
+  for (voice = 0; voice < YDSXG_PLAYBACK_VOICES; voice++) {
+    card->voices[voice].number = voice;
+    card->voices[voice].bank = (struct snd_ymfpci_playback_bank *)ptr;
+    card->voices[voice].bank_addr = (uint32_t)pds_cardmem_physicalptr(card->dm, ptr_addr);
+    for (bank = 0; bank < 2; bank++) {
+      card->bank_playback[voice][bank] = (struct snd_ymfpci_playback_bank *)ptr;
+      ptr += card->bank_size_playback;
+      ptr_addr += card->bank_size_playback;
+    }
+  }
+  ptr = (char *)ALIGN((unsigned long)ptr, 0x100);
+  ptr_addr = ALIGN(ptr_addr, 0x100);
+  card->bank_base_capture = ptr;
+  card->bank_base_capture_addr = (uint32_t)pds_cardmem_physicalptr(card->dm, ptr_addr);
+  for (voice = 0; voice < YDSXG_CAPTURE_VOICES; voice++)
+    for (bank = 0; bank < 2; bank++) {
+      card->bank_capture[voice][bank] = (struct snd_ymfpci_capture_bank *)ptr;
+      ptr += card->bank_size_capture;
+      ptr_addr += card->bank_size_capture;
+    }
+  ptr = (char *)ALIGN((unsigned long)ptr, 0x100);
+  ptr_addr = ALIGN(ptr_addr, 0x100);
+  card->bank_base_effect = ptr;
+  card->bank_base_effect_addr = (uint32_t)pds_cardmem_physicalptr(card->dm, ptr_addr);
+  for (voice = 0; voice < YDSXG_EFFECT_VOICES; voice++)
+    for (bank = 0; bank < 2; bank++) {
+      card->bank_effect[voice][bank] = (struct snd_ymfpci_effect_bank *)ptr;
+      ptr += card->bank_size_effect;
+      ptr_addr += card->bank_size_effect;
+    }
+  ptr = (char *)ALIGN((unsigned long)ptr, 0x100);
+  ptr_addr = ALIGN(ptr_addr, 0x100);
+  card->work_base = ptr;
+  card->work_base_addr = (uint32_t)pds_cardmem_physicalptr(card->dm, ptr_addr);
 
-	snd_ymfpci_writel(card, YDSXGR_PLAYCTRLBASE, card->bank_base_playback_addr);
-	snd_ymfpci_writel(card, YDSXGR_RECCTRLBASE, card->bank_base_capture_addr);
-	snd_ymfpci_writel(card, YDSXGR_EFFCTRLBASE, card->bank_base_effect_addr);
-	snd_ymfpci_writel(card, YDSXGR_WORKBASE, card->work_base_addr);
-	snd_ymfpci_writel(card, YDSXGR_WORKSIZE, card->work_size >> 2);
+  card->pcmout_buffer = card->work_base + card->work_size;
+  aui->card_DMABUFF = card->pcmout_buffer;
+
+  //snd_BUG_ON(ptr + card->work_size !=
+  //	   card->work_ptr.area + card->work_ptr.bytes);
+
+  snd_ymfpci_writel(card, YDSXGR_PLAYCTRLBASE, card->bank_base_playback_addr);
+  snd_ymfpci_writel(card, YDSXGR_RECCTRLBASE, card->bank_base_capture_addr);
+  snd_ymfpci_writel(card, YDSXGR_EFFCTRLBASE, card->bank_base_effect_addr);
+  snd_ymfpci_writel(card, YDSXGR_WORKBASE, card->work_base_addr);
+  snd_ymfpci_writel(card, YDSXGR_WORKSIZE, card->work_size >> 2);
 	
-	return 0;
+ return 0;
 }
+#endif // PCM
 
 void YMF_mixer_init (struct ymf_card_s *card)
 {
@@ -867,9 +839,6 @@ static int YMF_adetect (struct mpxplay_audioout_info_s *aui)
 {
   struct ymf_card_s *card;
   unsigned int i;
-#ifdef MPXPLAY_USE_DEBUGF
-  unsigned long prevtime = pds_gettimem();
-#endif
   uint16_t legacy_ctrl, legacy_ctrl2, old_legacy_ctrl;
 
   legacy_ctrl = 0;
@@ -914,7 +883,8 @@ static int YMF_adetect (struct mpxplay_audioout_info_s *aui)
   main_hw_mpuport = mpuport;
   pcibios_WriteConfig_Word(card->pci_dev, PCIR_DSXG_MPU401BASE, mpuport);
   legacy_ctrl |= YMFPCI_LEGACY_MEN;
-  legacy_ctrl |= YMFPCI_LEGACY_MIEN;
+  //legacy_ctrl |= YMFPCI_LEGACY_MIEN;
+  legacy_ctrl &= ~YMFPCI_LEGACY_MIEN; /* disable MPU401 irq */
   legacy_ctrl2 |= YMFPCI_LEGACY2_IMOD;
 
   //pcibios_WriteConfig_Word(card->pci_dev, PCIR_DSXG_JOYBASE, bar2);
@@ -974,6 +944,7 @@ static int YMF_adetect (struct mpxplay_audioout_info_s *aui)
     pcibios_WriteConfig_Word(card->pci_dev, c + PCI_PM_CTRL, 0);
   }
 
+  aui->card_pci_dev = card->pci_dev;
   aui->card_irq = card->irq = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
   card->pci_iobase = pcibios_ReadConfig_Dword(card->pci_dev, 0x10);
   card->pci_iobase &= 0xfffffff8;
@@ -983,13 +954,16 @@ static int YMF_adetect (struct mpxplay_audioout_info_s *aui)
   
   unsigned int cmd;
   pcibios_enable_memmap_set_master_all(card->pci_dev);
-  //pcibios_enable_interrupt(card->pci_dev);
+  card->src441_used = -1;
+  card->use_441_slot = 0;
+  card->running = 0;
+  pcibios_enable_interrupt(card->pci_dev); // called in main.c
   cmd = pcibios_ReadConfig_Word(card->pci_dev, PCIR_PCICMD);
-  printf("pci command word: %4.4X\n", cmd);
+  //printf("pci command word: %4.4X\n", cmd);
   
   printf("Yamaha YMF sound card: %4.4X (%X) legacy_iobase: %4.4X IRQ: %d\n",
          card->pci_dev->device_id, card->pci_dev->device_type, card->legacy_iobase, card->irq);
-  printf("iobase: %8.8X -> %8.8X\n", card->pci_iobase, card->iobase);
+  //printf("iobase: %8.8X -> %8.8X\n", card->pci_iobase, card->iobase);
 
 #if 0
   //if (g_card != NULL) {
@@ -1018,14 +992,20 @@ static int YMF_adetect (struct mpxplay_audioout_info_s *aui)
   snd_ymfpci_download_image(card);
   pds_delay_10us(1000);
 
-  //snd_ymfpci_memalloc(card);printf("did memalloc\n");
-  //snd_ymfpci_ac3_init(card);printf("did ac3\n");
+#if YMF_ENABLE_PCM
+  if (aui->card_handler == &YMFSB_sndcard_info) {
+    snd_ymfpci_memalloc(aui);
+    //printf("did memalloc\n");
+    //snd_ymfpci_ac3_init(card);
+    //printf("did ac3\n");
+  }
+#endif
 
   ac97_reset(card);
-  printf("reset AC97\n");
+  //printf("reset AC97\n");
   
   YMF_mixer_init(card);
-  printf("S/PDIF first 16 status bits: %4.4X\n", snd_ymfpci_readw(card, YDSXGR_SPDIFOUTSTATUS));
+  //printf("S/PDIF first 16 status bits: %4.4X\n", snd_ymfpci_readw(card, YDSXGR_SPDIFOUTSTATUS));
 
   /////////snd_ymfpci_writel(card, YDSXGR_SPDIFOUTVOL, 0x3fff3fff);
   // Line-in -> ADC -> SPDIF-out ???
@@ -1087,14 +1067,20 @@ static int YMF_adetect (struct mpxplay_audioout_info_s *aui)
   printf("\nscanned\n");
 #endif
 
-  au_cards_fallback_to_null = 1;
-  return 0;
+#if YMF_ENABLE_PCM
+  if (aui->card_handler == &YMFSB_sndcard_info)
+    return 1;
+  else
+#endif
+  {
+    au_cards_fallback_to_null = 1;
+    return 0;
+  }
 
  err_adetect:
   YMF_close(aui);
   return 0;
 }
-
 
 static void YMF_card_info (struct mpxplay_audioout_info_s *aui)
 {
@@ -1105,9 +1091,11 @@ static void YMF_card_info (struct mpxplay_audioout_info_s *aui)
   pds_textdisplay_printf(sout);
 }
 
-static void YMF_start (struct mpxplay_audioout_info_s *aui)
+static void snd_ymfpci_hw_start (struct ymf_card_s *card)
 {
-  struct ymf_card_s *card = aui->card_private_data;
+  unsigned long flags;
+
+  spin_lock_irqsave(&chip->reg_lock, flags);
   if (card->start_count++ > 0)
     goto __end;
   snd_ymfpci_writel(card, YDSXGR_MODE,
@@ -1115,12 +1103,15 @@ static void YMF_start (struct mpxplay_audioout_info_s *aui)
   card->active_bank = snd_ymfpci_readl(card, YDSXGR_CTRLSELECT) & 1;
  __end:
   {}
+  spin_unlock_irqrestore(&chip->reg_lock, flags);
 }
 
-static void YMF_stop (struct mpxplay_audioout_info_s *aui)
+static void snd_ymfpci_hw_stop (struct ymf_card_s *card)
 {
-  struct ymf_card_s *card = aui->card_private_data;
+  unsigned long flags;
   long timeout = 1000;
+
+  spin_lock_irqsave(&chip->reg_lock, flags);
   if (--card->start_count > 0)
     goto __end;
   snd_ymfpci_writel(card, YDSXGR_MODE,
@@ -1129,49 +1120,173 @@ static void YMF_stop (struct mpxplay_audioout_info_s *aui)
     if ((snd_ymfpci_readl(card, YDSXGR_STATUS) & 2) == 0)
       break;
   }
+  //if (atomic_read(&chip->interrupt_sleep_count)) {
+  //  atomic_set(&chip->interrupt_sleep_count, 0);
+  //  wake_up(&chip->interrupt_sleep);
+  //}
  __end:
-        {}
+  spin_unlock_irqrestore(&chip->reg_lock, flags);
 }
 
-static long YMF_getbufpos(struct mpxplay_audioout_info_s *aui)
+static void YMF_start (struct mpxplay_audioout_info_s *aui)
 {
   struct ymf_card_s *card = aui->card_private_data;
-  unsigned long bufpos;
-  struct snd_ymfpci_voice *voice = &card->voices[0];
-
-  bufpos = le32_to_cpu(voice->bank[card->active_bank].start);
-
-  if (bufpos < aui->card_dmasize)
-    aui->card_dma_lastgoodpos = bufpos;
-
-  return aui->card_dma_lastgoodpos;
+  card->ctrl_playback[card->voices[0].number + 1] = cpu_to_le32(card->voices[0].bank_addr);
+  if (card->voices[1].use && !card->use_441_slot)
+    card->ctrl_playback[card->voices[1].number + 1] = cpu_to_le32(card->voices[1].bank_addr);
+  card->running = 1;
 }
 
-#ifdef SBEMU
-#define PCMBUFFERPAGESIZE      512
-#else
-#define PCMBUFFERPAGESIZE      4096
-#endif
-
-static void YMF_setrate (struct mpxplay_audioout_info_s *aui)
+static void YMF_stop (struct mpxplay_audioout_info_s *aui)
 {
-  struct ymf_card_s *card = aui->card_private_data; 
-  if (aui->freq_card < 5000) {
-    aui->freq_card = 5000;
-  } else {
-    if (aui->freq_card > 48000) {
-      aui->freq_card = 48000;
-    }
-  }
-  aui->chan_card = 2;
-  aui->bits_card = 16;
-  aui->card_wave_id = MPXPLAY_WAVEID_PCM_SLE;
-  card->pcmout_bufsize = MDma_get_max_pcmoutbufsize(aui, 0, PCMBUFFERPAGESIZE, 2, 0);
-  unsigned int dmabufsize = MDma_init_pcmoutbuf(aui, card->pcmout_bufsize, PCMBUFFERPAGESIZE, 0);
-  snd_ymfpci_writel(card, YDSXGR_NATIVEDACOUTVOL, 0xffffffff);
-  //snd_ymfpci_writel(card, YDSXGR_NATIVEDACOUTVOL, 0x00000000); // AC3
+  struct ymf_card_s *card = aui->card_private_data;
+  snd_ymfpci_hw_stop(card);
 }
 
+#if YMF_ENABLE_PCM
+static int voice_alloc (struct ymf_card_s *card,
+                        enum snd_ymfpci_voice_type type,
+                        int pair,
+                        struct snd_ymfpci_voice **rvoice)
+{
+  struct snd_ymfpci_voice *voice, *voice2;
+  int idx;
+	
+  *rvoice = NULL;
+  for (idx = 0; idx < YDSXG_PLAYBACK_VOICES; idx += pair ? 2 : 1) {
+    voice = &card->voices[idx];
+    voice2 = pair ? &card->voices[idx+1] : NULL;
+    if (voice->use || (voice2 && voice2->use))
+      continue;
+    voice->use = 1;
+    if (voice2)
+      voice2->use = 1;
+    switch (type) {
+    case YMFPCI_PCM:
+      voice->pcm = 1;
+      if (voice2)
+        voice2->pcm = 1;
+      break;
+    case YMFPCI_SYNTH:
+      voice->synth = 1;
+      break;
+    case YMFPCI_MIDI:
+      voice->midi = 1;
+      break;
+    }
+    snd_ymfpci_hw_start(card);
+    *rvoice = voice;
+    return 0;
+  }
+  return -ENOMEM;
+}
+
+static int snd_ymfpci_voice_alloc (struct ymf_card_s *card,
+                                   enum snd_ymfpci_voice_type type,
+                                   int pair,
+                                   struct snd_ymfpci_voice **rvoice)
+{
+  unsigned long flags;
+  int result;
+	
+  if (snd_BUG_ON(!rvoice))
+    return -EINVAL;
+  if (snd_BUG_ON(pair && type != YMFPCI_PCM))
+    return -EINVAL;
+	
+  spin_lock_irqsave(&card->voice_lock, flags);
+  for (;;) {
+    result = voice_alloc(card, type, pair, rvoice);
+    if (result == 0 || type != YMFPCI_PCM)
+      break;
+    /* TODO: synth/midi voice deallocation */
+    break;
+  }
+  spin_unlock_irqrestore(&card->voice_lock, flags);	
+  return result;		
+}
+
+static int snd_ymfpci_voice_free (struct ymf_card_s *card, struct snd_ymfpci_voice *pvoice)
+{
+  unsigned long flags;
+	
+  if (snd_BUG_ON(!pvoice))
+    return -EINVAL;
+  snd_ymfpci_hw_stop(card);
+  spin_lock_irqsave(&card->voice_lock, flags);
+  if (pvoice->number == card->src441_used) {
+    card->src441_used = -1;
+    //pvoice->ypcm->use_441_slot = 0;
+    card->use_441_slot = 0;
+  }
+  pvoice->use = pvoice->pcm = pvoice->synth = pvoice->midi = 0;
+  //pvoice->ypcm = NULL;
+  pvoice->interrupt = NULL;
+  spin_unlock_irqrestore(&card->voice_lock, flags);
+  return 0;
+}
+
+static void snd_ymfpci_pcm_interrupt (struct mpxplay_audioout_info_s *aui, struct snd_ymfpci_voice *voice)
+{
+  struct ymf_card_s *card = aui->card_private_data;
+  int i;
+  //struct snd_ymfpci_pcm *ypcm;
+  //struct ymf_card_s *ypcm = card;
+  uint32_t pos, delta, size;
+
+  //ypcm = voice->ypcm;
+  //if (!ypcm)
+  //  return;
+  //if (ypcm->substream == NULL)
+  //  return;
+  spin_lock(&card->reg_lock);
+  // only called with voice 0
+  if (card->running /*&& card->active_bank == 0*/) {
+    size = card->pcmout_bufsize >> aui->chan_card >> 1;
+    pos = le32_to_cpu(voice->bank[card->active_bank].start);
+    
+#if YMF_DEBUG
+    //DBG_Log("voice %u  bank %u  pos %u / %u\n", voice->number, card->active_bank, pos, size);
+#endif
+    if (pos < card->last_pos)
+      //delta = pos + (ypcm->buffer_size - ypcm->last_pos);
+      delta = pos + (size - card->last_pos);
+    else
+      delta = pos - card->last_pos;
+    card->period_pos += delta;
+    card->last_pos = pos;
+    if (card->period_pos >= card->period_size) {
+      card->period_pos %= card->period_size;
+      //spin_unlock(&card->reg_lock);
+      //snd_pcm_period_elapsed(ypcm->substream);
+      //spin_lock(&card->reg_lock);
+    }
+
+#if 1
+    //if (unlikely(card->update_pcm_vol)) {
+    if (card->update_pcm_vol) {
+      //unsigned int subs = card->substream->number;
+      unsigned int next_bank = 1 - card->active_bank;
+      struct snd_ymfpci_playback_bank *bank;
+      uint32_t volume;
+			
+      bank = &voice->bank[next_bank];
+      volume = cpu_to_le32(0x40000000);
+      bank->left_gain_end = volume;
+      //if (card->output_rear)
+        bank->eff2_gain_end = volume;
+      if (card->voices[1].use)
+        bank = &card->voices[1].bank[next_bank];
+      //volume = cpu_to_le32(card->pcm_mixer[subs].right << 15);
+      bank->right_gain_end = volume;
+      //if (card->output_rear)
+        bank->eff3_gain_end = volume;
+      card->update_pcm_vol--;
+    }
+#endif
+  }
+  spin_unlock(&card->reg_lock);
+}
 
 static uint32_t snd_ymfpci_calc_delta(uint32_t rate)
 {
@@ -1222,9 +1337,239 @@ static uint32_t snd_ymfpci_calc_lpfQ(uint32_t rate)
 	return val[0];
 }
 
+static void snd_ymfpci_pcm_init_voice (struct mpxplay_audioout_info_s *aui,
+                                       //struct snd_ymfpci_pcm *ypcm,
+                                       unsigned int voiceidx,
+                                       //struct snd_pcm_runtime *runtime,
+                                       int has_pcm_volume)
+{
+  struct ymf_card_s *card = aui->card_private_data;
+  struct snd_ymfpci_voice *voice = &card->voices[voiceidx];
+  uint32_t format;
+  uint32_t delta = snd_ymfpci_calc_delta(aui->freq_card);
+  uint32_t lpfQ = snd_ymfpci_calc_lpfQ(aui->freq_card);
+  uint32_t lpfK = snd_ymfpci_calc_lpfK(aui->freq_card);
+  struct snd_ymfpci_playback_bank *bank;
+  unsigned int nbank;
+  uint32_t vol_left, vol_right;
+  uint8_t use_left, use_right;
+  unsigned long flags;
+
+  //if (snd_BUG_ON(!voice))
+  //  return;
+  //if (aui->chan_card > 1) {
+  if (aui->chan_card == 1) {
+    use_left = 1;
+    use_right = 1;
+  } else {
+    use_left = (voiceidx & 1) == 0;
+    use_right = !use_left;
+  }
+  //if (has_pcm_volume) {
+  //  vol_left = cpu_to_le32(ypcm->card->pcm_mixer
+  //                         [ypcm->substream->number].left << 15);
+  //  vol_right = cpu_to_le32(ypcm->card->pcm_mixer
+  //                          [ypcm->substream->number].right << 15);
+  //} else {
+  vol_left = cpu_to_le32(0x40000000);
+  vol_right = cpu_to_le32(0x40000000);
+  //}
+  spin_lock_irqsave(&ypcm->card->voice_lock, flags);
+  format = aui->chan_card == 2 ? 0x00010000 : 0;
+  if (aui->bits_card == 8)
+    format |= 0x80000000;
+  else if (card->pci_dev->device_type == 0x754 &&
+           aui->freq_card == 44100 && aui->chan_card == 2 &&
+           voiceidx == 0 && (card->src441_used == -1 ||
+                             card->src441_used == voice->number)) {
+    card->src441_used = voice->number;
+    //ypcm->use_441_slot = 1;
+    card->use_441_slot = 1;
+    format |= 0x10000000;
+  }
+  if (card->src441_used == voice->number &&
+      (format & 0x10000000) == 0) {
+    card->src441_used = -1;
+    card->use_441_slot = 0;
+  }
+  if (aui->chan_card == 2 && (voiceidx & 1) != 0)
+    format |= 1;
+#if YMF_DEBUG
+  DBG_Log("init_voice freq %u %u (use %u) format: %8.8X   vols: %x (%u)  /  %x (%u)\n", aui->freq_card, voiceidx, voice->use, format, vol_left, use_left, vol_right, use_right);
+#endif
+  spin_unlock_irqrestore(&ypcm->card->voice_lock, flags);
+  for (nbank = 0; nbank < 2; nbank++) {
+    bank = &voice->bank[nbank];
+    memset(bank, 0, sizeof(*bank));
+    bank->format = cpu_to_le32(format);
+    bank->base = (uint32_t)pds_cardmem_physicalptr(card->dm, card->pcmout_buffer);
+    bank->loop_end = cpu_to_le32(card->pcmout_bufsize >> aui->chan_card >> 1);
+    bank->lpfQ = cpu_to_le32(lpfQ);
+    bank->delta = bank->delta_end = cpu_to_le32(delta);
+    bank->lpfK = bank->lpfK_end = cpu_to_le32(lpfK);
+    bank->eg_gain = bank->eg_gain_end = cpu_to_le32(0x40000000);
+    if (1) { // ypcm->output_front) {
+      if (use_left) {
+        bank->left_gain = bank->left_gain_end = vol_left;
+        bank->eff2_gain = bank->eff2_gain_end = vol_left;
+      }
+      if (use_right) {
+        bank->right_gain = bank->right_gain_end = vol_right;
+        bank->eff3_gain = bank->eff3_gain_end = vol_right;
+      }
+    }
+#if 0
+    if (ypcm->output_rear) {
+      if (!ypcm->swap_rear) {
+        if (use_left) {
+          bank->eff2_gain = bank->eff2_gain_end = vol_left;
+        }
+        if (use_right) {
+          bank->eff3_gain = bank->eff3_gain_end = vol_right;
+        }
+      } else {
+        /* The SPDIF out channels seem to be swapped, so we have
+           /* to swap them here, too.  The rear analog out channels
+           * will be wrong, but otherwise AC3 would not work.
+           */
+        if (use_left) {
+          bank->eff3_gain = bank->eff3_gain_end = vol_left;
+        }
+        if (use_right) {
+          bank->eff2_gain = bank->eff2_gain_end = vol_right;
+        }
+      }
+    }
+#endif
+  }
+}
+
+static int snd_ymfpci_pcm_voice_alloc (struct ymf_card_s *card, int voices)
+{
+#if YMF_DEBUG
+  DBG_Log("voice_alloc %d\n", voices);
+#endif
+  int err;
+
+  if (card->voices[1].use && voices < 2) {
+    snd_ymfpci_voice_free(card, &card->voices[1]);
+  }
+  if (voices == 1 && card->voices[0].use)
+    return 0;		/* already allocated */
+  if (voices == 2 && card->voices[0].use && card->voices[1].use)
+    return 0;		/* already allocated */
+  if (voices > 1) {
+    if (card->voices[0].use && card->voices[1].use) {
+      snd_ymfpci_voice_free(card, &card->voices[0]);
+    }		
+  }
+  struct snd_ymfpci_voice *rvoice;
+  err = snd_ymfpci_voice_alloc(card, YMFPCI_PCM, voices > 1, &rvoice);
+  if (err < 0)
+    return err;
+  //ypcm->voices[0]->ypcm = ypcm;
+  card->voices[0].interrupt = snd_ymfpci_pcm_interrupt;
+  //if (voices > 1) {
+    //ypcm->voices[1] = &card->voices[ypcm->voices[0]->number + 1];
+    //ypcm->voices[1]->ypcm = ypcm;
+  //}
+  return 0;
+}
+
+//static int snd_ymfpci_playback_prepare (struct snd_pcm_substream *substream)
+static int snd_ymfpci_playback_prepare (struct mpxplay_audioout_info_s *aui)
+{
+  //struct snd_pcm_runtime *runtime = substream->runtime;
+  struct ymf_card_s *card = aui->card_private_data;
+  //struct snd_ymfpci_pcm *ypcm = runtime->private_data;
+  //struct snd_kcontrol *kctl;
+  unsigned int nvoice;
+
+  //ypcm->period_size = runtime->period_size;
+  //ypcm->buffer_size = runtime->buffer_size;
+  card->period_pos = 0;
+  card->last_pos = 0;
+  for (nvoice = 0; nvoice < aui->chan_card; nvoice++)
+    snd_ymfpci_pcm_init_voice(aui, nvoice, 0);
+  
+  //if (substream->pcm == card->pcm && !ypcm->use_441_slot) {
+  //  kctl = card->pcm_mixer[substream->number].ctl;
+  //  kctl->vd[0].access &= ~SNDRV_CTL_ELEM_ACCESS_INACTIVE;
+  //  snd_ctl_notify(card, SNDRV_CTL_EVENT_MASK_INFO, &kctl->id);
+  //}
+  return 0;
+}
+
+static long YMF_getbufpos (struct mpxplay_audioout_info_s *aui)
+{
+  struct ymf_card_s *card = aui->card_private_data;
+  unsigned long bufpos;
+
+  //bufpos = card->last_pos;
+  //bufpos <<= aui->chan_card;
+  //bufpos <<= 1;
+
+  struct snd_ymfpci_voice *voice = &card->voices[0];
+  //bufpos = le32_to_cpu(voice->bank[card->active_bank].start);
+  bufpos = le32_to_cpu(voice->bank[0].start);
+  bufpos <<= 2;
+  //bufpos = (512 - (bufpos + 1)) << 2;
+  
+#if YMF_DEBUG
+  //DBG_Log("bp %u / %u\n", bufpos, aui->card_dmasize);
+#endif
+
+  if (bufpos < aui->card_dmasize) 
+    aui->card_dma_lastgoodpos = bufpos;
+
+  return aui->card_dma_lastgoodpos;
+}
+
+static void YMF_setrate (struct mpxplay_audioout_info_s *aui)
+{
+  //DBG_Log("setrate\n");
+  struct ymf_card_s *card = aui->card_private_data; 
+  if (aui->freq_card < 5000) {
+    aui->freq_card = 5000;
+  } else {
+    if (aui->freq_card > 48000) {
+      aui->freq_card = 48000;
+    }
+  }
+  aui->chan_card = 2;
+  aui->bits_card = 16;
+  aui->card_wave_id = MPXPLAY_WAVEID_PCM_SLE;
+  //card->pcmout_bufsize = MDma_get_max_pcmoutbufsize(aui, 0, PCMBUFFERPAGESIZE, 2, 0);
+#if YMF_DEBUG
+  DBG_Log("pcmout_bufsize: %d   max: %d\n", card->pcmout_bufsize, MDma_get_max_pcmoutbufsize(aui, 0, PCMBUFFERPAGESIZE, 2, 0));
+#endif
+  unsigned int dmabufsize = MDma_init_pcmoutbuf(aui, card->pcmout_bufsize, PCMBUFFERPAGESIZE, 0);
+  //unsigned int dmabufsize = card->pcmout_bufsize;
+  
+#define YMF_PERIODS 8
+ int periods = max(1, dmabufsize / PCMBUFFERPAGESIZE);
+ card->dma_size    = dmabufsize >> aui->chan_card;
+ //card->dma_size    = dmabufsize >> 1;
+ card->period_size = (dmabufsize / periods) >> aui->chan_card;
+ //aui->card_samples_per_int = card->period_size / 4;
+ aui->card_samples_per_int = card->period_size / 4;
+ //aui->card_dmasize=4096;//XXX
+#if YMF_DEBUG
+ DBG_Log("buffer config: dmabufsize:%d period_size:%d aui->card_dmasize: %d periods: %d\n",dmabufsize,card->period_size, aui->card_dmasize,periods);
+#endif
+
+ snd_ymfpci_pcm_voice_alloc(card, aui->chan_card);
+ 
+ snd_ymfpci_playback_prepare(aui);
+
+ snd_ymfpci_writel(card, YDSXGR_NATIVEDACOUTVOL, 0xffffffff);
+ //snd_ymfpci_writel(card, YDSXGR_NATIVEDACOUTVOL, 0x00000000); // AC3
+ card->update_pcm_vol = 1;
+}
+#endif
 
 one_sndcard_info YMF_sndcard_info={
-  "Yamaha YMF",
+  "Yamaha YMF FM/MPU only",
   SNDCARD_LOWLEVELHAND|SNDCARD_INT08_ALLOWED,
 
   NULL,                  // card_config
@@ -1247,8 +1592,9 @@ one_sndcard_info YMF_sndcard_info={
   NULL,
 };
 
+#if YMF_ENABLE_PCM
 one_sndcard_info YMFSB_sndcard_info={
-  "Yamaha YMF SB",
+  "Yamaha DS1/DS1E (YMF7xx)",
   SNDCARD_LOWLEVELHAND|SNDCARD_INT08_ALLOWED,
 
   NULL,                  // card_config
@@ -1270,5 +1616,30 @@ one_sndcard_info YMFSB_sndcard_info={
   NULL,
   NULL,
 };
+#else
+one_sndcard_info YMFSB_sndcard_info={
+  "Yamaha YMF FM/MPU only",
+  SNDCARD_LOWLEVELHAND|SNDCARD_INT08_ALLOWED,
+
+  NULL,                  // card_config
+  NULL,                  // no init
+  &YMF_adetect,      // only autodetect
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+
+  NULL,
+  NULL,
+  NULL,
+};
+#endif
 
 #endif // AU_CARDS_LINK_IHD

@@ -50,6 +50,7 @@ extern one_sndcard_info SBLIVE_sndcard_info;
 extern one_sndcard_info CMI8X38_sndcard_info;
 extern one_sndcard_info EMU20KX_sndcard_info;
 extern one_sndcard_info YMF_sndcard_info;
+extern one_sndcard_info YMFSB_sndcard_info;
 #ifndef SBEMU
 extern one_sndcard_info ESS_sndcard_info;
 extern one_sndcard_info WSS_sndcard_info;
@@ -80,6 +81,9 @@ extern one_sndcard_info NUL_sndcard_info;
 #endif
 
 static one_sndcard_info *all_sndcard_info[]={
+#ifdef AU_CARDS_LINK_YMF
+ &YMFSB_sndcard_info,
+#endif
 #ifdef AU_CARDS_LINK_YMF
  &YMF_sndcard_info,
 #endif
