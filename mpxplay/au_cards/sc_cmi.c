@@ -876,7 +876,7 @@ static long CMI8X38_getbufpos(struct mpxplay_audioout_info_s *aui)
  unsigned int rem, tries;
  for (tries = 0; tries < 3; tries++) {
    do {rem = snd_cmipci_read_16(card, reg); //note: current sample count can be 0
-   }while(rem == 0xFFFF);
+   }while(rem == 0xFFFF && card->dma_size-1 != 0xFFFF);
    //mpxplay_debugf(CMI_DEBUG_OUTPUT, "PCM ptr: %u, card->dma_size: %d  aui->card_dmasize: %d", rem, card->dma_size, aui->card_dmasize);
    if (rem < card->dma_size)
      goto ok;
