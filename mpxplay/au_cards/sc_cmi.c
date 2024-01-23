@@ -716,6 +716,8 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
  if(aui->bits_card>=16){
   card->fmt|=0x02;
   card->shift++;
+  //if(aui->bits_card>16) // 24,32 bits ???
+  // card->shift++;
  }
  if(aui->chan_card>1){
   card->fmt|=0x01;
@@ -750,14 +752,6 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
  // program sample counts
  snd_cmipci_write_16(card, CM_REG_CH0_FRAME2    , card->dma_size - 1);
  snd_cmipci_write_16(card, CM_REG_CH0_FRAME2 + 2, card->period_size - 1);
-
- /* set adc/dac flag */
- val = CM_CHADC0;
- if (1) //(rec->is_dac)
-   card->ctrl &= ~val;
- else
-   card->ctrl |= val;
- snd_cmipci_write_32(card, CM_REG_FUNCTRL0, card->ctrl);
 
  // set sample rate
  freqnum = snd_cmipci_rate_freq(aui->freq_card);
