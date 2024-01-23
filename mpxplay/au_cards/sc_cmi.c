@@ -21,6 +21,8 @@
 #define CMI_DEBUG_OUTPUT stdout
 
 #include "au_cards.h"
+#define _LOG_ENABLE 0
+#include "../../sbemu/dpmi/dbgutil.h"
 
 #ifdef AU_CARDS_LINK_CMI8X38
 
@@ -129,6 +131,7 @@
 #define CM_CH0BUSY        0x00000004
 #define CM_CHINT1        0x00000002
 #define CM_CHINT0        0x00000001
+#define CM_INTR_MASK (CM_INTR|CM_UARTINT|CM_LTDMAINT|CM_HTDMAINT|CM_CHINT1|CM_CHINT0)
 
 #define CM_REG_LEGACY_CTRL    0x14
 #define CM_NXCHG        0x80000000    /* h/w multi channels? */
@@ -256,7 +259,7 @@
  */
 #define CM_REG_FM_PCI        0x50
 
-#define CM_REG_EXT_MISC		0x90
+#define CM_REG_EXT_MISC      0x90
 
 /*
  * for CMI-8338 .. this is not valid for CMI-8738.
@@ -299,8 +302,8 @@
 /*
  * pci ids
  */
-#define PCI_DEVICE_ID_CMEDIA_CM8338A	0x0100
-#define PCI_DEVICE_ID_CMEDIA_CM8338B	0x0101
+#define PCI_DEVICE_ID_CMEDIA_CM8338A    0x0100
+#define PCI_DEVICE_ID_CMEDIA_CM8338B    0x0101
 #define PCI_DEVICE_ID_CMEDIA_CM8738  0x0111
 #define PCI_DEVICE_ID_CMEDIA_CM8738B 0x0112
 
@@ -382,9 +385,12 @@ extern unsigned int intsoundconfig,intsoundcontrol;
 //-------------------------------------------------------------------------
 // low level write & read
 
-#define snd_cmipci_write_8(cm,reg,data)  outb(cm->iobase+reg,data)
-#define snd_cmipci_write_16(cm,reg,data) outw(cm->iobase+reg,data)
-#define snd_cmipci_write_32(cm,reg,data) outl(cm->iobase+reg,data)
+#define snd_cmipci_write_8(cm,reg,data)  do { outb(cm->iobase+reg,data); _LOG("%x: %x %x\n",reg,data,inb(cm->iobase+reg)); } while(cm->chip_version<=37 && inb(cm->iobase+reg) != (data))
+#define snd_cmipci_write_8nv(cm,reg,data)  do { outb(cm->iobase+reg,data); _LOG("%x: %x %x\n",reg,data,inb(cm->iobase+reg)); } while(0)
+#define snd_cmipci_write_16(cm,reg,data) do { outw(cm->iobase+reg,data); _LOG("%x: %x %x\n",reg,data,inw(cm->iobase+reg)); } while(cm->chip_version<=37 && inw(cm->iobase+reg) != (data))
+#define snd_cmipci_write_16nv(cm,reg,data) do { outw(cm->iobase+reg,data); _LOG("%x: %x %x\n",reg,data,inw(cm->iobase+reg)); } while(0)
+#define snd_cmipci_write_32(cm,reg,data) do { outl(cm->iobase+reg,data); _LOG("%x: %x %x\n",reg,data,inl(cm->iobase+reg)); } while(cm->chip_version<=37 && inl(cm->iobase+reg) != (data))
+#define snd_cmipci_write_32m(cm,reg,data,mask) do { outl(cm->iobase+reg,data); _LOG("%x: %x %x\n",reg,data,inl(cm->iobase+reg)); } while(cm->chip_version<=37 && (inl(cm->iobase+reg)&(mask)) != ((data)&mask))
 #define snd_cmipci_read_8(cm,reg)  inb(cm->iobase+reg)
 #define snd_cmipci_read_16(cm,reg) inw(cm->iobase+reg)
 #define snd_cmipci_read_32(cm,reg) inl(cm->iobase+reg)
@@ -392,7 +398,10 @@ extern unsigned int intsoundconfig,intsoundcontrol;
 static void snd_cmipci_set_bit(cmi8x38_card *cm, unsigned int cmd, unsigned int flag)
 {
  unsigned int val;
+ do {
  val = snd_cmipci_read_32(cm, cmd);
+ _LOG("%x %x\n",cmd, val);
+ } while(val == -1 && cm->chip_version <= 37);
  val|= flag;
  snd_cmipci_write_32(cm, cmd, val);
 }
@@ -400,20 +409,23 @@ static void snd_cmipci_set_bit(cmi8x38_card *cm, unsigned int cmd, unsigned int 
 static void snd_cmipci_clear_bit(cmi8x38_card *cm, unsigned int cmd, unsigned int flag)
 {
  unsigned int val;
+ do {
  val = snd_cmipci_read_32(cm, cmd);
+ _LOG("%x %x\n",cmd, val); 
+ } while(val == -1 && cm->chip_version <= 37);
  val&= ~flag;
  snd_cmipci_write_32(cm, cmd, val);
 }
 
 static void snd_cmipci_mixer_write(cmi8x38_card *cm, unsigned char idx, unsigned char data)
 {
- snd_cmipci_write_8(cm, CM_REG_SB16_ADDR, idx);
- snd_cmipci_write_8(cm, CM_REG_SB16_DATA, data);
+ snd_cmipci_write_8nv(cm, CM_REG_SB16_ADDR, idx);
+ snd_cmipci_write_8nv(cm, CM_REG_SB16_DATA, data);
 }
 
 static unsigned int snd_cmipci_mixer_read(cmi8x38_card *cm, unsigned char idx)
 {
- snd_cmipci_write_8(cm, CM_REG_SB16_ADDR, idx);
+ snd_cmipci_write_8nv(cm, CM_REG_SB16_ADDR, idx);
  return snd_cmipci_read_8(cm, CM_REG_SB16_DATA);
 }
 
@@ -434,12 +446,12 @@ static unsigned int snd_cmipci_rate_freq(unsigned int rate)
 static void snd_cmipci_ch_reset(cmi8x38_card *cm, int ch) //reset channel ch
 {
  int reset = CM_RST_CH0 << ch;
- snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, CM_CHADC1 | reset);
- snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, CM_CHADC1 & (~reset));
- pds_delay_10us(10);
- snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, reset);
- snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, (~reset));
- pds_delay_10us(10);
+ int adcch = CM_CHADC0 << ch;
+ snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, adcch|reset);
+ do {pds_delay_10us(10); printf("%x\n",snd_cmipci_read_32(cm,CM_REG_FUNCTRL0));} while(!(snd_cmipci_read_32(cm,CM_REG_FUNCTRL0)&reset));
+ snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, adcch&(~reset));
+ do {pds_delay_10us(10);} while((snd_cmipci_read_32(cm,CM_REG_FUNCTRL0)&reset));
+ pds_mdelay(5); 
 }
 
 static int set_dac_channels(cmi8x38_card *cm, int channels)
@@ -473,7 +485,6 @@ static int set_dac_channels(cmi8x38_card *cm, int channels)
    snd_cmipci_clear_bit(cm, CM_REG_LEGACY_CTRL, CM_CHB3D6C);
    snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_ENCENTER);
   }
- //}
  return 0;
 }
 
@@ -532,16 +543,23 @@ static void cmi8x38_chip_init(struct cmi8x38_card *cm)
  cm->chip_version = 0;
  cm->max_channels = 2;
  if (cm->pci_dev->device_id != PCI_DEVICE_ID_CMEDIA_CM8338A &&
-	    cm->pci_dev->device_id != PCI_DEVICE_ID_CMEDIA_CM8338B)
+        cm->pci_dev->device_id != PCI_DEVICE_ID_CMEDIA_CM8338B)
   query_chip(cm);
 
  mpxplay_debugf(CMI_DEBUG_OUTPUT, "chip version: %d, multi_chan: %d", cm->chip_version, cm->can_multi_ch);
 
  /* initialize codec registers */
  snd_cmipci_set_bit(cm, CM_REG_MISC_CTRL, CM_RESET); //reset DSP/Bus master
- pds_delay_10us(10);
+ do {pds_delay_10us(10);} while(!(snd_cmipci_read_32(cm, CM_REG_MISC_CTRL)&CM_RESET));
  snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_RESET); //release reset
- pds_delay_10us(10);
+ do {pds_delay_10us(10);} while((snd_cmipci_read_32(cm, CM_REG_MISC_CTRL)&CM_RESET));
+ pds_mdelay(10);
+
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "FUNCTRL0: %x",  snd_cmipci_read_32(cm, CM_REG_FUNCTRL0));
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "FUNCTRL1: %x",  snd_cmipci_read_32(cm, CM_REG_FUNCTRL1));
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "LEGCCTRL: %x",  snd_cmipci_read_32(cm, CM_REG_LEGACY_CTRL));
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "MISCCTRL: %x",  snd_cmipci_read_32(cm, CM_REG_MISC_CTRL));
+ 
  if(cm->chip_version <= 37)
   pcibios_WriteConfig_Dword(cm->pci_dev, 0x40, 0); //disable DMA slave
 
@@ -551,15 +569,15 @@ static void cmi8x38_chip_init(struct cmi8x38_card *cm)
  snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, 0);    /* disable channels */
  snd_cmipci_write_32(cm, CM_REG_FUNCTRL1, 0);
 
- snd_cmipci_write_32(cm, CM_REG_CHFORMAT, 0);
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "FUNCTRL0: %x",  snd_cmipci_read_32(cm, CM_REG_FUNCTRL0));
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "FUNCTRL1: %x",  snd_cmipci_read_32(cm, CM_REG_FUNCTRL1));
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "LEGCCTRL: %x",  snd_cmipci_read_32(cm, CM_REG_LEGACY_CTRL));
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "MISCCTRL: %x",  snd_cmipci_read_32(cm, CM_REG_MISC_CTRL));
+
+ snd_cmipci_write_32m(cm, CM_REG_CHFORMAT, 0, 0xFFFFFF);
  snd_cmipci_set_bit(cm, CM_REG_MISC_CTRL, CM_ENDBDAC|CM_N4SPK3D);
  snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_XCHGDAC);
 
- //magic from Linux source
- if (cm->chip_version) {
-  snd_cmipci_write_8(cm, CM_REG_EXT_MISC, 0x20); /* magic */
-  snd_cmipci_write_8(cm, CM_REG_EXT_MISC + 1, 0x09); /* more magic */
- }
  snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_SPD32SEL|CM_AC3EN2); //disable 32bit PCM/AC3
 
  /* Set Bus Master Request */
@@ -576,13 +594,18 @@ static void cmi8x38_chip_init(struct cmi8x38_card *cm)
  }
 
  /* disable FM */
- val = snd_cmipci_read_32(cm, CM_REG_LEGACY_CTRL) & (~CM_FMSEL_MASK);
- snd_cmipci_write_32(cm, CM_REG_LEGACY_CTRL, val);
+ snd_cmipci_clear_bit(cm, CM_REG_LEGACY_CTRL, CM_FMSEL_MASK);
  snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_FM_EN);
 
  snd_cmipci_write_16(cm, CM_REG_MIXER1, 0); //unmute FM/PCM, disable X3D for 8338
  /* reset mixer */
  snd_cmipci_mixer_write(cm, 0, 0);
+
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "FUNCTRL0: %x",  snd_cmipci_read_32(cm, CM_REG_FUNCTRL0));
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "FUNCTRL1: %x",  snd_cmipci_read_32(cm, CM_REG_FUNCTRL1));
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "LEGCCTRL: %x",  snd_cmipci_read_32(cm, CM_REG_LEGACY_CTRL));
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "MISCCTRL: %x",  snd_cmipci_read_32(cm, CM_REG_MISC_CTRL));
+ 
 }
 
 static void cmi8x38_chip_close(struct cmi8x38_card *cm)
@@ -746,32 +769,58 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
  // card->dma_size    = (card->dma_size * aui->chan_card) / 2;
  // card->period_size = (card->period_size * aui->chan_card) / 2;
  //}
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "0FUNCTRL0: %x",  snd_cmipci_read_32(card, CM_REG_FUNCTRL0));
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "FUNCTRL1: %x",  snd_cmipci_read_32(card, CM_REG_FUNCTRL1));
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "LEGCCTRL: %x",  snd_cmipci_read_32(card, CM_REG_LEGACY_CTRL));
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "MISCCTRL: %x",  snd_cmipci_read_32(card, CM_REG_MISC_CTRL));
+
 
   // set buffer address
  snd_cmipci_write_32(card, CM_REG_CH0_FRAME1, (uint32_t) pds_cardmem_physicalptr(card->dm, card->pcmout_buffer));
  // program sample counts
- snd_cmipci_write_16(card, CM_REG_CH0_FRAME2    , card->dma_size - 1);
- snd_cmipci_write_16(card, CM_REG_CH0_FRAME2 + 2, card->period_size - 1);
+ snd_cmipci_write_16nv(card, CM_REG_CH0_FRAME2    , card->dma_size - 1);
+ snd_cmipci_write_16nv(card, CM_REG_CH0_FRAME2 + 2, card->period_size - 1);
+
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "1FUNCTRL0: %x",  snd_cmipci_read_32(card, CM_REG_FUNCTRL0));
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "FUNCTRL1: %x",  snd_cmipci_read_32(card, CM_REG_FUNCTRL1));
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "LEGCCTRL: %x",  snd_cmipci_read_32(card, CM_REG_LEGACY_CTRL));
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "MISCCTRL: %x",  snd_cmipci_read_32(card, CM_REG_MISC_CTRL));
 
  // set sample rate
  freqnum = snd_cmipci_rate_freq(aui->freq_card);
  aui->freq_card=cmi_rates[freqnum]; // if the freq-config is not standard at CMI
 
  // DAC
- val = snd_cmipci_read_32(card, CM_REG_FUNCTRL1);
+ do {
+  val = snd_cmipci_read_32(card, CM_REG_FUNCTRL1);
+ }while(card->chip_version <= 37 && val == -1);
  val &= ~CM_DSFC_MASK;
  val |= (freqnum << CM_DSFC_SHIFT) & CM_DSFC_MASK;
  snd_cmipci_write_32(card, CM_REG_FUNCTRL1, val);
 
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "2FUNCTRL0: %x",  snd_cmipci_read_32(card, CM_REG_FUNCTRL0));
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "FUNCTRL1: %x",  snd_cmipci_read_32(card, CM_REG_FUNCTRL1));
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "LEGCCTRL: %x",  snd_cmipci_read_32(card, CM_REG_LEGACY_CTRL));
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "MISCCTRL: %x",  snd_cmipci_read_32(card, CM_REG_MISC_CTRL));
+ 
+
  // set format
- val = snd_cmipci_read_32(card, CM_REG_CHFORMAT);
+ do {
+  val = snd_cmipci_read_32(card, CM_REG_CHFORMAT);
+ }while(card->chip_version <= 37 && val == -1);
  
  //val &= CM_ADCDACLEN_MASK;
  //val |= CM_ADCDACLEN_130; //adc sample resolution, also 00 will work (highest)
 
  val &= ~CM_CH0FMT_MASK;
  val |= card->fmt << CM_CH0FMT_SHIFT;
- snd_cmipci_write_32(card, CM_REG_CHFORMAT, val);
+ snd_cmipci_write_32m(card, CM_REG_CHFORMAT, val, 0xFFFFFF);
+ pds_mdelay(10); 
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "3CHFORMAT: %x",  snd_cmipci_read_32(card, CM_REG_CHFORMAT));
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "FUNCTRL0: %x",  snd_cmipci_read_32(card, CM_REG_FUNCTRL0));
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "FUNCTRL1: %x",  snd_cmipci_read_32(card, CM_REG_FUNCTRL1));
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "LEGCCTRL: %x",  snd_cmipci_read_32(card, CM_REG_LEGACY_CTRL));
+ mpxplay_debugf(CMI_DEBUG_OUTPUT, "MISCCTRL: %x",  snd_cmipci_read_32(card, CM_REG_MISC_CTRL));
 
  // set SPDIF
  //if((aui->freq_card==44100 || aui->freq_card==48000) && (aui->chan_card==2) && (aui->bits_card==16))
@@ -828,7 +877,8 @@ static long CMI8X38_getbufpos(struct mpxplay_audioout_info_s *aui)
  unsigned int reg = CM_REG_CH0_FRAME2;
  unsigned int rem, tries;
  for (tries = 0; tries < 3; tries++) {
-   rem = snd_cmipci_read_16(card, reg); //note: current sample count can be 0
+   do {rem = snd_cmipci_read_16(card, reg); //note: current sample count can be 0
+   }while(rem == 0xFFFF);
    //mpxplay_debugf(CMI_DEBUG_OUTPUT, "PCM ptr: %u, card->dma_size: %d  aui->card_dmasize: %d", rem, card->dma_size, aui->card_dmasize);
    if (rem < card->dma_size)
      goto ok;
@@ -837,6 +887,7 @@ static long CMI8X38_getbufpos(struct mpxplay_audioout_info_s *aui)
  return aui->card_dma_lastgoodpos;
  ok:
   bufpos = (card->dma_size - (rem + 1)) << card->shift;
+  //_LOG("bufpos: %d %d\n",  rem, bufpos);
 #endif
 
   if (bufpos < aui->card_dmasize)
@@ -871,7 +922,9 @@ static int CMI8X38_IRQRoutine(mpxplay_audioout_info_s* aui)
 {
   cmi8x38_card *card=aui->card_private_data;
   int status = snd_cmipci_read_32(card, CM_REG_INT_STATUS); //read only reg (R)
-  if (!(status & CM_INTR)) {
+  while(status == -1) snd_cmipci_read_32(card, CM_REG_INT_STATUS);
+  if ( card->chip_version > 37 && !(status&CM_INTR) ||
+      card->chip_version <= 37 && !(status & CM_INTR_MASK)) { //the summary bit is incorrect for PCI-SX, the interrupt be chained to other shared IRQ device with invalid interrupts
     return 0;
   }
   if(status&CM_MCBINT) //Abort conditions occur during PCI Bus Target/Master Access
@@ -887,7 +940,7 @@ static int CMI8X38_IRQRoutine(mpxplay_audioout_info_s* aui)
     mask |= CM_CH0_INT_EN;
   if (status & CM_CHINT1)
     mask |= CM_CH1_INT_EN;
-  snd_cmipci_clear_bit(card, CM_REG_INT_HLDCLR, mask); //set to 0 will disable other interrupt. or write 0 and then with full ENs will work.
+  snd_cmipci_clear_bit(card, CM_REG_INT_HLDCLR, mask|CM_TDMA_INT_EN); //set to 0 will disable other interrupt. or write 0 and then with full ENs will work.
   snd_cmipci_set_bit(card, CM_REG_INT_HLDCLR, mask); //re-enable hold
   return 1;
 }
@@ -897,9 +950,9 @@ static int CMI8X38_IRQRoutine(mpxplay_audioout_info_s* aui)
 static aucards_onemixerchan_s cmi8x38_master_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_MASTER,AU_MIXCHANFUNC_VOLUME),2,{{0x30,31,3,0},{0x31,31,3,0}}};
 static aucards_onemixerchan_s cmi8x38_pcm_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_PCM,AU_MIXCHANFUNC_VOLUME),      2,{{0x32,31,3,0},{0x33,31,3,0}}};
 static aucards_onemixerchan_s cmi8x38_synth_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_SYNTH,AU_MIXCHANFUNC_VOLUME),  2,{{0x34,31,3,0},{0x35,31,3,0}}};
-//static aucards_onemixerchan_s cmi8x38_cdin_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_CDIN,AU_MIXCHANFUNC_VOLUME),    2,{{0x36,31,3,0},{0x37,31,3,0}}};
-//static aucards_onemixerchan_s cmi8x38_linein_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_LINEIN,AU_MIXCHANFUNC_VOLUME),2,{{0x38,31,3,0},{0x39,31,3,0}}};
-//static aucards_onemixerchan_s cmi8x38_micin_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_MICIN,AU_MIXCHANFUNC_VOLUME),  1,{{0x3A,31,3,0}}};
+static aucards_onemixerchan_s cmi8x38_cdin_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_CDIN,AU_MIXCHANFUNC_VOLUME),    2,{{0x36,31,3,0},{0x37,31,3,0}}};
+static aucards_onemixerchan_s cmi8x38_linein_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_LINEIN,AU_MIXCHANFUNC_VOLUME),2,{{0x38,31,3,0},{0x39,31,3,0}}};
+static aucards_onemixerchan_s cmi8x38_micin_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_MICIN,AU_MIXCHANFUNC_VOLUME),  1,{{0x3A,31,3,0}}};
 //FM for SBPro - don't write to it as in previous SBPro mixer test it might be reserved.
 //static aucards_onemixerchan_s cmi8x38_auxin_vol={AU_MIXCHANFUNCS_PACK(AU_MIXCHAN_AUXIN,AU_MIXCHANFUNC_VOLUME),  2,{{0x26,15,4,0},{0x26,15,0,0}}}; //??? in or out?
 
@@ -907,9 +960,9 @@ static aucards_allmixerchan_s cmi8x38_mixerset[]={
  &cmi8x38_master_vol,
  &cmi8x38_pcm_vol,
  &cmi8x38_synth_vol,
- //&cmi8x38_cdin_vol,
- //&cmi8x38_linein_vol,
- //&cmi8x38_micin_vol,
+ &cmi8x38_cdin_vol,
+ &cmi8x38_linein_vol,
+ &cmi8x38_micin_vol,
  //&cmi8x38_auxin_vol,
  NULL
 };
