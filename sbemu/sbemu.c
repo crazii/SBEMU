@@ -332,7 +332,18 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                     }
                 }
                 if(SBEMU_SampleRate == 0)
+                {
+                    uint8_t limit = 212; //23K Hz. limit time constant. reference: sblaster.cpp from DOSBox-X.
+                    if(SBEMU_DSPVER >= 0x0400) //SB16
+                        limit = SBEMU_GetBits() == 2 ? 165 : (SBEMU_GetBits() == 3 ? 179 : (SBEMU_GetBits() == 4 ? 172 : 234));
+                    else if(SBEMU_DSPVER >= 0x0300) //SBPro
+                        limit = SBEMU_GetBits() == 2 ? 165 : (SBEMU_GetBits() == 3 ? 179 : (SBEMU_GetBits() == 4 ? 172 : (SBEMU_HighSpeed?234:212)));
+                    else //SB2.0
+                        limit = SBEMU_GetBits() == 2 ? 189 : (SBEMU_GetBits() <= 4 ? 172 : ((SBEMU_HighSpeed?234:210)));
+                    value = min(value, limit);
+                    
                     SBEMU_SampleRate = 256000000/(65536-(value<<8)) / SBEMU_GetChannels();
+                }
                 SBEMU_DSPCMD_Subindex = 2; //only 1byte
                 SBEMU_UseTimeConst = SBEMU_GetChannels(); // 1 or 2
                 //_LOG("SBEMU: set sampling rate: %d", SBEMU_SampleRate);
