@@ -391,7 +391,7 @@ extern unsigned int intsoundconfig,intsoundcontrol;
 #define snd_cmipci_write_16nv(cm,reg,data) do { outw(cm->iobase+reg,data); _LOG("%x: %x %x\n",reg,data,inw(cm->iobase+reg)); } while(0)
 #define snd_cmipci_write_32(cm,reg,data) do { outl(cm->iobase+reg,data); _LOG("%x: %x %x\n",reg,data,inl(cm->iobase+reg)); } while(cm->chip_version<=37 && inl(cm->iobase+reg) != (data))
 #define snd_cmipci_write_32m(cm,reg,data,mask) do { outl(cm->iobase+reg,data); _LOG("%x: %x %x\n",reg,data,inl(cm->iobase+reg)); } while(cm->chip_version<=37 && (inl(cm->iobase+reg)&(mask)) != ((data)&mask))
-#define snd_cmipci_read_8(cm,reg)  inb(cm->iobase+reg);
+#define snd_cmipci_read_8(cm,reg)  inb(cm->iobase+reg)
 #define snd_cmipci_read_16(cm,reg) inw(cm->iobase+reg)
 #define snd_cmipci_read_32(cm,reg) inl(cm->iobase+reg)
 
@@ -594,8 +594,7 @@ static void cmi8x38_chip_init(struct cmi8x38_card *cm)
  }
 
  /* disable FM */
- val = snd_cmipci_read_32(cm, CM_REG_LEGACY_CTRL) & (~CM_FMSEL_MASK);
- snd_cmipci_write_32(cm, CM_REG_LEGACY_CTRL, val);
+ snd_cmipci_clear_bit(cm, CM_REG_LEGACY_CTRL, CM_FMSEL_MASK);
  snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_FM_EN);
 
  /* reset mixer */
@@ -791,7 +790,9 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
  aui->freq_card=cmi_rates[freqnum]; // if the freq-config is not standard at CMI
 
  // DAC
- val = snd_cmipci_read_32(card, CM_REG_FUNCTRL1);
+ do {
+  val = snd_cmipci_read_32(card, CM_REG_FUNCTRL1);
+ }while(card->chip_version <= 37 && val == -1);
  val &= ~CM_DSFC_MASK;
  val |= (freqnum << CM_DSFC_SHIFT) & CM_DSFC_MASK;
  snd_cmipci_write_32(card, CM_REG_FUNCTRL1, val);
@@ -803,7 +804,9 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
  
 
  // set format
- val = snd_cmipci_read_32(card, CM_REG_CHFORMAT);
+ do {
+  val = snd_cmipci_read_32(card, CM_REG_CHFORMAT);
+ }while(card->chip_version <= 37 && val == -1);
  
  //val &= CM_ADCDACLEN_MASK;
  //val |= CM_ADCDACLEN_130; //adc sample resolution, also 00 will work (highest)
@@ -872,7 +875,8 @@ static long CMI8X38_getbufpos(struct mpxplay_audioout_info_s *aui)
  unsigned int reg = CM_REG_CH0_FRAME2;
  unsigned int rem, tries;
  for (tries = 0; tries < 3; tries++) {
-   rem = snd_cmipci_read_16(card, reg); //note: current sample count can be 0
+   do {rem = snd_cmipci_read_16(card, reg); //note: current sample count can be 0
+   }while(rem == 0xFFFF);
    //mpxplay_debugf(CMI_DEBUG_OUTPUT, "PCM ptr: %u, card->dma_size: %d  aui->card_dmasize: %d", rem, card->dma_size, aui->card_dmasize);
    if (rem < card->dma_size)
      goto ok;
@@ -916,7 +920,7 @@ static int CMI8X38_IRQRoutine(mpxplay_audioout_info_s* aui)
 {
   cmi8x38_card *card=aui->card_private_data;
   int status = snd_cmipci_read_32(card, CM_REG_INT_STATUS); //read only reg (R)
-  //if(status != -1) _LOG("INTR: %x\n", status);
+  while(status == -1) snd_cmipci_read_32(card, CM_REG_INT_STATUS);
   if ( card->chip_version > 37 && !(status&CM_INTR) ||
       card->chip_version <= 37 && !(status & CM_INTR_MASK)) { //the summary bit is incorrect for PCI-SX, the interrupt be chained to other shared IRQ device with invalid interrupts
     return 0;
