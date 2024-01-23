@@ -868,7 +868,7 @@ static int AU_getmixer_one(struct mpxplay_audioout_info_s *aui,unsigned int mixc
 #define AU_MIXCHANS_OUTS 5
 
 static const unsigned int au_mixchan_outs[AU_MIXCHANS_OUTS]={
- AU_MIXCHAN_MASTER,AU_MIXCHAN_SYNTH,AU_MIXCHAN_PCM,AU_MIXCHAN_HEADPHONE,AU_MIXCHAN_SPDIFOUT};
+ AU_MIXCHAN_MASTER,AU_MIXCHAN_PCM,AU_MIXCHAN_HEADPHONE,AU_MIXCHAN_SPDIFOUT,AU_MIXCHAN_SYNTH};
 
 void AU_setmixer_outs(struct mpxplay_audioout_info_s *aui,unsigned int setmode,int newvalue)
 {
