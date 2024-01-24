@@ -10,7 +10,7 @@
 
 #ifndef DEBUG
 #define DEBUG 0
-#else
+#elif DEBUG != 0
 #undef DEBUG
 #define DEBUG 1
 #endif
