@@ -800,7 +800,8 @@ int main(int argc, char* argv[])
         }
 
         //OPL3EMU_Init(aui.freq_card);
-        printf("OPL3 emulation at port 388: ");
+        char *emutype = (main_hw_fmport != 0) ? "hardware" : "emulation";
+        printf("OPL3 %s at port 388: ", emutype);
         MAIN_Print_Enabled_Newline(true);
     }
     
@@ -818,8 +819,9 @@ int main(int argc, char* argv[])
             return 1;
         }
 
-        printf("MPU-401 UART emulation at address %x: ",
-               MAIN_Options[OPT_MPUADDR].value);
+        char *emutype = (main_hw_mpuport != 0) ? "hardware" : "emulation";
+        printf("MPU-401 UART %s at address %x: ",
+               emutype, MAIN_Options[OPT_MPUADDR].value);
         MAIN_Print_Enabled_Newline(true);
     }
 
