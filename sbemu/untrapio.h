@@ -1,7 +1,7 @@
 #ifndef _UNTRAPIO_H_
 #define _UNTRAPIO_H_
 //Untrapped IO wrapper function
-//in PM mode, HDPMI will call the trap handler with IOPL0 so direct in/out works, but in RM, QEMM doesn't do that,
+//in PM mode, HDPMI will call the trap handler with IOPL0 so direct in/out works - now with IOPL3, but in RM, QEMM doesn't do that,
 //so QEMM's untrapped function need to be called, this works for both PM & RM mode
 
 #include <stdint.h>

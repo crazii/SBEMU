@@ -981,7 +981,7 @@ static void snd_ihd_hw_init(struct intelhd_card_s *card)
  azx_writeb(card, RIRBSTS, RIRB_INT_MASK);
  azx_writeb(card, CORBSTS, 1);
  azx_writel(card, INTCTL, 0);
- azx_writel(card, INTSTS, ICH6_INT_CTRL_EN | ICH6_INT_ALL_STREAM);
+ //azx_writel(card, INTSTS, ICH6_INT_CTRL_EN | ICH6_INT_ALL_STREAM); //INTSTS is read only.
  #ifndef SBEMU
   azx_writel(card, INTCTL, azx_readl(card, INTCTL) | ICH6_INT_CTRL_EN | ICH6_INT_GLOBAL_EN);
  #endif
@@ -1625,7 +1625,10 @@ static int INTELHD_IRQRoutine(mpxplay_audioout_info_s* aui)
     azx_writew(card, STATESTS, statests);
   statests &= azx_readw(card, WAKEEN); //same as above
 
-  return sdsts | rirbsts | statests;
+  int intsts = azx_readl(card, INTSTS); //INTSTS is read only.
+  intsts &= azx_readl(card, INTCTL); //same as above
+
+  return sdsts | rirbsts | statests | intsts;
 }
 #endif
 

@@ -42,7 +42,6 @@ static int SBEMU_TriggerIRQ = 0;
 static int SBEMU_Pos = 0;
 static int SBEMU_DetectionCounter = 0;
 static int SBEMU_DirectCount = 0;
-static int SBEMU_UseTimeConst = 0;
 static int SBEMU_FixTC = 0;
 static uint8_t SBEMU_IRQMap[4] = {2,5,7,10};
 static uint8_t SBEMU_MixerRegIndex = 0;
@@ -52,6 +51,8 @@ static uint8_t SBEMU_RS = 0x2A;
 static uint8_t SBEMU_TestReg;
 static uint8_t SBEMU_DMAID_A;
 static uint8_t SBEMU_DMAID_X;
+static uint8_t SBEMU_UseTimeConst = 0;
+static uint8_t SBEMU_TimeConst = 0;
 static uint16_t SBEMU_DSPVER = 0x0302;
 static ADPCM_STATE SBEMU_ADPCM;
 
@@ -75,6 +76,25 @@ static int SBEMU_Indexof(uint8_t* array, int count, uint8_t  val)
             return i;
     }
     return -1;
+}
+
+static void SBMEU_UpdateTCSampleRate()
+{
+    if(!SBEMU_UseTimeConst)
+        return;
+
+    uint8_t tc = SBEMU_TimeConst;
+    uint8_t limit = 212; //23K Hz. limit time constant. reference: sblaster.cpp from DOSBox-X.
+    if(SBEMU_DSPVER >= 0x0400) //SB16
+        limit = SBEMU_GetBits() == 2 ? 165 : (SBEMU_GetBits() == 3 ? 179 : (SBEMU_GetBits() == 4 ? 172 : 234));
+    else if(SBEMU_DSPVER >= 0x0200 && SBEMU_DSPVER < 0x300) //SB16
+        limit = SBEMU_GetBits() == 2 ? 189 : (SBEMU_GetBits() <= 4 ? 172 : ((SBEMU_HighSpeed?234:210)));
+    else //SBPro
+        limit = SBEMU_GetBits() == 2 ? 165 : (SBEMU_GetBits() == 3 ? 179 : (SBEMU_GetBits() == 4 ? 172 : (SBEMU_HighSpeed?234:212)));
+    //DBG_Log("tc val: %d, limit: %d, bits: %d\n", value, limit, SBEMU_GetBits());
+    tc = min(tc, limit);
+    SBEMU_SampleRate = 256000000/(65536-(tc<<8)) / SBEMU_GetChannels();
+    SBEMU_UseTimeConst = SBEMU_GetChannels();
 }
 
 
@@ -157,11 +177,10 @@ void SBEMU_Mixer_Write(uint16_t port, uint8_t value)
             }
         }
     }
-    if(SBEMU_MixerRegIndex == SBEMU_MIXERREG_MODEFILTER && SBEMU_UseTimeConst)
+    if(SBEMU_MixerRegIndex == SBEMU_MIXERREG_MODEFILTER)
     {
         //divide channels: channels might be set later than time const, order opposite to the SB programming guide. (Game: Epic Pinball)
-        SBEMU_SampleRate = SBEMU_SampleRate * SBEMU_UseTimeConst / SBEMU_GetChannels();
-        SBEMU_UseTimeConst = SBEMU_GetChannels();
+        SBMEU_UpdateTCSampleRate(); //recalc sample rate using new channel count
     }
 }
 
@@ -274,6 +293,8 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                 SBEMU_Auto = SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_AUTO_HS || SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_AUTO;
                 SBEMU_Bits = 8;
                 SBEMU_HighSpeed = (SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_AUTO_HS || SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_1_HS);
+                //DBG_Log("Hispeed: %d\n", SBEMU_HighSpeed);
+                SBMEU_UpdateTCSampleRate(); //hispeed will affect the TC limit, update it
                 SBEMU_Started = TRUE; //start transfer
                 SBEMU_DSPCMD = SBEMU_DSPCMD_INVALID;
                 SBEMU_Pos = 0;
@@ -331,10 +352,14 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                         break;
                     }
                 }
-                if(SBEMU_SampleRate == 0)
-                    SBEMU_SampleRate = 256000000/(65536-(value<<8)) / SBEMU_GetChannels();
-                SBEMU_DSPCMD_Subindex = 2; //only 1byte
+
                 SBEMU_UseTimeConst = SBEMU_GetChannels(); // 1 or 2
+                SBEMU_TimeConst = value;
+
+                if(SBEMU_SampleRate == 0)
+                    SBMEU_UpdateTCSampleRate();
+
+                SBEMU_DSPCMD_Subindex = 2; //only 1byte
                 //_LOG("SBEMU: set sampling rate: %d", SBEMU_SampleRate);
             }
             break;
