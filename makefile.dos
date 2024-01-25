@@ -1,6 +1,11 @@
 TARGET := output/sbemu.exe
 CC := gcc
 CXX := gxx
+
+ifeq ($(DEBUG),)
+override DEBUG = 0
+endif
+
 DEBUG ?= 0
 
 VERSION ?= LOCAL_DOS

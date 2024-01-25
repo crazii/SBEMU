@@ -288,7 +288,7 @@ int pds_xms_free(unsigned short handle)
 int pds_dpmi_xms_allocmem(xmsmem_t * mem,unsigned int size)
 {
     unsigned long addr;
-    size = (size+1023)/1024*1024;
+    size = (size+0xFFF)&~0xFFF; //align to 4K
     if( (mem->xms=pds_xms_alloc(size/1024, &addr)) )
     {
         unsigned long base = 0;
@@ -302,6 +302,7 @@ int pds_dpmi_xms_allocmem(xmsmem_t * mem,unsigned int size)
             {
                 if(info.address < base)
                 {
+                    printf("DPMI remap base address\n");
                     __dpmi_free_physical_address_mapping(&info);
                     info.address = base + limit + 1;
                     if(__dpmi_allocate_linear_memory(&info, 0) != 0)//TODO: handle error

@@ -52,6 +52,8 @@ static uint32_t MAIN_DMA_MappedAddr = 0;
 static uint8_t MAIN_QEMM_Present = 0;
 static uint8_t MAIN_HDPMI_Present = 0;
 static uint8_t MAIN_InINT;
+#define MAIN_ININT_PM 0x01
+#define MAIN_ININT_RM 0x02
 
 SBEMU_EXTFUNS MAIN_SbemuExtFun;
 
@@ -977,28 +979,35 @@ int main(int argc, char* argv[])
 
 static void MAIN_InterruptPM()
 {
+    if(MAIN_InINT&MAIN_ININT_PM) return;
+    //DBG_Log("INTPM %d\n", MAIN_InINT);
+    MAIN_InINT |= MAIN_ININT_PM;
+
     HDPMIPT_GetInterrupContext(&MAIN_IntContext);
-    if(!MAIN_InINT && aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
+    if(!(MAIN_InINT&MAIN_ININT_RM) && aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
     {
         MAIN_Interrupt();
         PIC_SendEOIWithIRQ(aui.card_irq);
     }
     else
     {
-        BOOL InInt = MAIN_InINT;
-        MAIN_InINT = TRUE;
-        if(MAIN_IntContext.EFLAGS&CPU_VMFLAG)
+        if((MAIN_InINT&MAIN_ININT_RM) || (MAIN_IntContext.EFLAGS&CPU_VMFLAG))
             DPMI_CallOldISR(&MAIN_IntHandlePM);
         else
             DPMI_CallOldISRWithContext(&MAIN_IntHandlePM, &MAIN_IntContext.regs);
         PIC_UnmaskIRQ(aui.card_irq);
-        MAIN_InINT = InInt;
+        //DBG_Log("INTPME %d\n", MAIN_InINT);
     }
+    MAIN_InINT &= ~MAIN_ININT_PM;
 }
 
 static void MAIN_InterruptRM()
 {
-    if(!MAIN_InINT && aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
+    if(MAIN_InINT&MAIN_ININT_RM) return;
+    //DBG_Log("INTRM %d\n", MAIN_InINT);
+    MAIN_InINT |= MAIN_ININT_RM;
+    
+    if(!(MAIN_InINT&MAIN_ININT_PM) && aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
     {
         MAIN_IntContext.regs = MAIN_RMIntREG;
         MAIN_IntContext.EFLAGS = MAIN_RMIntREG.w.flags | CPU_VMFLAG;
@@ -1007,13 +1016,12 @@ static void MAIN_InterruptRM()
     }
     else
     {
-        BOOL InInt = MAIN_InINT;
-        MAIN_InINT = TRUE;
         DPMI_REG r = MAIN_RMIntREG; //don't modify MAIN_RMIntREG on hardware interrupt
         DPMI_CallRealModeOldISR(&MAIN_IntHandleRM, &r);
         PIC_UnmaskIRQ(aui.card_irq);
-        MAIN_InINT = InInt;
+        //DBG_Log("INTRME %d\n", MAIN_InINT);
     }
+    MAIN_InINT &= ~MAIN_ININT_RM;
 }
 
 static void MAIN_Interrupt()

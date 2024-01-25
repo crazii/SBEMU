@@ -558,15 +558,19 @@ uint32_t DPMI_CallOldISRWithContext(DPMI_ISR_HANDLE* inputp handle, const DPMI_R
     "mov %0, %%eax \n\t mov %1, %%ecx \n\t mov %2, %%edx \n\t mov %3, %%ebx \n\t mov %4, %%esi \n\t mov %5, %%edi \n\t"
     "push %6 \n\t pop %%ds \n\t push %7 \n\t pop %%es \n\t push %8 \n\t pop %%fs \n\t push %9 \n\t pop %%gs \n\t"
     
-    //"pushl %10 \n\t andw $0xFCFF, (%%esp) \n\t" //don't restore ebp, lcall uses it.
+    "push %12 \n\t"
+    "push %11 \n\t"
+    //"pushl %10 \n\t andw $0xFCFF, (%%esp) \n\t"
     "pushfl \n\t"
-    "lcall *%11 \n\t"
+    "mov %13, %%ebp \n\t"
+    "lcall *4(%%esp) \n\t"
+    "add $8, %%esp \n\t"
     
     "pop %%gs \n\t pop %%fs \n\t pop %%es \n\t pop %%ds \n\t" 
     "popfl \n\t popal \n\t"
     ::"m"(r.d.eax),"m"(r.d.ecx),"m"(r.d.edx),"m"(r.d.ebx),"m"(r.d.esi),"m"(r.d.edi),
     "m"(r.w.ds),"m"(r.w.es),"m"(r.w.fs),"m"(r.w.gs),
-    "m"(r.w.flags), "m"(h.old_offset)
+    "m"(r.w.flags), "m"(h.old_offset), "m"(h.old_cs), "m"(r.d.ebp)
     );
     return 0;
 }
