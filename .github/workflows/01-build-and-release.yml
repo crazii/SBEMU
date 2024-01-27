@@ -15,15 +15,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: src
-      - name: Fetch git history for changelog
-        run: |
-          pushd src
-          git log
-          git fetch --unshallow --tags
-          echo $?
-          git log
-          git tag --list
-          popd
+          # We need this in order to generate a changelog from the commits between the latest and previous tags
+          fetch-depth: 0
+
       - name: Install DJGPP
         run: |
           wget -P /tmp https://github.com/andrewwutw/build-djgpp/releases/download/v3.4/djgpp-linux64-gcc1220.tar.bz2
