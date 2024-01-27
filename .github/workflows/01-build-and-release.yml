@@ -21,12 +21,25 @@ jobs:
           echo "8464f17017d6ab1b2bb2df4ed82357b5bf692e6e2b7fee37e315638f3d505f00  /tmp/djgpp-linux64-gcc1220.tar.bz2" | shasum -a 256 --check
           tar -xf /tmp/djgpp-linux64-gcc1220.tar.bz2 -C /opt
           rm /tmp/djgpp-linux64-gcc1220.tar.bz2
+      - name: Get latest tag
+        id: latestTag
+        run: |
+          name=$(git tag --sort=taggerdate | tail -1)
+          echo "latestTag: $name"
+          echo "latestTag=$name" >> $GITHUB_ENV
+      - name: Get previous tag
+        id: previousTag
+        run: |
+          name=$(git tag --sort=taggerdate | grep -v ${{ env.latestTag }} | tail -1)
+          echo "previousTag: $name"
+          echo "previousTag=$name" >> $GITHUB_ENV
       - name: "✏️ Generate release changelog"
         id: changelog
         uses: requarks/changelog-action@v1
         with:
           token: ${{ github.token }}
-          tag: ${{ github.ref_name }}
+          fromTag: ${{ env.latestTag }}
+          toTag: ${{ env.previousTag }}
       - name: Build project
         run: |
           cd $GITHUB_WORKSPACE/src
