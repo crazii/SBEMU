@@ -1078,7 +1078,7 @@ try_724:
     //YMF_printf("fmsts1: %x\n", fmsts1);
     OPL_write(0x02, 0xff); // Set Timer 1 to ff
     OPL_write(0x04, 0x21); // Unmask and start Timer 1
-    pds_delay_10us(80); // Delay at least 80us -> 800???
+    pds_delay_10us(8); // Delay at least 80us
     uint8_t fmsts2 = OPL_status();
     OPL_write(0x04, 0x60); // Reset Timer 1 and Timer 2
     OPL_write(0x04, 0x80); // Reset the IRQ
@@ -1114,7 +1114,7 @@ try_724:
     uint16_t state = w & PCI_PM_CTRL_STATE_MASK;
     pcibios_WriteConfig_Word(card->pci_dev, c + PCI_PM_CTRL, 0);
     w = pcibios_ReadConfig_Word(card->pci_dev, c + PCI_PM_CTRL);
-    YMF_printf("power state: %4.4X -> %4.4X\n", state, w);
+    YMF_printf("power state: %4.4X -> %4.4X\n", state, w & PCI_PM_CTRL_STATE_MASK);
   }
 
   aui->card_pci_dev = card->pci_dev;
