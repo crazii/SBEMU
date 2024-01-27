@@ -22,9 +22,11 @@ jobs:
           tar -xf /tmp/djgpp-linux64-gcc1220.tar.bz2 -C /opt
           rm /tmp/djgpp-linux64-gcc1220.tar.bz2
       - name: "✏️ Generate release changelog"
-        uses: heinrichreimer/action-github-changelog-generator@v2.4
+        id: changelog
+        uses: requarks/changelog-action@v1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ github.token }}
+          tag: ${{ github.ref_name }}
       - name: Build project
         run: |
           cd $GITHUB_WORKSPACE/src
