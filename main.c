@@ -184,10 +184,10 @@ static uint32_t MAIN_MPU_330(uint32_t port, uint32_t val, uint32_t out)
           c = '\n';
           mpu_dbg_ctr = 0;
         }
-        DBG_Log("%02x%c", val, c);
+        DBG_Logi("%02x%c", val, c);
       }
     } else {
-      DBG_Log("r%x\n", mpu_state);
+      DBG_Logi("r%x\n", mpu_state);
     }
   }
 #endif
@@ -222,10 +222,10 @@ static uint32_t MAIN_MPU_331(uint32_t port, uint32_t val, uint32_t out)
 #if MPU_DEBUG
   if (mpu_debug) {
     if (out) {
-      DBG_Log("s%x\n", val);
+      DBG_Logi("s%x\n", val);
     } else {
       if (mpu_dbg_ctr < 10 && mpu_state <= 2) {
-        DBG_Log("sr%x\n", mpu_state);
+        DBG_Logi("sr%x\n", mpu_state);
         mpu_dbg_ctr++;
       }
     }
