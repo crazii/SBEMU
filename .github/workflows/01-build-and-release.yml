@@ -1,10 +1,11 @@
 # With thanks to https://gist.github.com/weibeld/f136048d0a82aacc063f42e684e3c494
 name: build-and-release
+
 on:
   push:
-    branches:
-      - main
-      - generate-changelog-with-each-release
+    tags:
+      - v[0-9]+.[0-9]+.[0-9]+
+
 permissions:
   contents: write
 jobs:
