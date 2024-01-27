@@ -24,18 +24,6 @@ jobs:
           echo "8464f17017d6ab1b2bb2df4ed82357b5bf692e6e2b7fee37e315638f3d505f00  /tmp/djgpp-linux64-gcc1220.tar.bz2" | shasum -a 256 --check
           tar -xf /tmp/djgpp-linux64-gcc1220.tar.bz2 -C /opt
           rm /tmp/djgpp-linux64-gcc1220.tar.bz2
-      - name: Get latest tag
-        id: latestTag
-        run: |
-          name=$(git -C ./src tag --sort=taggerdate | tail -1)
-          echo "latestTag: $name"
-          echo "latestTag=$name" >> $GITHUB_ENV
-      - name: Get previous tag
-        id: previousTag
-        run: |
-          name=$(git -C ./src tag --sort=taggerdate | grep -v ${{ env.latestTag }} | tail -1)
-          echo "previousTag: $name"
-          echo "previousTag=$name" >> $GITHUB_ENV
       - name: "✏️ Generate release changelog"
         id: changelog
         uses: requarks/changelog-action@v1
@@ -59,6 +47,10 @@ jobs:
         id: tag
         run: |
           echo "release_tag=UserBuild_$(date +"%Y.%m.%d_%H-%M")" >> $GITHUB_OUTPUT
+      - name: Combine changelog and user instructions into release notes
+        run: |
+          cat $GITHUB_WORKSPACE/CHANGELOG.md $GITHUB_WORKSPACE/src/user_instructions.md > $GITHUB_WORKSPACE/RELEASE_NOTES.md
+
       - name: Release FreeDOS SBEMU USB image
         uses: softprops/action-gh-release@v1
         env:
@@ -68,4 +60,4 @@ jobs:
           files: |
             ${{ github.workspace }}/SBEMU.zip
             ${{ github.workspace }}/SBEMU-FD13-USB.img.xz
-          body_path: ${{ github.workspace }}/CHANGELOG.md
+          body_path: ${{ github.workspace }}/RELEASE_NOTES.md
