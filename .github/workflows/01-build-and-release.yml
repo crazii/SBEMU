@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - set-up-cicd
+      - generate-changelog-with-each-release
 permissions:
   contents: write
 jobs:
