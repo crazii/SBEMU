@@ -597,7 +597,6 @@ static void cmi8x38_chip_init(struct cmi8x38_card *cm)
  snd_cmipci_clear_bit(cm, CM_REG_LEGACY_CTRL, CM_FMSEL_MASK);
  snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_FM_EN);
 
- snd_cmipci_write_16(cm, CM_REG_MIXER1, 0); //unmute FM/PCM, disable X3D for 8338
  /* reset mixer */
  snd_cmipci_mixer_write(cm, 0, 0);
 
@@ -856,7 +855,6 @@ static void CMI8X38_stop(struct mpxplay_audioout_info_s *aui)
  snd_cmipci_write_32(card, CM_REG_FUNCTRL0, card->ctrl & ~CM_RST_CH0);
 }
 
-#include "../../sbemu/dpmi/dbgutil.h"
 static long CMI8X38_getbufpos(struct mpxplay_audioout_info_s *aui)
 {
  struct cmi8x38_card *card=aui->card_private_data;
