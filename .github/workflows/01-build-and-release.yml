@@ -49,4 +49,4 @@ jobs:
           files: |
             ${{ github.workspace }}/SBEMU.zip
             ${{ github.workspace }}/SBEMU-FD13-USB.img.xz
-          generate_release_notes : true
+          body_path: ${{ github.workspace }}/CHANGELOG.md
