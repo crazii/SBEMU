@@ -43,6 +43,7 @@ jobs:
           token: ${{ github.token }}
           tag: ${{ github.ref_name }}
           includeInvalidCommits: true
+          excludeTypes: ""
       - name: Build project
         run: |
           cd $GITHUB_WORKSPACE/src
