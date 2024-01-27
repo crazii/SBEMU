@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
 set -e
+
 PATH_TO_SBEMU_EXE=${1?param 1 missing - path to SBEMU.EXE}
 test -f "$PATH_TO_SBEMU_EXE" || (echo "File $PATH_TO_SBEMU_EXE does not exit"; exit 1)
 FULL_PATH_TO_SBEMU_EXE=$(readlink -f "$PATH_TO_SBEMU_EXE")
-PATH_TO_OUTPUT_ARTIFACTS=${2?param 2 missing - path to output directory}
+
+PATH_TO_RELEASE_NOTES=${2?param 2 missing - path to RELEASE_NOTES.md}
+test -f "$PATH_TO_RELEASE_NOTES" || (echo "File $PATH_TO_RELEASE_NOTES does not exit"; exit 1)
+FULL_PATH_TO_RELEASE_NOTES=$(readlink -f "$PATH_TO_RELEASE_NOTES")
+
+PATH_TO_OUTPUT_ARTIFACTS=${3?param 3 missing - path to output directory}
 test -d "$PATH_TO_OUTPUT_ARTIFACTS" || (echo "Directory $PATH_TO_OUTPUT_ARTIFACTS does not exit"; exit 1)
 FULL_PATH_TO_OUTPUT_ARTIFACTS=$(readlink -f "$PATH_TO_OUTPUT_ARTIFACTS")
+
 mkdir -p /tmp/sbemu_usb_img
 rm -rf /tmp/sbemu_usb_img/*
 pushd /tmp/sbemu_usb_img
@@ -26,7 +33,9 @@ mkdir -p /tmp/mnt
 sudo mount FD13LITE.img /tmp/mnt -t vfat -o loop,offset=$((63*512)),rw,uid="$(id -u)",gid="$(id -g)"
 mkdir /tmp/mnt/sbemu
 cp "$FULL_PATH_TO_SBEMU_EXE" /tmp/mnt/sbemu
+cp "$FULL_PATH_TO_RELEASE_NOTES" /tmp/mnt/sbemu
 cp "$FULL_PATH_TO_SBEMU_EXE" /tmp/SBEMU
+cp "$FULL_PATH_TO_RELEASE_NOTES" /tmp/SBEMU
 pushd /tmp/mnt
 mkdir jemm
 cd jemm

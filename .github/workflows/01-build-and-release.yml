@@ -39,18 +39,17 @@ jobs:
           . /opt/djgpp/setenv
           make
           test -f output/sbemu.exe
-      - name: Build FreeDOS SBEMU USB image
+      - name: Combine changelog and user instructions into release notes
+        run: |
+          cat $GITHUB_WORKSPACE/CHANGELOG.md $GITHUB_WORKSPACE/src/user_instructions.md > $GITHUB_WORKSPACE/RELEASE_NOTES.md
+      - name: Build FreeDOS SBEMU USB image and ZIP file
         run: |
           shellcheck $GITHUB_WORKSPACE/src/scripts/build-release-artifacts.sh
-          $GITHUB_WORKSPACE/src/scripts/build-release-artifacts.sh $GITHUB_WORKSPACE/src/output/sbemu.exe $GITHUB_WORKSPACE/
+          $GITHUB_WORKSPACE/src/scripts/build-release-artifacts.sh $GITHUB_WORKSPACE/src/output/sbemu.exe $GITHUB_WORKSPACE/RELEASE_NOTES.md $GITHUB_WORKSPACE/
       - name: Generate release tag
         id: tag
         run: |
           echo "release_tag=UserBuild_$(date +"%Y.%m.%d_%H-%M")" >> $GITHUB_OUTPUT
-      - name: Combine changelog and user instructions into release notes
-        run: |
-          cat $GITHUB_WORKSPACE/CHANGELOG.md $GITHUB_WORKSPACE/src/user_instructions.md > $GITHUB_WORKSPACE/RELEASE_NOTES.md
-
       - name: Release FreeDOS SBEMU USB image
         uses: softprops/action-gh-release@v1
         env:
