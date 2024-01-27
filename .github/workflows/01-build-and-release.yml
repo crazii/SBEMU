@@ -41,8 +41,7 @@ jobs:
         uses: requarks/changelog-action@v1
         with:
           token: ${{ github.token }}
-          fromTag: ${{ env.latestTag }}
-          toTag: ${{ env.previousTag }}
+          tag: ${{ github.ref_name }}
       - name: Build project
         run: |
           cd $GITHUB_WORKSPACE/src
