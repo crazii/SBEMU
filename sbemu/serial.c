@@ -59,6 +59,10 @@ ser_setup(int stype, unsigned int sdev)
     if (sdev >= 1 && sdev <= 4) {
         iobase = get_com_port_address(sdev);
     } else {
+        if (stype == 1 && sdev == 9) { // HW MIDI only
+          iobase = 0;
+          sdev = 0; // Prevent error
+        }
         if (sdev > 0xff) { // Check for typos (less than 3 hexadecimal digits)
             iobase = sdev;
         } else {
@@ -102,9 +106,9 @@ ser_setup(int stype, unsigned int sdev)
 void
 ser_putbyte(int c)
 {
-    // if (midi_iobase == 0) { // No need to check this
-    //   return;
-    // }
+  if (midi_iobase == 0) { // HW MIDI only
+        return;
+    }
 
     while((inp(midi_iobase | UART_LSTAT) & LST_TRIG_EMPTY) == 0);
     outp(midi_iobase | UART_DATA, c);

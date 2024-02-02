@@ -49,6 +49,8 @@ extern one_sndcard_info VIA82XX_sndcard_info;
 extern one_sndcard_info SBLIVE_sndcard_info;
 extern one_sndcard_info CMI8X38_sndcard_info;
 extern one_sndcard_info EMU20KX_sndcard_info;
+extern one_sndcard_info YMF_sndcard_info;
+extern one_sndcard_info YMFSB_sndcard_info;
 #ifndef SBEMU
 extern one_sndcard_info ESS_sndcard_info;
 extern one_sndcard_info WSS_sndcard_info;
@@ -71,14 +73,20 @@ extern one_sndcard_info WINDSOUND_sndcard_info;
 extern one_sndcard_info WINWAVOUT_sndcard_info;
 #endif
 
+extern one_sndcard_info NON_sndcard_info;
 #ifndef SBEMU
 extern one_sndcard_info WAV_sndcard_info;
-extern one_sndcard_info NON_sndcard_info;
 extern one_sndcard_info TST_sndcard_info;
 extern one_sndcard_info NUL_sndcard_info;
 #endif
 
 static one_sndcard_info *all_sndcard_info[]={
+#ifdef AU_CARDS_LINK_YMF
+ &YMFSB_sndcard_info,
+#endif
+#ifdef AU_CARDS_LINK_YMF
+ &YMF_sndcard_info,
+#endif
 #ifdef AU_CARDS_LINK_SB16
  &SB16_sndcard_info,
 #endif
@@ -149,6 +157,7 @@ unsigned int playcontrol,outmode = OUTMODE_TYPE_AUDIO;
 unsigned int intsoundconfig=INTSOUND_NOINT08|INTSOUND_NOBUSYWAIT,intsoundcontrol;
 unsigned long allcpuusage,allcputime;
 unsigned int is_lfn_support,uselfn,iswin9x;
+unsigned char au_cards_fallback_to_null = 0;
 #endif
 
 static aucards_writedata_t aucards_writedata_func;
@@ -341,8 +350,21 @@ auinit_retry:
    goto err_out_auinit;
   }
   if(!aui->card_handler && !(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_SILENT)){
-   pds_textdisplay_printf("No supported soundcard found!");
-   goto err_out_auinit;
+#ifdef SBEMU
+   if (au_cards_fallback_to_null) {
+    static one_sndcard_info *no_sndcard_info[]={&NON_sndcard_info};
+    asip=&no_sndcard_info[0];
+    aui->card_handler=*asip;
+    aui->card_test_index = 1;
+    carddetect(aui,0);
+    pds_textdisplay_printf("Using NULL driver");
+   } else {
+#endif
+    pds_textdisplay_printf("No supported soundcard found!");
+    goto err_out_auinit;
+#ifdef SBEMU
+   }
+#endif
   }
  }
 

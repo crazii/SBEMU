@@ -42,6 +42,8 @@ CARDS_SRC := mpxplay/au_cards/ac97_def.c \
 	     mpxplay/au_cards/sc_sbliv.c \
 	     mpxplay/au_cards/sc_via82.c \
 		 mpxplay/au_cards/sc_sbxfi.c \
+		 mpxplay/au_cards/sc_null.c \
+		 mpxplay/au_cards/sc_ymf.c \
 
 SBEMU_SRC := sbemu/dbopl.cpp \
 	     sbemu/opl3emu.cpp \

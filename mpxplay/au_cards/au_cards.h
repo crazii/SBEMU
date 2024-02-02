@@ -166,6 +166,7 @@ typedef struct au_cardconfig_v0154_s{
   #define AU_CARDS_LINK_IHD     1
   #define AU_CARDS_LINK_SBLIVE  1
   #define AU_CARDS_LINK_VIA82XX 1
+  #define AU_CARDS_LINK_YMF     1
  #endif
  #ifdef AU_CARDS_LINK_WIN
   #define AU_CARDS_LINK_WINDSOUND 1
@@ -187,6 +188,7 @@ typedef struct au_cardconfig_v0154_s{
   #define AU_CARDS_LINK_IHD     1
   #define AU_CARDS_LINK_SBLIVE  1
   #define AU_CARDS_LINK_VIA82XX 1
+  #define AU_CARDS_LINK_YMF     1
  #endif
 #endif
 
@@ -292,6 +294,10 @@ extern void AU_pause_process(struct mpxplay_audioout_info_s *);
 extern unsigned int AU_cardbuf_space(struct mpxplay_audioout_info_s *aui);
 #endif
 extern int  AU_writedata(struct mpxplay_audioout_info_s *);
+
+#ifdef SBEMU
+extern unsigned char au_cards_fallback_to_null;
+#endif
 
 #ifdef __cplusplus
 }
