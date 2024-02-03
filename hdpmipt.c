@@ -285,7 +285,7 @@ uint8_t HDPMIPT_UntrappedIO_Read(uint16_t port)
     return result;
 }
 
-BOOL HDPMIPT_InstallIRQACKHandler(uint8_t irq, uint16_t cs, uint32_t offset)
+BOOL HDPMIPT_InstallIRQRoutedHandler(uint8_t irq, uint16_t cs, uint32_t offset, uint16_t rmcs, uint16_t rmoffset)
 {
     if(HDPMIPT_Entry.es == 0 || HDPMIPT_Entry.edi == 0)
     {
@@ -293,18 +293,113 @@ BOOL HDPMIPT_InstallIRQACKHandler(uint8_t irq, uint16_t cs, uint32_t offset)
             return FALSE;
     }
 
+    BOOL result = 0;
     asm(
     "push %%esi \n\t"
-    "mov $0x0B, %%eax \n\t" //function no.
-    "movzx %1, %%esi \n\t" //esi=irq
-    "movzx %2, %%ecx \n\t"   //ecx=selector
-    "mov %3, %%edx \n\t"    //edx=offset
-    "lcall *%0\n\t"
-    "pop %%esi"
-    :
-    :"m"(HDPMIPT_Entry),"m"(irq),"m"(cs),"m"(offset)
-    :"eax","ecx","edx"
+    "movl $0x0B, %%eax \n\t" //function no.
+    "movzxb %2, %%esi \n\t" //esi=irq
+    "movzxw %3, %%ecx \n\t"   //ecx=selector
+    "movl %4, %%edx \n\t"    //edx=offset
+    "movw %5, %%bx \n\t"    //ebx=rm far ptr
+    "shl $16, %%ebx \n\t"
+    "movw %6, %%bx \n\t"
+    "lcall *%1 \n\t"
+    "pop %%esi \n\t"
+    "movb $1, %0 \n\t "
+    "jnc 1f \n\t"
+    "movb $0, %0 \n\t"
+    "1: \n\t"
+    :"=m"(result)
+    :"m"(HDPMIPT_Entry),"m"(irq),"m"(cs),"m"(offset),"m"(rmcs),"m"(rmoffset)
+    :"eax","ecx","edx","ebx"
     );
+    return result;
+}
+
+BOOL HDPMIPT_GetIRQRoutedHandler(uint8_t irq, uint16_t* cs, uint32_t* offset, uint16_t* rmcs, uint16_t* rmoffset)
+{
+    if(HDPMIPT_Entry.es == 0 || HDPMIPT_Entry.edi == 0)
+    {
+        if(!HDPMIPT_GetVendorEntry(&HDPMIPT_Entry))
+            return FALSE;
+    }
+    assert(cs && offset && rmcs && rmoffset);
+
+    uint16_t _cs = 0, _rmcs = 0, _rmoffset = 0;
+    uint32_t _offset = 0;
+
+    BOOL result = 0;
+    asm(
+    "push %%esi \n\t"
+    "movl $0x0D, %%eax \n\t" //function no.
+    "movzxb %6, %%esi \n\t" //esi=irq
+    "lcall *%5\n\t"
+    "jc 1f \n\t"
+
+    "movw %%cx, %0 \n\t"   //ecx=selector
+    "movl %%edx, %1 \n\t"    //edx=offset
+    "movw %%bx, %2 \n\t"    //ebx=rm far ptr
+    "shl $16, %%ebx \n\t"
+    "movw %%bx, %3 \n\t"
+    
+    "movb $1, %4 \n\t "
+    "jmp 2f \n\t"
+    "1: movb $0, %4 \n\t"
+    "2: pop %%esi \n\t"
+    :"=m"(_cs),"=m"(_offset),"=m"(_rmcs),"=m"(_rmoffset),"=m"(result)
+    :"m"(HDPMIPT_Entry),"m"(irq)
+    :"eax","ecx","edx","ebx"
+    );
+    *offset = _offset; *cs = _cs; *rmcs = _rmcs; *rmoffset = _rmoffset;
+    return result;
+}
+
+static HDPMIPT_IRQRoutedHandle DPMIPT_IRQROutingCache[16];
+
+BOOL HDPMIPT_DisableIRQRouting(uint8_t irq)
+{
+    if(irq > 15)
+    {
+        assert(FALSE);
+        return FALSE;
+    }
+
+    if(!HDPMIPT_GetIRQRoutedHandlerH(irq, &DPMIPT_IRQROutingCache[irq]))
+    {
+        assert(FALSE);
+        return FALSE;
+    }
+
+    if(DPMIPT_IRQROutingCache[irq].cs == 0 && DPMIPT_IRQROutingCache[irq].offset == 0
+        && DPMIPT_IRQROutingCache[irq].rmcs == 0 && DPMIPT_IRQROutingCache[irq].rmoffset == 0)
+    {
+        return TRUE;
+    }
+
+    BOOL result = HDPMIPT_InstallIRQRoutedHandler(irq, 0, 0, 0, 0);
+    assert(result);
+    return result;
+}
+
+BOOL HDPMIPT_EnableIRQRouting(uint8_t irq)
+{
+    if(irq > 15 || !DPMIPT_IRQROutingCache[irq].valid)
+    {
+        assert(FALSE);
+        return FALSE;
+    }
+
+    if( DPMIPT_IRQROutingCache[irq].cs == 0 && DPMIPT_IRQROutingCache[irq].offset == 0
+        && DPMIPT_IRQROutingCache[irq].rmcs == 0 && DPMIPT_IRQROutingCache[irq].rmoffset == 0)
+    {
+        return TRUE;
+    }
+
+    if(!HDPMIPT_InstallIRQRoutedHandlerH(irq, &DPMIPT_IRQROutingCache[irq]))
+    {
+        assert(FALSE);
+        return FALSE;
+    }
     return TRUE;
 }
 

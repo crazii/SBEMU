@@ -418,7 +418,7 @@ uint16_t DPMI_CallRealModeIRET(DPMI_REG* reg)
 }
 
 #define RAW_HOOK 1
-uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), DPMI_ISR_HANDLE* outputp handle)
+uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), DPMI_ISR_HANDLE* outputp handle, BOOL chained)
 {
     if(i < 0 || i > 255 || handle == NULL || ISR == NULL)
         return -1;
@@ -426,9 +426,12 @@ uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), DPMI_ISR_HANDLE* outputp h
     _go32_dpmi_seginfo go32pa;
     go32pa.pm_selector = (uint16_t)_my_cs();
     go32pa.pm_offset = (uintptr_t)ISR;
-    //_go32_interrupt_stack_size = 2048; //512 minimal. default:16K
-    if(_go32_dpmi_allocate_iret_wrapper(&go32pa) != 0)
-        return -1;
+    //_go32_interrupt_stack_size = 2048; //512 minimal, default 16K
+    if(!chained)
+    {
+        if( _go32_dpmi_allocate_iret_wrapper(&go32pa) != 0)
+            return -1;
+    }
 
     _go32_dpmi_seginfo go32pa_rm = {0};
     __dpmi_raddr ra;
@@ -450,16 +453,49 @@ uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), DPMI_ISR_HANDLE* outputp h
     handle->wrapper_offset = go32pa.pm_offset;
     handle->wrapper_cs = go32pa.pm_selector;
     handle->n = i;
+    handle->chained = chained;
+    handle->chainedDOSMem = 0;
 
     memcpy(handle->internal1, &go32pa, sizeof(go32pa));
     memset(handle->internal2, 0, sizeof(handle->internal2));
 
-    int result = _go32_dpmi_set_protected_mode_interrupt_vector(i, &go32pa);
-    return (uint16_t)result;
+    int result;
+    if(chained)
+    {
+        result = _go32_dpmi_chain_protected_mode_interrupt_vector(i, &go32pa);
+        if(result == 0)
+        {
+            handle->wrapper_offset = go32pa.pm_offset;
+            handle->wrapper_cs = go32pa.pm_selector;
+        }
+    }
+    else
+    {
+        result = _go32_dpmi_set_protected_mode_interrupt_vector(i, &go32pa);
+        if(result != 0)
+            _go32_dpmi_free_iret_wrapper(&go32pa);
+    }
+
+    if(result != 0)
+        memset(handle, 0, sizeof(*handle));
+
+    return result;
 }
 
+static void __NAKED DPMI_RMISR_ChainedWrapper()
+{
+    _ASM_BEGIN16
+        _ASM(pushf) //calling iret
+        _ASM(call dword ptr cs:[0]) //call target
+        _ASM(pushf) //calling iret
+        _ASM(call dword ptr cs:[4]) //call chained next
+        _ASM(iret)
+    _ASM_END16
+}
+static void __NAKED DPMI_RMISR_ChainedWrapperEnd() {}
+
 //http://www.delorie.com/djgpp/v2faq/faq18_9.html
-uint16_t DPMI_InstallRealModeISR(uint8_t i, void(*ISR_RM)(void), DPMI_REG* RMReg, DPMI_ISR_HANDLE* outputp handle)
+uint16_t DPMI_InstallRealModeISR(uint8_t i, void(*ISR_RM)(void), DPMI_REG* RMReg, DPMI_ISR_HANDLE* outputp handle, BOOL chained)
 {
     if(i < 0 || i > 255 || handle == NULL || ISR_RM == NULL || RMReg == NULL)
         return -1;
@@ -487,11 +523,43 @@ uint16_t DPMI_InstallRealModeISR(uint8_t i, void(*ISR_RM)(void), DPMI_REG* RMReg
     handle->old_cs = pa.selector;
     handle->old_rm_cs = ra.segment;
     handle->old_rm_offset = ra.offset16;
-    handle->wrapper_offset = 0;
-    handle->wrapper_cs = 0;
+    //handle->wrapper_offset = go32pa_rm.rm_offset;
+    //handle->wrapper_cs = go32pa_rm.rm_segment;
     handle->n = i;
+    handle->chained = chained;
+    handle->chainedDOSMem = 0;
     memset(handle->internal1, 0, sizeof(handle->internal1));
     memcpy(handle->internal2, &go32pa_rm, sizeof(go32pa_rm));
+
+    //there's no go32 chained api for realmode, either we edit gormcb.c
+    //or we allocate extra memory and do it on our own
+    if(chained)
+    {
+        uint32_t codesize = (uintptr_t)&DPMI_RMISR_ChainedWrapperEnd - (uintptr_t)&DPMI_RMISR_ChainedWrapper;
+        handle->chainedDOSMem = DPMI_HighMalloc((codesize + 8 + 15)>>4, TRUE); //+target + chained next (both real mode far ptr)
+        if(handle->chainedDOSMem == 0)
+        {
+            _go32_dpmi_free_real_mode_callback(&go32pa_rm);
+            return -1;
+        }
+
+        uint8_t* buf = (uint8_t*)malloc(codesize+8);
+        //copy target
+        memcpy(buf+0, &go32pa_rm.rm_offset, 2);
+        memcpy(buf+2, &go32pa_rm.rm_segment, 2);
+        //copy chained next
+        memcpy(buf+4, &ra.offset16, 2);
+        memcpy(buf+6, &ra.segment, 2);
+        //copy warpper code
+        memcpy(buf+8, &DPMI_RMISR_ChainedWrapper, codesize);
+        DPMI_CopyLinear(DPMI_SEGOFF2L(handle->chainedDOSMem, 0), DPMI_PTR2L(buf), codesize+8);
+        free(buf);
+
+        go32pa_rm.rm_segment = handle->chainedDOSMem&0xFFFF;
+        go32pa_rm.rm_offset = 8;
+    }
+    handle->wrapper_offset = go32pa_rm.rm_offset;
+    handle->wrapper_cs = go32pa_rm.rm_segment;
 
     ra.segment = go32pa_rm.rm_segment;
     ra.offset16 = go32pa_rm.rm_offset;
@@ -506,6 +574,9 @@ uint16_t DPMI_InstallRealModeISR(uint8_t i, void(*ISR_RM)(void), DPMI_REG* RMReg
     #else
     int result = __dpmi_set_real_mode_interrupt_vector(i, &ra);
     #endif
+
+    if(result != 0)
+        memset(handle, 0, sizeof(*handle));
     return (uint16_t)result;
 }
 
@@ -533,14 +604,21 @@ uint16_t DPMI_UninstallISR(DPMI_ISR_HANDLE* inputp handle)
         result = _go32_dpmi_free_real_mode_callback(&go32pa) | result;
 
     memcpy(&go32pa, handle->internal1, sizeof(go32pa));
-    return (uint16_t)(_go32_dpmi_free_iret_wrapper(&go32pa) | result);
+
+    if(handle->chained) //chained go32 wrapper cannot be freed.
+    {
+        if(handle->chainedDOSMem)
+            DPMI_HighFree(handle->chainedDOSMem);
+        return (uint16_t)result;
+    }
+    else
+        return (uint16_t)(_go32_dpmi_free_iret_wrapper(&go32pa) | result);
 }
 
 uint32_t DPMI_CallOldISR(DPMI_ISR_HANDLE* inputp handle)
 {
     asm(
         "pushfl \n\t"
-        "cli \n\t"
         "lcall *%0 \n\t"
         ::"m"(*handle)
     );

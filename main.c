@@ -31,6 +31,7 @@ PROGNAME = "SBEMU";
 #define MAIN_TRAP_PIC_ONDEMAND 1
 #define MAIN_INSTALL_RM_ISR 1 //not needed. but to workaround some rm games' problem. need RAW_HOOk in dpmi_dj2.c
 #define MAIN_DOUBLE_OPL_VOLUME 1 //hack: double the amplitude of OPL PCM. should be 1 or 0
+#define MAIN_ISR_CHAINED 0 //experimental, not fully working yet
 
 #define MAIN_TSR_INT 0x2D   //AMIS multiplex. TODO: 0x2F?
 #define MAIN_TSR_INTSTART_ID 0x01 //start id
@@ -461,7 +462,11 @@ static void MAIN_InvokeIRQ(uint8_t irq) //generate virtual IRQ
         HDPMIPT_Install_IOPortTrap(0xA0, 0xA1, MAIN_VIRQ_IODT+2, 2, &MAIN_VIRQ_IOPT_PM2);
     }
     #endif
+
+    HDPMIPT_DisableIRQRouting(irq); //disable routing
     VIRQ_Invoke(irq, &MAIN_IntContext.regs, MAIN_IntContext.EFLAGS&CPU_VMFLAG);
+    HDPMIPT_EnableIRQRouting(irq); //restore routing
+
     #if MAIN_TRAP_PIC_ONDEMAND
     if(MAIN_Options[OPT_RM].value) QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
     if(MAIN_Options[OPT_PM].value)
@@ -535,8 +540,11 @@ update_serial_mpu_output()
 }
 
 static BOOL OPLRMInstalled, OPLPMInstalled, MPURMInstalled, MPUPMInstalled;
+static HDPMIPT_IRQRoutedHandle OldRoutedHandle = HDPMIPT_IRQRoutedHandle_Default;
 static void MAIN_Cleanup()
 {
+    if(OldRoutedHandle.valid)
+        HDPMIPT_InstallIRQRoutedHandlerH(aui.card_irq, &OldRoutedHandle);
     AU_stop(&aui);
     AU_close(&aui);
     if(OPLRMInstalled)
@@ -737,7 +745,7 @@ int main(int argc, char* argv[])
         return 1;
     atexit(&MAIN_Cleanup);
 
-    if(aui.card_irq > 15)
+    if(aui.card_irq > 31) //UEFI with CSM may have APIC enabled (16-31).
     {
         printf("Invalid Sound card IRQ: ");
         MAIN_CPrintf(RED, "%d", aui.card_irq);
@@ -760,14 +768,18 @@ int main(int argc, char* argv[])
     }
     if(aui.card_irq <= 0x07) //SBPCI/CMI use irq 5/7 to gain DOS compatility?
     {
-        printf("WARNING: Low IRQ %d used for sound card, higher IRQ number(8~15) is recommended.\nTrying to enable Level triggered mode.\n", aui.card_irq);
+        printf("WARNING: Low IRQ %d used for sound card, higher IRQ number(8~15) is recommended.\n", aui.card_irq);
         //TODO: do we need to do this? 
+        #if 0
+        printf("Trying to enable Level triggered mode...");
         if(aui.card_irq > 2) //don't use level triggering for legacy ISA IRQ (timer/kbd etc)
         {
-            uint16_t elcr = inpw(0x4D0); //edge level control reg
+            uint16_t elcr = ((uint16_t)inp(0x4D1)<<8) | (inp(0x4D0)); //edge level control reg
             elcr |= (1<<aui.card_irq);
             outpw(0x4D0, elcr);
+            printf("done.\n");
         }
+        #endif
     }
     pcibios_enable_interrupt(aui.card_pci_dev);
 
@@ -777,15 +789,15 @@ int main(int argc, char* argv[])
     printf("Protected mode support: ");
     MAIN_Print_Enabled_Newline(enablePM);
 
-    if(enableRM)
-    {
-        UntrappedIO_OUT_Handler = &QEMM_UntrappedIO_Write;
-        UntrappedIO_IN_Handler = &QEMM_UntrappedIO_Read;
-    }
-    else
+    if(enablePM) //prefer PM IO since there's no mode switch and thus more faster. previously QEEM IO was used to avoid bugs/crashes.
     {
         UntrappedIO_OUT_Handler = &HDPMIPT_UntrappedIO_Write;
         UntrappedIO_IN_Handler = &HDPMIPT_UntrappedIO_Read;
+    }
+    else
+    {
+        UntrappedIO_OUT_Handler = &QEMM_UntrappedIO_Write;
+        UntrappedIO_IN_Handler = &QEMM_UntrappedIO_Read;
     }
 
     if(MAIN_Options[OPT_OPL].value)
@@ -887,7 +899,7 @@ int main(int argc, char* argv[])
         if(r.h.al != 0) //find free multiplex number
             continue;
         MAIN_TSR_INT_FNO = i;
-        TSR_ISR = DPMI_InstallRealModeISR(MAIN_TSR_INT, MAIN_TSR_Interrupt, &MAIN_TSRREG, &MAIN_TSRIntHandle) == 0;
+        TSR_ISR = DPMI_InstallRealModeISR(MAIN_TSR_INT, MAIN_TSR_Interrupt, &MAIN_TSRREG, &MAIN_TSRIntHandle, FALSE) == 0;
         if(!TSR_ISR)
             break;
         MAIN_ISR_DOSID = DPMI_HighMalloc((sizeof(MAIN_ISR_DOSID_String)+15)>>4, TRUE);
@@ -909,22 +921,18 @@ int main(int argc, char* argv[])
     if(MAIN_Options[OPT_OPL].value)
         OPL3EMU_Init(aui.freq_card); //aui.freq_card available after AU_setrate
 
-    BOOL PM_ISR = DPMI_InstallISR(PIC_IRQ2VEC(aui.card_irq), MAIN_InterruptPM, &MAIN_IntHandlePM) == 0;
-    //set default ACK, to skip recursion of DOS/4GW
-    {
-        DPMI_ISR_HANDLE h;
-        for(int i = 0; i < 15; ++i)
-        {
-            DPMI_GetISR(PIC_IRQ2VEC(i), &h);
-            HDPMIPT_InstallIRQACKHandler(i, h.old_cs, h.old_offset);
-        }
-    }
-    HDPMIPT_InstallIRQACKHandler(aui.card_irq, MAIN_IntHandlePM.wrapper_cs, MAIN_IntHandlePM.wrapper_offset);
+    BOOL PM_ISR = DPMI_InstallISR(PIC_IRQ2VEC(aui.card_irq), MAIN_InterruptPM, &MAIN_IntHandlePM, MAIN_ISR_CHAINED) == 0;
+
     #if MAIN_INSTALL_RM_ISR
-    BOOL RM_ISR = DPMI_InstallRealModeISR(PIC_IRQ2VEC(aui.card_irq), MAIN_InterruptRM, &MAIN_RMIntREG, &MAIN_IntHandleRM) == 0;
+    BOOL RM_ISR = DPMI_InstallRealModeISR(PIC_IRQ2VEC(aui.card_irq), MAIN_InterruptRM, &MAIN_RMIntREG, &MAIN_IntHandleRM, MAIN_ISR_CHAINED) == 0;
     #else
     BOOL RM_ISR = TRUE;
+    MAIN_IntHandleRM.wrapper_cs = MAIN_IntHandleRM.wrapper_offset = -1; //skip for HDPMIPT_InstallIRQRouteHandler
     #endif
+
+    HDPMIPT_GetIRQRoutedHandlerH(aui.card_irq, &OldRoutedHandle);
+    HDPMIPT_InstallIRQRoutedHandler(aui.card_irq, MAIN_IntHandlePM.wrapper_cs, MAIN_IntHandlePM.wrapper_offset,
+        MAIN_IntHandleRM.wrapper_cs, (uint16_t)MAIN_IntHandleRM.wrapper_offset);
     PIC_UnmaskIRQ(aui.card_irq);
 
     AU_prestart(&aui);
@@ -977,18 +985,38 @@ int main(int argc, char* argv[])
     return 1;
 }
 
+//with the modified fork of HDPMI, HDPMI will route PM interrupts to IVT.
+//IRQ routing path:
+//PM: IDT -> PM handlers after SBEMU -> SBEMU MAIN_InterruptPM(*) -> PM handlers befoe SBEMU -> IVT -> SBEMU MAIN_InterruptRM(*) -> DPMI entrance -> IVT handlers before DPMI installed
+//RM: IVT -> RM handlers before SBEMU -> SBEMU MAIN_InterruptRM(*) -> RM handlers after SBEMU -> DPMI entrance -> PM handlers after SBEMU -> SBEMU MAIN_InterruptPM(*) -> PM handlers befoe SBEMU -> IVT handlers before DPMI installed
+//(*) means SBEMU might early terminate the calling chain if sound irq is handled.
+//early terminating is OK because PCI irq are level triggered, IRQ signal will keep high (raised) unless the hardware IRQ is ACKed.
+
 static void MAIN_InterruptPM()
 {
-    if(MAIN_InINT&MAIN_ININT_PM) return;
+    const uint8_t irq = PIC_GetIRQ();
+    if(irq != aui.card_irq) //shared IRQ handled by other handlers(EOI sent) or new irq arrived but not for us
+        return;
+
+    //if(MAIN_InINT&MAIN_ININT_PM) return; //skip reentrance. go32 will do this so actually we don't need it
     //DBG_Log("INTPM %d\n", MAIN_InINT);
     MAIN_InINT |= MAIN_ININT_PM;
 
+    //note: we have full control of the calling chain, if the irq belongs to the sound card,
+    //we send EOI and skip calling the chain - it will be a little faster. if other devices raises irq at the same time,
+    //the interrupt handler will enterred again (not nested) so won't be a problem.
+    //also we send EOI on our own and terminate, this doesn't rely on the default implementation in IVT.
+    //
+    //an alternative chained methods will always calls next handler, see @MAIN_ISR_CHAINED
+    
+    //MAIN_IntContext.EFLAGS |= (MAIN_InINT&MAIN_ININT_RM) ? (MAIN_IntContext.EFLAGS&CPU_VMFLAG) : 0;
     HDPMIPT_GetInterrupContext(&MAIN_IntContext);
-    if(!(MAIN_InINT&MAIN_ININT_RM) && aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
+    if(/*!(MAIN_InINT&MAIN_ININT_RM) && */aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
     {
         MAIN_Interrupt();
         PIC_SendEOIWithIRQ(aui.card_irq);
     }
+    #if !MAIN_ISR_CHAINED
     else
     {
         if((MAIN_InINT&MAIN_ININT_RM) || (MAIN_IntContext.EFLAGS&CPU_VMFLAG))
@@ -996,31 +1024,38 @@ static void MAIN_InterruptPM()
         else
             DPMI_CallOldISRWithContext(&MAIN_IntHandlePM, &MAIN_IntContext.regs);
         PIC_UnmaskIRQ(aui.card_irq);
-        //DBG_Log("INTPME %d\n", MAIN_InINT);
     }
+    #endif
+    //DBG_Log("INTPME %d\n", MAIN_InINT);
     MAIN_InINT &= ~MAIN_ININT_PM;
 }
 
 static void MAIN_InterruptRM()
 {
-    if(MAIN_InINT&MAIN_ININT_RM) return;
+    const uint8_t irq = PIC_GetIRQ();
+    if(irq != aui.card_irq) //shared IRQ handled by other handlers(EOI sent) or new irq arrived but not for us
+        return;
+    
+    //f(MAIN_InINT&MAIN_ININT_RM) return; //skip reentrance. go32 will do this so actually we don't need it
     //DBG_Log("INTRM %d\n", MAIN_InINT);
     MAIN_InINT |= MAIN_ININT_RM;
     
-    if(!(MAIN_InINT&MAIN_ININT_PM) && aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
+    if(/*!(MAIN_InINT&MAIN_ININT_PM) && */aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
     {
         MAIN_IntContext.regs = MAIN_RMIntREG;
         MAIN_IntContext.EFLAGS = MAIN_RMIntREG.w.flags | CPU_VMFLAG;
         MAIN_Interrupt();
         PIC_SendEOIWithIRQ(aui.card_irq);
     }
+    #if !MAIN_ISR_CHAINED
     else
     {
         DPMI_REG r = MAIN_RMIntREG; //don't modify MAIN_RMIntREG on hardware interrupt
         DPMI_CallRealModeOldISR(&MAIN_IntHandleRM, &r);
         PIC_UnmaskIRQ(aui.card_irq);
-        //DBG_Log("INTRME %d\n", MAIN_InINT);
     }
+    #endif
+    //DBG_Log("INTRME %d\n", MAIN_InINT);
     MAIN_InINT &= ~MAIN_ININT_RM;
 }
 

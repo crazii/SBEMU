@@ -81,6 +81,8 @@ typedef struct //old interrupt handler info returned by install isr.
     uint32_t wrapper_offset;
     uint16_t wrapper_cs;
     uint8_t n; //INTn
+    uint8_t chained;
+    uint32_t chainedDOSMem;
 
     //internal informations
     uint32_t internal1[8];
@@ -210,8 +212,8 @@ uint16_t DPMI_CallRealModeINT(uint8_t i, DPMI_REG* reg);
 uint16_t DPMI_CallRealModeIRET(DPMI_REG* reg);
 //install interrupt service routine. ISR use normal return, no need to do IRET.
 //return 0 if succeed
-uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), DPMI_ISR_HANDLE* outputp handle);
-uint16_t DPMI_InstallRealModeISR(uint8_t i, void(*ISR_RM)(void), DPMI_REG* RMReg, DPMI_ISR_HANDLE* outputp handle);
+uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), DPMI_ISR_HANDLE* outputp handle, BOOL chained);
+uint16_t DPMI_InstallRealModeISR(uint8_t i, void(*ISR_RM)(void), DPMI_REG* RMReg, DPMI_ISR_HANDLE* outputp handle, BOOL chained);
 
 uint16_t DPMI_UninstallISR(DPMI_ISR_HANDLE* inputp handle);
 uint32_t DPMI_CallOldISR(DPMI_ISR_HANDLE* inputp handle);
