@@ -21,6 +21,11 @@
  *                             called and don't call the user's function)
  */
 
+/**
+ * Return wrapper cs/offset for _go32_dpmi_chain_protected_mode_interrupt_vector,
+ * new line 194. by Crazii 02/04/2024
+ */
+
 #define	STACK_WAS_MALLOCED	(1 << 0)
 
 #define	FILL	0x00
@@ -186,6 +191,8 @@ static int _go32_dpmi_chain_protected_mode_interrupt_vector_with_stack(int vecto
   pm_int.offset32 = (int)wrapper;
   pm_int.selector = _my_cs();
   __dpmi_set_protected_mode_interrupt_vector(vector, &pm_int);
+  info->pm_offset = (int)wrapper;
+  info->pm_selector = _my_cs();
   return 0;
 }
 

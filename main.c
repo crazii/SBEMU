@@ -31,7 +31,7 @@ PROGNAME = "SBEMU";
 #define MAIN_TRAP_PIC_ONDEMAND 1
 #define MAIN_INSTALL_RM_ISR 1 //not needed. but to workaround some rm games' problem. need RAW_HOOk in dpmi_dj2.c
 #define MAIN_DOUBLE_OPL_VOLUME 1 //hack: double the amplitude of OPL PCM. should be 1 or 0
-#define MAIN_ISR_CHAINED 0 //experimental, not fully working yet
+#define MAIN_ISR_CHAINED 1 //auto calls next handler AFTER current handler exits
 
 #define MAIN_TSR_INT 0x2D   //AMIS multiplex. TODO: 0x2F?
 #define MAIN_TSR_INTSTART_ID 0x01 //start id
@@ -1005,9 +1005,13 @@ static void MAIN_InterruptPM()
     //note: we have full control of the calling chain, if the irq belongs to the sound card,
     //we send EOI and skip calling the chain - it will be a little faster. if other devices raises irq at the same time,
     //the interrupt handler will enterred again (not nested) so won't be a problem.
-    //also we send EOI on our own and terminate, this doesn't rely on the default implementation in IVT.
+    //also we send EOI on our own and terminate, this doesn't rely on the default implementation in IVT - some platform (i.e. VirtualBox)
+    //don't send EOI on default handler in IVT.
     //
-    //an alternative chained methods will always calls next handler, see @MAIN_ISR_CHAINED
+    //it has one problem that if other drivers (shared IRQ) enables interrupts (because it needs wait or is time consuming)
+    //then because we're still in MAIN_InterruptPM, so MAIN_InterruptPM is never enterred agian (guarded by go32 or MAIN_ININT_PM), 
+    //so the newly coming irq will never be processed and the IRQ will flood the system
+    //an alternative chained methods will EXIT MAIN_InterruptPM FIRST and calls next handler, which will avoid this case, see @MAIN_ISR_CHAINED
     
     //MAIN_IntContext.EFLAGS |= (MAIN_InINT&MAIN_ININT_RM) ? (MAIN_IntContext.EFLAGS&CPU_VMFLAG) : 0;
     HDPMIPT_GetInterrupContext(&MAIN_IntContext);
@@ -1036,7 +1040,7 @@ static void MAIN_InterruptRM()
     if(irq != aui.card_irq) //shared IRQ handled by other handlers(EOI sent) or new irq arrived but not for us
         return;
     
-    //f(MAIN_InINT&MAIN_ININT_RM) return; //skip reentrance. go32 will do this so actually we don't need it
+    //if(MAIN_InINT&MAIN_ININT_RM) return; //skip reentrance. go32 will do this so actually we don't need it
     //DBG_Log("INTRM %d\n", MAIN_InINT);
     MAIN_InINT |= MAIN_ININT_RM;
     

@@ -59,6 +59,7 @@ SBEMU_SRC := sbemu/dbopl.cpp \
 	     sbemu/dpmi/dpmi_dj2.c \
 	     sbemu/dpmi/dpmi_tsr.c \
 	     sbemu/dpmi/djgpp/gormcb.c \
+		 sbemu/dpmi/djgpp/gopint.c \
 	     main.c \
 	     qemm.c \
 	     test.c \
