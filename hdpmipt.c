@@ -73,7 +73,7 @@ static void __attribute__((naked)) HDPMIPT_TrapHandlerWrapper()
     //switch to local stack from trapped client's stack
     #if HDPMIPT_SWITCH_STACK
     asm(
-    "mov %%esp, %0 \n\t"
+    "movl %%esp, %0 \n\t"
     "mov %%ss, %%sp \n\t"
     "mov %%sp, %1 \n\t"
     "lss %2, %%esp \n\t"
@@ -96,23 +96,23 @@ static int HDPMIPT_GetVendorEntry(HDPMIPT_ENTRY* entry)
 {
     int result = 0;
     asm(
-    "push %%es \n\t"
-    "push %%esi \n\t"
-    "push %%edi \n\t"
+    "pushl %%es \n\t"
+    "pushl %%esi \n\t"
+    "pushl %%edi \n\t"
     "xor %%eax, %%eax \n\t"
     "xor %%edi, %%edi \n\t"
     "mov %%di, %%es \n\t"
-    "mov $0x168A, %%ax \n\t"
-    "mov %3, %%esi \n\t"
+    "movw $0x168A, %%ax \n\t"
+    "movl %3, %%esi \n\t"
     "int $0x2F \n\t"
     "mov %%es, %%cx \n\t" //entry->es & entry->edi may use register esi & edi
     "mov %%edi, %%edx \n\t" //save edi to edx and pop first
-    "pop %%edi \n\t"
-    "pop %%esi \n\t"
-    "pop %%es \n\t"
-    "mov %%eax, %0 \n\t"
-    "mov %%cx, %1 \n\t"
-    "mov %%edx, %2 \n\t"
+    "popl %%edi \n\t"
+    "popl %%esi \n\t"
+    "popl %%es \n\t"
+    "movl %%eax, %0 \n\t"
+    "movw %%cx, %1 \n\t"
+    "movl %%edx, %2 \n\t"
     : "=r"(result),"=m"(entry->es), "=m"(entry->edi)
     : "m"(VENDOR_HDPMI)
     : "eax", "ecx", "edx","memory"
@@ -126,23 +126,23 @@ static uint32_t HDPMI_Internal_InstallTrap(const HDPMIPT_ENTRY* entry, int start
     int count = end - start + 1;
     const HDPMIPT_ENTRY ent = *entry; //avoid gcc using ebx
     asm(
-    "push %%ebx \n\t"
-    "push %%esi \n\t"
-    "push %%edi \n\t"
-    "mov %1, %%esi \n\t" //ESI: starting port
-    "mov %2, %%edi \n\t"    //EDI: port count
+    "pushl %%ebx \n\t"
+    "pushl %%esi \n\t"
+    "pushl %%edi \n\t"
+    "movl %1, %%esi \n\t" //ESI: starting port
+    "movl %2, %%edi \n\t"    //EDI: port count
     "xor %%ecx, %%ecx \n\t"
     "mov %%cs, %%cx \n\t" //CX: handler code seg
     "xor %%ebx, %%ebx \n\t"
     "mov %%ds, %%bx \n\t" //BX: handler data seg
-    "mov %3, %%edx \n\t"  //EDX: handler addr
-    "mov $6, %%eax \n\t" //ax=6, install port trap
+    "movl %3, %%edx \n\t"  //EDX: handler addr
+    "movl $6, %%eax \n\t" //ax=6, install port trap
     "lcall *%4\n\t"
     "jc 1f \n\t"
-    "mov %%eax, %0 \n\t"
-    "1: pop %%edi \n\t"
-    "pop %%esi \n\t"
-    "pop %%ebx \n\t"
+    "movl %%eax, %0 \n\t"
+    "1: popl %%edi \n\t"
+    "popl %%esi \n\t"
+    "popl %%ebx \n\t"
     :"=m"(handle)
     :"m"(start),"m"(count),"m"(handler),"m"(ent)
     :"eax","ebx","ecx","edx","memory"
@@ -154,12 +154,12 @@ static BOOL HDPMI_Internal_UninstallTrap(const HDPMIPT_ENTRY* entry, uint32_t ha
 {
     BOOL result = FALSE;
     asm(
-    "mov %2, %%edx \n\t"  //EDX=handle
-    "mov $7, %%eax \n\t" //ax=7, unistall port trap
+    "movl %2, %%edx \n\t"  //EDX=handle
+    "movl $7, %%eax \n\t" //ax=7, unistall port trap
     "lcall *%1\n\t"
     "jc 1f \n\t"
-    "mov $1, %%eax \n\t"
-    "mov %%eax, %0 \n\t"
+    "movl $1, %%eax \n\t"
+    "movb %%al, %0 \n\t"
     "1: nop \n\t"
     :"=m"(result)
     :"m"(*entry),"m"(handle)
@@ -253,10 +253,10 @@ void HDPMIPT_UntrappedIO_Write(uint16_t port, uint8_t value)
     }
 
     asm(
-    "mov $0x08, %%eax \n\t" //function no.
-    "mov %1, %%dx \n\t"     //dx=port
-    "mov %2, %%cl \n\t"     //cl=value
-    "mov $1, %%ch \n\t"     //ch=int/out
+    "movl $0x08, %%eax \n\t" //function no.
+    "movw %1, %%dx \n\t"     //dx=port
+    "movb %2, %%cl \n\t"     //cl=value
+    "movb $1, %%ch \n\t"     //ch=int/out
     "lcall *%0\n\t"
     :
     :"m"(HDPMIPT_Entry),"m"(port),"m"(value)
@@ -273,11 +273,11 @@ uint8_t HDPMIPT_UntrappedIO_Read(uint16_t port)
     }
     uint8_t result = 0;
     asm(
-    "mov $0x08, %%eax \n\t" //function no.
-    "mov %2, %%dx \n\t"     //dx=port
+    "movl $0x08, %%eax \n\t" //function no.
+    "movw %2, %%dx \n\t"     //dx=port
     "xor %%ch, %%ch \n\t"   //ch=in/out
     "lcall *%1\n\t"
-    "mov %%al, %0 \n\t"
+    "movb %%al, %0 \n\t"
     :"=m"(result)
     :"m"(HDPMIPT_Entry),"m"(port)
     :"eax","ecx","edx"
@@ -295,7 +295,7 @@ BOOL HDPMIPT_InstallIRQRoutedHandler(uint8_t irq, uint16_t cs, uint32_t offset, 
 
     BOOL result = 0;
     asm(
-    "push %%esi \n\t"
+    "pushl %%esi \n\t"
     "movl $0x0B, %%eax \n\t" //function no.
     "movzxb %2, %%esi \n\t" //esi=irq
     "movzxw %3, %%ecx \n\t"   //ecx=selector
@@ -304,7 +304,7 @@ BOOL HDPMIPT_InstallIRQRoutedHandler(uint8_t irq, uint16_t cs, uint32_t offset, 
     "shl $16, %%ebx \n\t"
     "movw %6, %%bx \n\t"
     "lcall *%1 \n\t"
-    "pop %%esi \n\t"
+    "popl %%esi \n\t"
     "movb $1, %0 \n\t "
     "jnc 1f \n\t"
     "movb $0, %0 \n\t"
@@ -330,7 +330,7 @@ BOOL HDPMIPT_GetIRQRoutedHandler(uint8_t irq, uint16_t* cs, uint32_t* offset, ui
 
     BOOL result = 0;
     asm(
-    "push %%esi \n\t"
+    "pushl %%esi \n\t"
     "movl $0x0D, %%eax \n\t" //function no.
     "movzxb %6, %%esi \n\t" //esi=irq
     "lcall *%5\n\t"
@@ -345,7 +345,7 @@ BOOL HDPMIPT_GetIRQRoutedHandler(uint8_t irq, uint16_t* cs, uint32_t* offset, ui
     "movb $1, %4 \n\t "
     "jmp 2f \n\t"
     "1: movb $0, %4 \n\t"
-    "2: pop %%esi \n\t"
+    "2: popl %%esi \n\t"
     :"=m"(_cs),"=m"(_offset),"=m"(_rmcs),"=m"(_rmoffset),"=m"(result)
     :"m"(HDPMIPT_Entry),"m"(irq)
     :"eax","ecx","edx","ebx"
@@ -411,12 +411,12 @@ BOOL HDPMIPT_GetInterrupContext(INTCONTEXT* context)
             return FALSE;
     }
     asm(
-    "push %%edi \n\t"
+    "pushl %%edi \n\t"
     "mov %%ds, %%dx \n\t"
-    "mov %1, %%edi \n\t"
-    "mov $0x0C, %%eax \n\t"
+    "movl %1, %%edi \n\t"
+    "movl $0x0C, %%eax \n\t"
     "lcall *%0 \n\t"
-    "pop %%edi \n\t"
+    "popl %%edi \n\t"
     :
     :"m"(HDPMIPT_Entry), "m"(context)
     :"eax", "edx"
