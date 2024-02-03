@@ -121,13 +121,28 @@ static uint32_t PLTFM_BSF(uint32_t x) { uint32_t i; __asm {bsf eax, x; mov i, ea
 #define _ASM_PLIST_(N, ...) _ASM_CONCAT(_ASM_P, N)(__VA_ARGS__)
 #define _ASM_PLIST(...) ".att_syntax noprefix\n\t" : _ASM_PLIST_(_ASM_LIST_NARG(__VA_ARGS__), __VA_ARGS__)
 
-//#define _ASM_PLIST ".att_syntax noprefix\n\t" :
+#ifdef __cplusplus
+extern "C" {
+#endif
+//make platform.h more dependent without including <dpmi.h>
+int __dpmi_get_virtual_interrupt_state(void);
+int __dpmi_get_and_enable_virtual_interrupt_state(void);
+int __dpmi_get_and_disable_virtual_interrupt_state(void);
+int __dpmi_get_and_set_virtual_interrupt_state(int);
+#ifdef __cplusplus
+}
+#endif
 
 #define NOP() asm __volatile__("nop")
-#define CLI() asm __volatile__("cli")
-#define STI() asm __volatile__("sti")
+#define CLI() __dpmi_get_and_disable_virtual_interrupt_state() //asm __volatile__("cli")
+#define STI() __dpmi_get_and_enable_virtual_interrupt_state() //asm __volatile__("sti")
 static inline uint32_t PLTFM_BSF(uint32_t x) {uint32_t i; asm("bsf %1, %0" : "=r" (i) : "rm" (x)); return i;} //386+
-static inline uint16_t PLTFM_CPU_FLAGS_ASM(void) { uint32_t flags = 0; asm("pushf\n\t" "pop %0\n\t" : "=r"(flags)); return (uint16_t)flags; }
+static inline uint16_t PLTFM_CPU_FLAGS_ASM(void) {
+uint32_t flags = 0; asm("pushf\n\t" "pop %0\n\t" : "=r"(flags));
+if(__dpmi_get_virtual_interrupt_state()) flags |= 0x0200;
+else flags &= ~0x0200;
+return (uint16_t)flags;
+}
 static inline uint16_t PLTFM_CPU_FLAGS() { uint16_t (* volatile VFN)(void) = &PLTFM_CPU_FLAGS_ASM; return VFN();} //prevent optimization, need get FLAGS every time
 
 #define memcpy_c2d memcpy
@@ -379,7 +394,10 @@ static __INLINE uint32_t EndianSwap32(uint32_t x) {return (x<<24) | ((x<<8)&0xFF
 #define BSF PLTFM_BSF
 #define CPU_FLAGS() PLTFM_CPU_FLAGS()
 
-#if 1
+#if defined(DJGPP)
+#define CLIS() int FLTFM_IFlag = CLI()
+#define STIL() do { if(FLTFM_IFlag) STI(); } while(0)
+#else
 //CLI is not enough. this works for normal code. but driver code during intrrupt (which keeps IF always 0) don't do CLI
 //CLIS will store IF and do cli.
 #define CLIS() int FLTFM_IFlag = (CPU_FLAGS()&CPU_IFLAG); CLI()

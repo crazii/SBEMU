@@ -50,7 +50,8 @@
 //#define  VIA_REG_CTRL_RESET         0x01    /* RW - probably reset? undocumented */
 
 #define VIA_REG_OFFSET_TYPE          0x02    /* byte - channel type */
-#define  VIA_REG_TYPE_INT_LSAMPLE    0x04    /* interrupt on last sample sent */
+#define  VIA_REG_TYPE_AUTOSTART       0x80    /* RW - autostart at EOL (loop) */
+#define  VIA_REG_TYPE_INT_LSAMPLE    0x04    /* interrupt selection: last sample sent */
 #define  VIA_REG_TYPE_INT_EOL         0x02   /* interrupt on end of link */
 #define  VIA_REG_TYPE_INT_FLAG         0x01  /* interrupt on flag */
 
@@ -64,7 +65,6 @@
 #define VIA_REG_CTRL_INT_EOL           0x02  /* interrupt on end of link */
 #define VIA_REG_CTRL_INT_FLAG          0x01  /* interrupt on flag */
 #define VIA_REG_OFFSET_STOP_IDX      0x08    /* dword - stop index, channel type, sample rate */
-#define VIA_REG_TYPE_AUTOSTART         0x80    /* RW - autostart at EOL */
 #define VIA_REG_TYPE_16BIT         0x20    /* RW */
 #define VIA_REG_TYPE_STEREO         0x10    /* RW */
 #define VIA8233_REG_TYPE_16BIT         0x00200000    /* RW */
@@ -393,7 +393,7 @@ static void VIA82XX_start(struct mpxplay_audioout_info_s *aui)
  if(card->pci_dev->device_id==PCI_DEVICE_ID_VT82C686)
  {
   #ifdef SBEMU //enable interrupt
-  outb(card->iobase+VIA_REG_OFFSET_TYPE, inb(card->iobase+VIA_REG_OFFSET_TYPE) | VIA_REG_TYPE_INT_LSAMPLE | VIA_REG_TYPE_INT_EOL | VIA_REG_TYPE_INT_FLAG);
+  outb(card->iobase+VIA_REG_OFFSET_TYPE, inb(card->iobase+VIA_REG_OFFSET_TYPE) | VIA_REG_TYPE_INT_EOL | VIA_REG_TYPE_INT_FLAG);
   #endif
   outb(card->iobase + VIA_REG_OFFSET_CONTROL, VIA_REG_CTRL_START);
  }

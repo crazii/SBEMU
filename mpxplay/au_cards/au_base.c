@@ -25,6 +25,11 @@
 #include <dpmi.h>
 #include <sys/exceptn.h>
 extern unsigned long __djgpp_selector_limit;
+
+//the djgpp disable/enable uses CLI/STI, change it to hdpmi std method.
+#define disable __dpmi_get_and_disable_virtual_interrupt_state
+#define enable __dpmi_get_and_enable_virtual_interrupt_state
+
 #endif
 
 //dummy symbol to keep original code unmodified
@@ -1148,18 +1153,30 @@ void pds_delay_10us(unsigned int ticks) //each tick is 10us
  unsigned int i,oldtsc, tsctemp, tscdif;
 
  for(i=0;i<ticks;i++){
-  disable();
+#ifdef DJGPP
+  int intr = 
+#endif
+  _disable();
   outp(0x43,0x04);
   oldtsc=inp(0x40);
   oldtsc+=inp(0x40)<<8;
-  enable();
+#ifdef DJGPP
+  if(intr)
+#endif
+  _enable();
 
   do{
-   disable();
+#ifdef DJGPP
+  int intr2 = 
+#endif
+   _disable();
    outp(0x43,0x04);
    tsctemp=inp(0x40);
    tsctemp+=inp(0x40)<<8;
-   enable();
+#ifdef DJGPP
+  if(intr2)
+#endif
+   _enable();
    if(tsctemp<=oldtsc)
     tscdif=oldtsc-tsctemp; // handle overflow
    else
