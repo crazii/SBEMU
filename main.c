@@ -31,7 +31,7 @@ PROGNAME = "SBEMU";
 #define MAIN_TRAP_PIC_ONDEMAND 1
 #define MAIN_INSTALL_RM_ISR 1 //not needed. but to workaround some rm games' problem. need RAW_HOOk in dpmi_dj2.c
 #define MAIN_DOUBLE_OPL_VOLUME 1 //hack: double the amplitude of OPL PCM. should be 1 or 0
-#define MAIN_ISR_CHAINED 0 //auto calls next handler AFTER current handler exits
+#define MAIN_ISR_CHAINED 1 //auto calls next handler AFTER current handler exits
 
 #define MAIN_TSR_INT 0x2D   //AMIS multiplex. TODO: 0x2F?
 #define MAIN_TSR_INTSTART_ID 0x01 //start id
@@ -989,7 +989,7 @@ int main(int argc, char* argv[])
 //IRQ routing path:
 //PM: IDT -> PM handlers after SBEMU -> SBEMU MAIN_InterruptPM(*) -> PM handlers befoe SBEMU -> IVT -> SBEMU MAIN_InterruptRM(*) -> DPMI entrance -> IVT handlers before DPMI installed
 //RM: IVT -> RM handlers before SBEMU -> SBEMU MAIN_InterruptRM(*) -> RM handlers after SBEMU -> DPMI entrance -> PM handlers after SBEMU -> SBEMU MAIN_InterruptPM(*) -> PM handlers befoe SBEMU -> IVT handlers before DPMI installed
-//(*) means SBEMU might early terminate the calling chain if sound irq is handled.
+//(*) means SBEMU might early terminate the calling chain if sound irq is handled (when MAIN_ISR_CHAINED==0).
 //early terminating is OK because PCI irq are level triggered, IRQ signal will keep high (raised) unless the hardware IRQ is ACKed.
 
 static void MAIN_InterruptPM()
@@ -1010,9 +1010,9 @@ static void MAIN_InterruptPM()
     //
     //it has one problem that if other drivers (shared IRQ) enables interrupts (because it needs wait or is time consuming)
     //then because we're still in MAIN_InterruptPM, so MAIN_InterruptPM is never enterred agian (guarded by go32 or MAIN_ININT_PM), 
-    //so the newly coming irq will never be processed and the IRQ will flood the system
+    //so the newly coming irq will never be processed and the IRQ will flood the system (freeze)
     //an alternative chained methods will EXIT MAIN_InterruptPM FIRST and calls next handler, which will avoid this case, see @MAIN_ISR_CHAINED
-    //but we need a hack if the default handler in IVT doesn't send EOI or masks the irq (TODO) 
+    //but we need a hack if the default handler in IVT doesn't send EOI or masks the irq - this is done in the RM final wrapper, see @DPMI_RMISR_ChainedWrapper
     
     //MAIN_IntContext.EFLAGS |= (MAIN_InINT&MAIN_ININT_RM) ? (MAIN_IntContext.EFLAGS&CPU_VMFLAG) : 0;
     HDPMIPT_GetInterrupContext(&MAIN_IntContext);

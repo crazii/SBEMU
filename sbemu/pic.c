@@ -62,7 +62,8 @@ uint8_t PIC_GetIRQ(void)
     if(mask&0x4)
     {
         outp(PIC_PORT2, PIC_READISR);
-        mask = (uint16_t)(inp(PIC_PORT2)<<8);
+        mask &= ~0x04;
+        mask = (uint16_t)(inp(PIC_PORT2)<<8) | mask;
     }
     STIL();
     if(mask == 0)
@@ -110,7 +111,7 @@ void PIC_MaskIRQ(uint8_t irq)
 void PIC_UnmaskIRQ(uint8_t irq)
 {
     uint16_t port = PIC_DATA1;
-    CLIS();    
+    CLIS();
     if(irq >= 8)
     {
         uint8_t master = inp(port);

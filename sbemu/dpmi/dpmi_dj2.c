@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include "xms.h"
 #include "dbgutil.h"
+#include "../pic.h"
 
 extern DPMI_ADDRESSING DPMI_Addressing;
 
@@ -489,6 +490,48 @@ static void __NAKED DPMI_RMISR_ChainedWrapper()
         _ASM(call dword ptr cs:[0]) //call target
         _ASM(pushf) //calling iret
         _ASM(call dword ptr cs:[4]) //call chained next
+
+        _ASM(push ax)
+
+        //unmask IRQ because default entry in IVT may mask the irq out
+        _ASM(in al, 0x21)
+        _ASM(and al, byte ptr cs:[8])
+        _ASM(out 0x21, al)
+        _ASM(in al, 0xA1)
+        _ASM(and al, byte ptr cs:[9])
+        _ASM(out 0xA1, al)
+
+        //read pic
+        _ASM(xor ah, ah)
+        _ASM(mov al, 0x0B) //read isr
+        _ASM(out 0x20, al)
+        _ASM(in al, 0x20)
+        _ASM(test al, 0x04)
+        _ASM(jz noslave)
+        _ASM(and al, ~0x04)
+        _ASM(mov ah, al)
+        _ASM(mov al, 0x0B) //read slave isr
+        _ASM(out 0xA0, al)
+        _ASM(in al, 0xA0)
+        _ASM(xchg ah, al)
+    _ASMLBL(noslave:)
+        _ASM(test ax, ax)
+        _ASM(jz done) //no pending irq in pic isr, done
+        _ASM(bsf ax, ax)
+        _ASM(cmp al, byte ptr cs:[10]) //compare with irq
+        _ASM(jne done) //different irq pending, done
+
+        //same irq pending after the full chain is called, send EOI in case the default entry in IVT doesn't send EOI
+        //note if this irq is new coming, send EOI doesn't matter (at least for SBEMU) since it is level triggered.
+        _ASM(mov al, 0x20)
+        _ASM(cmp byte ptr cs:[10], 8) //irq: 0-7?
+        _ASM(jb masterEOI)
+        _ASM(out 0xA0, al)
+    _ASMLBL(masterEOI:)
+        _ASM(out 0x20, al)
+
+    _ASMLBL(done:)
+        _ASM(pop ax)
         _ASM(iret)
     _ASM_END16
 }
@@ -525,28 +568,37 @@ uint16_t DPMI_InstallRealModeISR(uint8_t i, void(*ISR_RM)(void), DPMI_REG* RMReg
     if(chained)
     {
         uint32_t codesize = (uintptr_t)&DPMI_RMISR_ChainedWrapperEnd - (uintptr_t)&DPMI_RMISR_ChainedWrapper;
-        handle->chainedDOSMem = DPMI_HighMalloc((codesize + 8 + 15)>>4, TRUE); //+target + chained next (both real mode far ptr)
+        const uint32_t extra_size = 11;  //+target + chained next (both real mode far ptr) + irqunmask + irq
+        handle->chainedDOSMem = DPMI_HighMalloc((codesize + extra_size + 15)>>4, TRUE);
         if(handle->chainedDOSMem == 0)
         {
             _go32_dpmi_free_real_mode_callback(&go32pa_rm);
             assert(FALSE);
             return -1;
         }
+        uint8_t irq = PIC_VEC2IRQ(i);
+        uint16_t unmask = 1<<irq;
+        if(irq >= 8) unmask |= 0x04; //mark slave cascaded in master
+        unmask = ~unmask;
 
-        uint8_t* buf = (uint8_t*)malloc(codesize+8);
+        uint8_t* buf = (uint8_t*)malloc(codesize+extra_size);
         //copy target
         memcpy(buf+0, &go32pa_rm.rm_offset, 2);
         memcpy(buf+2, &go32pa_rm.rm_segment, 2);
         //copy chained next
         memcpy(buf+4, &ra.offset16, 2);
         memcpy(buf+6, &ra.segment, 2);
+        //copy irq unmask
+        memcpy(buf+8, &unmask, 2);
+        //copy irq
+        memcpy(buf+10, &irq, 1);
         //copy warpper code
-        memcpy(buf+8, &DPMI_RMISR_ChainedWrapper, codesize);
-        DPMI_CopyLinear(DPMI_SEGOFF2L(handle->chainedDOSMem, 0), DPMI_PTR2L(buf), codesize+8);
+        memcpy(buf+extra_size, &DPMI_RMISR_ChainedWrapper, codesize);
+        DPMI_CopyLinear(DPMI_SEGOFF2L(handle->chainedDOSMem, 0), DPMI_PTR2L(buf), codesize+extra_size);
         free(buf);
 
         go32pa_rm.rm_segment = handle->chainedDOSMem&0xFFFF;
-        go32pa_rm.rm_offset = 8;
+        go32pa_rm.rm_offset = (uint16_t)extra_size;
     }
 
     int result = -1;
