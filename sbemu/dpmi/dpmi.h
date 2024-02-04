@@ -306,7 +306,7 @@ void DPMI_HighFree(uint32_t segment);
 //convert real mode far pointer to linear addr
 #define DPMI_FP2L(f32) ((((f32)>>12)&0xFFFF0)+((f32)&0xFFFF))
 //convert far pointer (seg:off) to linear
-#define DPMI_SEGOFF2L(seg, off) ((((uint32_t)((seg)&0xFFFF))<<4) + ((off)&0xFFFF))
+#define DPMI_SEGOFF2L(seg, off) ((((uint32_t)(((uint32_t)seg)&0xFFFF))<<4) + ((off)&0xFFFF))
 //convert far pointer (seg:off) to 32bit far ptr
 #define DPMI_MKFP(seg, off) ((((uint32_t)((seg)&0xFFFF))<<16) | ((off)&0xFFFF))
 
