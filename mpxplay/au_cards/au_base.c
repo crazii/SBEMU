@@ -1017,7 +1017,7 @@ unsigned int cv_channels_1_to_n(PCM_CV_TYPE_S *pcm_sample,unsigned int samplenum
 unsigned int mixer_speed_lq(PCM_CV_TYPE_S* dest, unsigned int destsample, const PCM_CV_TYPE_S* source, unsigned int sourcesample, unsigned int channels, unsigned int samplerate, unsigned int newrate)
 {
  const unsigned int instep=((samplerate/newrate)<<12) | (((4096*(samplerate%newrate)-1)/(newrate-1))&0xFFF);
- const unsigned int inend=(sourcesample/channels) << 12;
+ const unsigned int inend=(sourcesample/channels - 1) << 12; //for n samples, interpolation n-1 steps
  int16_t *pcm; int16_t const* intmp;
  unsigned long ipi;
  unsigned int inpos = 0;//(samplerate<newrate) ? instep/2 : 0;
@@ -1044,7 +1044,7 @@ unsigned int mixer_speed_lq(PCM_CV_TYPE_S* dest, unsigned int destsample, const 
   ch=channels;
   ipi*=ch;
   intmp1=intmp+ipi;
-  intmp2=ipi < total-ch ? intmp1+ch : intmp1;
+  intmp2=intmp1+ch;
   do{
    *pcm++= ((*intmp1++)*m1+(*intmp2++)*m2)/4096;// >> 12; //don't use shift, signed right shift impl defined, maybe logical shift
   }while(--ch);

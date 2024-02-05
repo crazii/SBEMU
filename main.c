@@ -43,6 +43,8 @@ mpxplay_audioout_info_s aui = {0};
 static int16_t MAIN_OPLPCM[MAIN_PCM_SAMPLESIZE];
 static int16_t MAIN_PCM[MAIN_PCM_SAMPLESIZE];
 static int16_t MAIN_PCMResample[MAIN_PCM_SAMPLESIZE];
+static int MAIN_LastSBRate = 0;
+static int16_t MAIN_LastResample[SBEMU_CHANNELS];
 
 static DPMI_ISR_HANDLE MAIN_IntHandlePM;
 static DPMI_ISR_HANDLE MAIN_IntHandleRM;
@@ -1133,6 +1135,11 @@ static void MAIN_Interrupt()
         uint32_t SB_Bytes = SBEMU_GetSampleBytes();
         uint32_t SB_Pos = SBEMU_GetPos();
         uint32_t SB_Rate = SBEMU_GetSampleRate();
+        if(MAIN_LastSBRate != SB_Rate)
+        {
+            for(int i = 0; i < SBEMU_CHANNELS; ++i) MAIN_LastResample[i] = 0;
+            MAIN_LastSBRate = SB_Rate;
+        }
         int samplesize = max(1, SBEMU_GetBits()/8); //sample size in bytes 1 for 8bit. 2 for 16bit
         int channels = SBEMU_GetChannels();
         _LOG("sample rate: %d %d\n", SB_Rate, aui.freq_card);
@@ -1173,7 +1180,7 @@ static void MAIN_Interrupt()
             int bytes = count * samplesize * channels;
 
             {
-                int16_t* pcm = resample ? MAIN_PCMResample : MAIN_PCM + pos*2;
+                int16_t* pcm = resample ? MAIN_PCMResample+channels : MAIN_PCM + pos*2;
                 if(MAIN_DMA_MappedAddr == 0) //map failed?
                     memset(pcm, 0, bytes);
                 else
@@ -1183,7 +1190,14 @@ static void MAIN_Interrupt()
                 if(samplesize != 2)
                     cv_bits_n_to_m(pcm, count*channels, samplesize, 2);
                 if(resample/*SB_Rate != aui.freq_card*/)
-                    count = mixer_speed_lq(MAIN_PCM+pos*2, MAIN_PCM_SAMPLESIZE-pos*2, pcm, count*channels, channels, SB_Rate, aui.freq_card)/channels;
+                {
+                    for(int i = 0; i < channels; ++i)
+                    {
+                        MAIN_PCMResample[i] = MAIN_LastResample[i]; //put last sample at beginning for interpolation
+                        MAIN_LastResample[i] = *(pcm + (count-1)*channels + i); //record last sample
+                    }
+                    count = mixer_speed_lq(MAIN_PCM+pos*2, MAIN_PCM_SAMPLESIZE-pos*2, MAIN_PCMResample, count*channels, channels, SB_Rate, aui.freq_card)/channels;
+                }
             }
             if(channels == 1) //should be the last step
                 cv_channels_1_to_n(MAIN_PCM+pos*2, count, 2, 2);
