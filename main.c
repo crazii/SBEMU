@@ -1128,6 +1128,7 @@ static void MAIN_Interrupt()
     BOOL digital = SBEMU_HasStarted();
     int dma = (SBEMU_GetBits() <= 8 || MAIN_Options[OPT_TYPE].value < 6) ? SBEMU_GetDMA() : SBEMU_GetHDMA();
     int32_t DMA_Count = VDMA_GetCounter(dma); //count in bytes
+    if(!digital) MAIN_LastSBRate = 0;
     if(digital)//&& DMA_Count != 0x10000) //-1(0xFFFF)+1=0
     {
         uint32_t DMA_Addr = VDMA_GetAddress(dma);
@@ -1167,7 +1168,7 @@ static void MAIN_Interrupt()
             int count = samples-pos;
             BOOL resample = TRUE; //don't resample if sample rates are close
             if(SB_Rate < aui.freq_card-50)
-                count = max(1, count*SB_Rate/aui.freq_card);
+                count = max(min(2,count), count*SB_Rate/aui.freq_card); //need at least 2 for interpolation
             else if(SB_Rate > aui.freq_card+50)
                 count = count*SB_Rate/aui.freq_card;
             else
