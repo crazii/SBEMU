@@ -17,8 +17,8 @@ unzip FD13-LiteUSB.zip
 rm FD13-LiteUSB.zip
 wget https://github.com/Baron-von-Riedesel/Jemm/releases/download/v5.84pre2/JemmB_v584.zip
 echo "719dfea1fdc609c5256fee4b8ad6db6880ff7a29f0ddc5dcaaa609a87771d218  JemmB_v584.zip" | shasum -a 256 --check
-wget https://github.com/crazii/HX/releases/download/v0.1-beta3/HDPMI32i.zip
-echo "4b7fc576d6c5dfd3fe7290fd1d0c0229118d01a55c8325d487452c2d6e0c3bbd  HDPMI32i.zip" | shasum -a 256 --check
+wget https://github.com/crazii/HX/releases/download/v0.1-beta4rc1/HDPMI32i.zip
+echo "8ed80290860d2bfe63d4ee471fc3d9b63e397497f36fde5fd94c9d5aeed26a31  HDPMI32i.zip" | shasum -a 256 --check
 wget https://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/repositories/1.3/base/ctmouse.zip
 echo "a891124cd5b13e8141778fcae718f3b2667b0a49727ce92b782ab11a8c4bb63a  ctmouse.zip" | shasum -a 256 --check
 mkdir -p /tmp/SBEMU
