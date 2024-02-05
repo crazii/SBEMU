@@ -1014,29 +1014,30 @@ unsigned int cv_channels_1_to_n(PCM_CV_TYPE_S *pcm_sample,unsigned int samplenum
 }
 
 //sample rates
-unsigned int mixer_speed_lq(PCM_CV_TYPE_S *pcm16,unsigned int samplenum, unsigned int channels, unsigned int samplerate, unsigned int newrate)
+unsigned int mixer_speed_lq(PCM_CV_TYPE_S* dest, unsigned int destsample, const PCM_CV_TYPE_S* source, unsigned int sourcesample, unsigned int channels, unsigned int samplerate, unsigned int newrate)
 {
  const unsigned int instep=((samplerate/newrate)<<12) | (((4096*(samplerate%newrate)-1)/(newrate-1))&0xFFF);
- const unsigned int inend=(samplenum/channels) << 12;
- int16_t *pcm,*intmp;
+ const unsigned int inend=(sourcesample/channels) << 12;
+ int16_t *pcm; int16_t const* intmp;
  unsigned long ipi;
  unsigned int inpos = 0;//(samplerate<newrate) ? instep/2 : 0;
- if(!samplenum)
+ if(!sourcesample)
   return 0;
- assert(((samplenum/channels)&0xFFF00000) == 0); //too many samples, need other approches.
- unsigned int buffcount = max(((unsigned long long)max(samplenum,512)*newrate+samplerate-1)/samplerate,max(samplenum,512))*2+32;
- int16_t* buff = (int16_t*)malloc(buffcount*sizeof(int16_t));
+ assert(((sourcesample/channels)&0xFFF00000) == 0); //too many samples, need other approches.
+ unsigned int buffcount = max(((unsigned long long)max(sourcesample,512)*newrate+samplerate-1)/samplerate,max(sourcesample,512))*2+32;
+ assert(buffcount <= destsample);
+ int16_t* buff = dest;
 
  mpxplay_debugf(MPXPLAY_DEBUG_OUTPUT, "step: %08x, end: %08x\n", instep, inend);
 
  pcm = buff;
- intmp = pcm16;
- int total = samplenum/channels;
+ intmp = source;
+ int total = sourcesample/channels;
 
  do{
   int m1,m2;
   unsigned int ipi,ch;
-  int16_t *intmp1,*intmp2;
+  const int16_t *intmp1,*intmp2;
   ipi = inpos >> 12;
   m2=inpos&0xFFF;
   m1=4096-m2;
@@ -1048,13 +1049,17 @@ unsigned int mixer_speed_lq(PCM_CV_TYPE_S *pcm16,unsigned int samplenum, unsigne
    *pcm++= ((*intmp1++)*m1+(*intmp2++)*m2)/4096;// >> 12; //don't use shift, signed right shift impl defined, maybe logical shift
   }while(--ch);
   inpos+=instep;
+
+  if(pcm - buff >= destsample) //check overflow
+  {
+    assert(FALSE);
+    return pcm - buff;
+  }
  }while(inpos<inend);
 
  mpxplay_debugf(MPXPLAY_DEBUG_OUTPUT, "sample count: %d\n", pcm-buff);
  //_LOG("MIXER_SPEED_LQ: %d, %d\n", pcm-buff, buffcount);
  assert(pcm-buff <= buffcount);
- memcpy(pcm16, buff, (pcm-buff)*sizeof(int16_t));
- free(buff);
  return pcm - buff;
 }
 

@@ -514,7 +514,7 @@ extern void cv_bits_n_to_m(PCM_CV_TYPE_S *pcm,unsigned int samplenum,unsigned in
 //channels
 extern unsigned int cv_channels_1_to_n(PCM_CV_TYPE_S *pcm_sample,unsigned int samplenum,unsigned int newchannels,unsigned int bytespersample);
 //sample rates
-unsigned int mixer_speed_lq(PCM_CV_TYPE_S *pcm16,unsigned int samplenum, unsigned int channels, unsigned int samplerate, unsigned int newrate);
+unsigned int mixer_speed_lq(PCM_CV_TYPE_S* dest, unsigned int destsample, const PCM_CV_TYPE_S* source, unsigned int sourcesample, unsigned int channels, unsigned int samplerate, unsigned int newrate);
 
 #ifdef MPXPLAY_USE_DEBUGF
 

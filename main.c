@@ -40,8 +40,9 @@ mpxplay_audioout_info_s aui = {0};
 
 #define MAIN_PCM_SAMPLESIZE 16384
 
-static int16_t MAIN_OPLPCM[MAIN_PCM_SAMPLESIZE+256];
-static int16_t MAIN_PCM[MAIN_PCM_SAMPLESIZE+256];
+static int16_t MAIN_OPLPCM[MAIN_PCM_SAMPLESIZE];
+static int16_t MAIN_PCM[MAIN_PCM_SAMPLESIZE];
+static int16_t MAIN_PCMResample[MAIN_PCM_SAMPLESIZE];
 
 static DPMI_ISR_HANDLE MAIN_IntHandlePM;
 static DPMI_ISR_HANDLE MAIN_IntHandleRM;
@@ -1070,20 +1071,6 @@ static void MAIN_InterruptRM()
 
 static void MAIN_Interrupt()
 {
-    #if 0
-    aui.card_outbytes = aui.card_dmasize;
-    int space = AU_cardbuf_space(&aui)+2048;
-    //_LOG("int space: %d\n", space);
-    int samples = space / sizeof(int16_t) / 2 * 2;
-    //int samples = 22050/18*2;
-    _LOG("samples: %d %d\n", 22050/18*2, space/4*2);
-    static int cur = 0;
-    aui.samplenum = min(samples, TEST_SampleLen-cur);
-    aui.pcm_sample = TEST_Sample + cur;
-    //_LOG("cur: %d %d\n",cur,aui.samplenum);
-    cur += aui.samplenum;
-    cur -= AU_writedata(&aui);
-    #else
     if(!(aui.card_infobits&AUINFOS_CARDINFOBIT_PLAYING))
         return;
         
@@ -1131,7 +1118,7 @@ static void MAIN_Interrupt()
     }
 
     aui.card_outbytes = aui.card_dmasize;
-    int samples = AU_cardbuf_space(&aui) / sizeof(int16_t) / 2; //16 bit, 2 channels
+    int samples = AU_cardbuf_space(&aui) / sizeof(int16_t) / SBEMU_CHANNELS; //16 bit, 2 channels
     //_LOG("samples:%d\n",samples);
     if(samples == 0)
         return;
@@ -1153,7 +1140,8 @@ static void MAIN_Interrupt()
         //_LOG("DMA index: %x\n", DMA_Index);
         //_LOG("digital start\n");
         int pos = 0;
-        do {
+        do
+        {
             if(MAIN_DMA_MappedAddr != 0
              && !(DMA_Addr >= MAIN_DMA_Addr && DMA_Addr+DMA_Index+DMA_Count <= MAIN_DMA_Addr+MAIN_DMA_Size))
             {
@@ -1184,16 +1172,19 @@ static void MAIN_Interrupt()
             _LOG("samples:%d %d %d, %d %d, %d %d\n", samples, pos+count, count, DMA_Count, DMA_Index, SB_Bytes, SB_Pos);
             int bytes = count * samplesize * channels;
 
-            if(MAIN_DMA_MappedAddr == 0) //map failed?
-                memset(MAIN_PCM+pos*2, 0, bytes);
-            else
-                DPMI_CopyLinear(DPMI_PTR2L(MAIN_PCM+pos*2), MAIN_DMA_MappedAddr+(DMA_Addr-MAIN_DMA_Addr)+DMA_Index, bytes);
-            if(SBEMU_GetBits()<8) //ADPCM  8bit
-                count = SBEMU_DecodeADPCM((uint8_t*)(MAIN_PCM+pos*2), bytes);
-            if(samplesize != 2)
-                cv_bits_n_to_m(MAIN_PCM+pos*2, count*channels, samplesize, 2);
-            if(resample/*SB_Rate != aui.freq_card*/)
-                count = mixer_speed_lq(MAIN_PCM+pos*2, count*channels, channels, SB_Rate, aui.freq_card)/channels;
+            {
+                int16_t* pcm = resample ? MAIN_PCMResample : MAIN_PCM + pos*2;
+                if(MAIN_DMA_MappedAddr == 0) //map failed?
+                    memset(pcm, 0, bytes);
+                else
+                    DPMI_CopyLinear(DPMI_PTR2L(pcm), MAIN_DMA_MappedAddr+(DMA_Addr-MAIN_DMA_Addr)+DMA_Index, bytes);
+                if(SBEMU_GetBits()<8) //ADPCM  8bit
+                    count = SBEMU_DecodeADPCM((uint8_t*)(pcm), bytes);
+                if(samplesize != 2)
+                    cv_bits_n_to_m(pcm, count*channels, samplesize, 2);
+                if(resample/*SB_Rate != aui.freq_card*/)
+                    count = mixer_speed_lq(MAIN_PCM+pos*2, MAIN_PCM_SAMPLESIZE-pos*2, pcm, count*channels, channels, SB_Rate, aui.freq_card)/channels;
+            }
             if(channels == 1) //should be the last step
                 cv_channels_1_to_n(MAIN_PCM+pos*2, count, 2, 2);
             pos += count;
@@ -1239,7 +1230,7 @@ static void MAIN_Interrupt()
     {
         samples = SBEMU_GetDirectCount();
         _LOG("direct out:%d %d\n",samples,aui.card_samples_per_int);
-        memcpy(MAIN_PCM, SBEMU_GetDirectPCM8(), samples);
+        memcpy(MAIN_PCMResample, SBEMU_GetDirectPCM8(), samples);
         SBEMU_ResetDirect();
 #if 0   //fix noise for some games - SBEMU-X NOTE: unlikely to be needed
         int zeros = TRUE;
@@ -1255,10 +1246,10 @@ static void MAIN_Interrupt()
         }
 #endif
         //for(int i = 0; i < samples; ++i) _LOG("%d ",((uint8_t*)MAIN_PCM)[i]); _LOG("\n");
-        cv_bits_n_to_m(MAIN_PCM, samples, 1, 2);
+        cv_bits_n_to_m(MAIN_PCMResample, samples, 1, 2);
         //for(int i = 0; i < samples; ++i) _LOG("%d ",MAIN_PCM[i]); _LOG("\n");
         // the actual sample rate is derived from current count of samples in direct output buffer
-        samples = mixer_speed_lq(MAIN_PCM, samples, 1, (samples * aui.freq_card) / aui.card_samples_per_int, aui.freq_card);
+        samples = mixer_speed_lq(MAIN_PCM, MAIN_PCM_SAMPLESIZE, MAIN_PCMResample, samples, 1, (samples * aui.freq_card) / aui.card_samples_per_int, aui.freq_card);
         //for(int i = 0; i < samples; ++i) _LOG("%d ",MAIN_PCM[i]); _LOG("\n");
         cv_channels_1_to_n(MAIN_PCM, samples, 2, 2);
         digital = TRUE;
@@ -1306,7 +1297,6 @@ static void MAIN_Interrupt()
     AU_writedata(&aui);
 
     //_LOG("MAIN INT END\n");
-    #endif
 }
 
 void MAIN_TSR_InstallationCheck()
