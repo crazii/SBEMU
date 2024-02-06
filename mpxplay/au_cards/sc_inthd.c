@@ -230,7 +230,6 @@ static void azx_corb_stop(struct intelhd_card_s *chip)
 
 static void azx_switch_to_pio(struct intelhd_card_s *chip)
 {
- printf("Intel HDA: Switching to PIO.\n");
  azx_corb_stop(chip);
  chip->config_select |= AUCARDSCONFIG_IHD_USE_PIO;
  azx_writel(chip, GCTL, (azx_readl(chip, GCTL) & (~ICH6_GCTL_UREN)));
@@ -304,6 +303,20 @@ static void azx_corb_init(struct intelhd_card_s *chip)  // setup CORB command DM
       if ((rp & CORBRPRST) == 0) break;
       pds_delay_10us(10);
     } while (--timeout);
+
+    //check PIO mode
+    if((chip->config_select&AUCARDSCONFIG_IHD_USE_PIO))
+    {
+      int try = 8;
+      do
+      {
+        if(snd_hda_codec_read(chip, AC_NODE_ROOT,0,AC_VERB_PARAMETERS,AC_PAR_VENDOR_ID) != 0)
+          break;
+        pds_delay_10us(100);
+      }while(--try > 0);
+      if(try <= 0)
+        chip->config_select &= ~AUCARDSCONFIG_IHD_USE_PIO;
+    }
 
     if(!(chip->config_select&AUCARDSCONFIG_IHD_USE_PIO))
       azx_corb_start(chip, 1);
@@ -409,7 +422,7 @@ static unsigned int azx_get_response(struct intelhd_card_s *chip)
     timeout = 20000; // 200000 ms
     while((azx_readw(chip, IRS) & ICH6_IRS_BUSY) && (--timeout)) pds_mdelay(10);
     mpxplay_debugf(IHD_DEBUG_OUTPUT,"PIO wait cmd response timeout2 %d", timeout); //timetout2 should not happen (always>0)
-    //resp = 0; //not sure if it is invalid
+    resp = 0; //not sure if it is invalid
   }
 
 #ifdef INTHD_CODEC_EXTRA_DELAY_US
@@ -1465,6 +1478,9 @@ static int INTELHD_adetect(struct mpxplay_audioout_info_s *aui)
     break;
   }
  }
+
+ if(!(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_SILENT) && (card->config_select&AUCARDSCONFIG_IHD_USE_PIO))
+  printf("Intel HDA: PIO mode used.\n");
 
  mpxplay_debugf(IHD_DEBUG_OUTPUT,"MIXER init time: %d ms", pds_gettimem()-prevtime);
 
