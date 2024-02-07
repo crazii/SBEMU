@@ -347,7 +347,7 @@ void pcibios_enable_interrupt(pci_config_s* ppkey)
  pcibios_WriteConfig_Word(ppkey, PCIR_PCICMD, cmd);
 }
 
-#define USE_P32_CALL 1 //32bit protected mode call. if this doesn't work for some PCs, then the final solution should be programming the interrupt router.
+#define USE_P32_CALL 0 //32bit protected mode call. if this doesn't work for some PCs, then the final solution should be programming the interrupt router.
 
 #pragma pack(1)
 
