@@ -192,7 +192,7 @@ BOOL QEMM_Install_IOPortTrap(QEMM_IODT* inputp iodt, uint16_t count, QEMM_IOPT* 
         {
             uint32_t codesize = (uintptr_t)&QEMM_RM_WrapperEnd - (uintptr_t)&QEMM_RM_Wrapper;
             //_LOG("QEMM dos mem size: %d\n", codesize);
-            QEMM_DOSMEM = DPMI_HighMalloc((codesize + 4 + 2 + 15)>>4, TRUE);
+            QEMM_DOSMEM = DPMI_HighMalloc((codesize + 4 + 2 + 15)>>4, FALSE);
             uint32_t rmcb = DPMI_AllocateRMCB_RETF(&QEMM_TrapHandler, &QEMM_TrapHandlerREG);
             if(rmcb == 0)
             {
