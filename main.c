@@ -31,7 +31,7 @@ PROGNAME = "SBEMU";
 #define MAIN_TRAP_PIC_ONDEMAND 1
 #define MAIN_INSTALL_RM_ISR 1 //not needed. but to workaround some rm games' problem. need RAW_HOOk in dpmi_dj2.c
 #define MAIN_DOUBLE_OPL_VOLUME 1 //hack: double the amplitude of OPL PCM. should be 1 or 0
-#define MAIN_ISR_CHAINED 1 //auto calls next handler AFTER current handler exits
+#define MAIN_ISR_CHAINED 0 //auto calls next handler AFTER current handler exits - crashes on some PCs and don't use it for now
 
 #define MAIN_TSR_INT 0x2D   //AMIS multiplex. TODO: 0x2F?
 #define MAIN_TSR_INTSTART_ID 0x01 //start id
@@ -748,7 +748,7 @@ int main(int argc, char* argv[])
         return 1;
     atexit(&MAIN_Cleanup);
 
-    if(aui.card_irq > 31) //UEFI with CSM may have APIC enabled (16-31).
+    if(aui.card_irq > 15) //UEFI with CSM may have APIC enabled (16-31) - but we need read APIC, not implemented for now.
     {
         printf("Invalid Sound card IRQ: ");
         MAIN_CPrintf(RED, "%d", aui.card_irq);
@@ -905,7 +905,7 @@ int main(int argc, char* argv[])
         TSR_ISR = DPMI_InstallRealModeISR(MAIN_TSR_INT, MAIN_TSR_Interrupt, &MAIN_TSRREG, &MAIN_TSRIntHandle, FALSE) == 0;
         if(!TSR_ISR)
             break;
-        MAIN_ISR_DOSID = DPMI_HighMalloc((sizeof(MAIN_ISR_DOSID_String)+15)>>4, TRUE);
+        MAIN_ISR_DOSID = DPMI_HighMalloc((sizeof(MAIN_ISR_DOSID_String)+15)>>4, FALSE);
         //printf("DOSID:%x\n", DPMI_SEGOFF2L(MAIN_ISR_DOSID,0));
         DPMI_CopyLinear(DPMI_SEGOFF2L(MAIN_ISR_DOSID,0), DPMI_PTR2L((char*)MAIN_ISR_DOSID_String), sizeof(MAIN_ISR_DOSID_String));
         break;
@@ -936,6 +936,7 @@ int main(int argc, char* argv[])
     HDPMIPT_GetIRQRoutedHandlerH(aui.card_irq, &OldRoutedHandle);
     HDPMIPT_InstallIRQRoutedHandler(aui.card_irq, MAIN_IntHandlePM.wrapper_cs, MAIN_IntHandlePM.wrapper_offset,
         MAIN_IntHandleRM.wrapper_cs, (uint16_t)MAIN_IntHandleRM.wrapper_offset);
+    HDPMIPT_LockIRQRouting(TRUE);
     PIC_UnmaskIRQ(aui.card_irq);
 
     AU_prestart(&aui);

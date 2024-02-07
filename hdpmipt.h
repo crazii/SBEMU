@@ -20,6 +20,7 @@ BOOL HDPMIPT_InstallIRQRoutedHandler(uint8_t irq, uint16_t cs, uint32_t offset, 
 BOOL HDPMIPT_GetIRQRoutedHandler(uint8_t irq, uint16_t* cs, uint32_t* offset, uint16_t* rmcs, uint16_t* rmoffset);
 BOOL HDPMIPT_DisableIRQRouting(uint8_t irq);
 BOOL HDPMIPT_EnableIRQRouting(uint8_t irq);
+BOOL HDPMIPT_LockIRQRouting(BOOL locked);
 
 //helpers
 typedef struct

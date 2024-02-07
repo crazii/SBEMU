@@ -333,7 +333,7 @@ BOOL HDPMIPT_GetIRQRoutedHandler(uint8_t irq, uint16_t* cs, uint32_t* offset, ui
     "pushl %%esi \n\t"
     "movl $0x0D, %%eax \n\t" //function no.
     "movzxb %6, %%esi \n\t" //esi=irq
-    "lcall *%5\n\t"
+    "lcall *%5 \n\t"
     "jc 1f \n\t"
 
     "movw %%cx, %0 \n\t"   //ecx=selector
@@ -401,6 +401,33 @@ BOOL HDPMIPT_EnableIRQRouting(uint8_t irq)
         return FALSE;
     }
     return TRUE;
+}
+
+BOOL HDPMIPT_LockIRQRouting(BOOL locked)
+{
+    if(HDPMIPT_Entry.es == 0 || HDPMIPT_Entry.edi == 0)
+    {
+        if(!HDPMIPT_GetVendorEntry(&HDPMIPT_Entry))
+            return FALSE;
+    }
+
+    locked = locked ? 1 : 0;
+
+    BOOL result = 0;
+    asm(
+    "movl $0x0E, %%eax \n\t" //function no.
+    "movzxb %2, %%ecx \n\t"
+    "lcall *%1 \n\t"
+    "jc 1f \n\t"  
+    "movb $1, %0 \n\t "
+    "jmp 2f \n\t"
+    "1: movb $0, %0 \n\t"
+    "2: \n\t"
+    :"=m"(result)
+    :"m"(HDPMIPT_Entry),"m"(locked)
+    :"eax","ecx"
+    );
+    return result;
 }
 
 BOOL HDPMIPT_GetInterrupContext(INTCONTEXT* context)
