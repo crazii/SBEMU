@@ -9,7 +9,7 @@
  * distribution for the license terms and conditions.
  *
  */
-static uint32_t dsp_size = 0x0020;
+static uint32_t dsp_size = 0x0020 * 4;
 static uint32_t dsp[] = {
   0x00000081, 0x000001a4, 0x0000000a, 0x0000002f,
   0x00080253, 0x01800317, 0x0000407b, 0x0000843f,
@@ -21,7 +21,7 @@ static uint32_t dsp[] = {
   0x00000000, 0x00000000, 0x00000000, 0x00000000
 };
 
-static uint32_t cntrl_size = 0x0c00;
+static uint32_t cntrl_size = 0x0c00 * 4;
 static uint32_t cntrl[] = {
   0x000007, 0x240007, 0x0C0007, 0x1C0007,
   0x060007, 0x700002, 0x000020, 0x030040,
@@ -793,7 +793,7 @@ static uint32_t cntrl[] = {
   0x000000, 0x000000, 0x000000, 0x000000
 };
 
-static uint32_t cntrl1E_size = 0x0c00;
+static uint32_t cntrl1E_size = 0x0c00 * 4;
 static uint32_t cntrl1E[] = {
   0x000007, 0x240007, 0x0C0007, 0x1C0007,
   0x060007, 0x700002, 0x000020, 0x030040,
