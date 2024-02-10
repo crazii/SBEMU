@@ -1302,6 +1302,12 @@ try_724:
   dumped = 1;
 #endif
 
+  if (!(aui->card_select_index == 0 || aui->card_select_index == aui->card_test_index)) {
+    // Disable HW FM/MPU if another card was selected
+    main_hw_fmport = 0;
+    main_hw_mpuport = 0;
+  }
+
 #if YMF_ENABLE_PCM
   if (aui->card_handler == &YMFSB_sndcard_info)
     return 1;
