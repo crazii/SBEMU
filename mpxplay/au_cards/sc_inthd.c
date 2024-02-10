@@ -319,7 +319,29 @@ static void azx_corb_init(struct intelhd_card_s *chip)  // setup CORB command DM
     }
 
     if(!(chip->config_select&AUCARDSCONFIG_IHD_USE_PIO))
+    {
+      chip->rirb_index = 0;
+      
+      azx_writew(chip, CORBRP, CORBRPRST); //reset corb read ptr
+      //confirm reset
+      int timeout = 2000;
+      do {
+        if (azx_readw(chip, CORBRP)&CORBRPRST) break;
+        pds_delay_10us(10);
+      } while (--timeout);
+      if(!timeout) mpxplay_debugf(IHD_DEBUG_OUTPUT, "reset corb rp timeout\n");
+
+      azx_writew(chip, CORBRP, 0); //set it back, spec required
+      //confirm set back
+      timeout = 2000;
+      do {
+        if ((azx_readw(chip, CORBRP)&CORBRPRST) == 0) break;
+        pds_delay_10us(10);
+      } while (--timeout);
+      if(!timeout) mpxplay_debugf(IHD_DEBUG_OUTPUT, "reset corb rp timeout2\n");
+      
       azx_corb_start(chip, 1);
+    }
   }
 }
 
