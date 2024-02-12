@@ -7,8 +7,8 @@ VERSION ?= $(shell git describe --tags)
 
 INCLUDES := -I./mpxplay -I./sbemu
 DEFINES := -D__DOS__ -DSBEMU -DDEBUG=$(DEBUG) -DMAIN_SBEMU_VER=\"$(VERSION)\"
-CFLAGS := -fcommon -march=i386 -Os $(INCLUDES) $(DEFINES)
-LDFLAGS := -lstdc++ -lm
+CFLAGS := -fcommon -march=i386 -O2 -flto=auto -Wno-attributes $(INCLUDES) $(DEFINES)
+LDFLAGS := -lstdc++ -lm -save-temps
 
 ifeq ($(DEBUG),0)
 LDFLAGS += -s
@@ -86,6 +86,8 @@ output/%.o: %.cpp
 clean:
 	$(SILENTMSG) "CLEAN\n"
 	$(SILENTCMD)$(RM) $(OBJS)
+# delete LTO -save-temps files
+	$(SILENTCMD)$(RM) output/sbemu.ltrans*
 
 distclean: clean
 	$(SILENTMSG) "DISTCLEAN\n"
