@@ -236,6 +236,7 @@ extern int ioctl(int, int, int, void*);
 extern int _my_cs();
 extern int _my_es();
 extern int _my_ds();
+extern void textcolor(int);
 #define _dos_ds 0
 
 #define DOS_RCVDATA 2

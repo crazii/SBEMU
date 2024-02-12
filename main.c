@@ -28,10 +28,11 @@ PROGNAME = "SBEMU";
 #define MAIN_SBEMU_VER "1.0 beta3"
 #endif
 
-#define MAIN_TRAP_PIC_ONDEMAND 1
+#define MAIN_TRAP_PMPIC_ONDEMAND 0 //now we need a Virtual PIC to hide some IRQ for protected mode games (doom especially)
+#define MAIN_TRAP_RMPIC_ONDEMAND 1 //don't hide IRQ for rm, as some driver(i.e.usbuhci) will use it
 #define MAIN_INSTALL_RM_ISR 1 //not needed. but to workaround some rm games' problem. need RAW_HOOk in dpmi_dj2.c
 #define MAIN_DOUBLE_OPL_VOLUME 1 //hack: double the amplitude of OPL PCM. should be 1 or 0
-#define MAIN_ISR_CHAINED 0 //auto calls next handler AFTER current handler exits - crashes on some PCs and don't use it for now
+#define MAIN_ISR_CHAINED 1 //auto calls next handler AFTER current handler exits
 
 #define MAIN_TSR_INT 0x2D   //AMIS multiplex. TODO: 0x2F?
 #define MAIN_TSR_INTSTART_ID 0x01 //start id
@@ -457,8 +458,10 @@ static int MAIN_SB_DSPVersion[] =
 
 static void MAIN_InvokeIRQ(uint8_t irq) //generate virtual IRQ
 {
-    #if MAIN_TRAP_PIC_ONDEMAND
+    #if MAIN_TRAP_RMPIC_ONDEMAND
     if(MAIN_Options[OPT_RM].value) QEMM_Install_IOPortTrap(MAIN_VIRQ_IODT, countof(MAIN_VIRQ_IODT), &MAIN_VIRQ_IOPT);
+    #endif
+    #if MAIN_TRAP_PMPIC_ONDEMAND
     if(MAIN_Options[OPT_PM].value)
     {
         HDPMIPT_Install_IOPortTrap(0x20, 0x21, MAIN_VIRQ_IODT, 2, &MAIN_VIRQ_IOPT_PM1);
@@ -470,8 +473,10 @@ static void MAIN_InvokeIRQ(uint8_t irq) //generate virtual IRQ
     VIRQ_Invoke(irq, &MAIN_IntContext.regs, MAIN_IntContext.EFLAGS&CPU_VMFLAG);
     HDPMIPT_EnableIRQRouting(irq); //restore routing
 
-    #if MAIN_TRAP_PIC_ONDEMAND
+    #if MAIN_TRAP_RMPIC_ONDEMAND
     if(MAIN_Options[OPT_RM].value) QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
+    #endif
+    #if MAIN_TRAP_PMPIC_ONDEMAND
     if(MAIN_Options[OPT_PM].value)
     {
         HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM1);
@@ -769,6 +774,7 @@ int main(int argc, char* argv[])
         printf("Please try use /i5 or /i7 switch, or disable some onboard devices in the BIOS settings to release IRQs.\n");
         return 1;
     }
+    #if 0
     if(aui.card_irq <= 0x07) //SBPCI/CMI use irq 5/7 to gain DOS compatility?
     {
         printf("WARNING: Low IRQ %d used for sound card, higher IRQ number(8~15) is recommended.\n", aui.card_irq);
@@ -784,6 +790,7 @@ int main(int argc, char* argv[])
         }
         #endif
     }
+    #endif
     pcibios_enable_interrupt(aui.card_pci_dev);
 
     printf("Real mode support: ");
@@ -842,11 +849,12 @@ int main(int argc, char* argv[])
         MAIN_Print_Enabled_Newline(true);
     }
 
+    VIRQ_Init();
+
     MAIN_SbemuExtFun.StartPlayback = NULL; //not used
     MAIN_SbemuExtFun.RaiseIRQ = NULL;
     MAIN_SbemuExtFun.DMA_Size = &VDMA_GetCounter;
     MAIN_SbemuExtFun.DMA_Write = &VDMA_WriteData;
-
     SBEMU_Init(
         MAIN_Options[OPT_IRQ].value,
         MAIN_Options[OPT_DMA].value,
@@ -870,7 +878,7 @@ int main(int argc, char* argv[])
     MAIN_Print_Enabled_Newline(true);
 
     BOOL QEMMInstalledVDMA = !enableRM || QEMM_Install_IOPortTrap(MAIN_VDMA_IODT, countof(MAIN_VDMA_IODT), &MAIN_VDMA_IOPT);
-    #if MAIN_TRAP_PIC_ONDEMAND//will crash with VIRQ installed, do it temporarily. TODO: figure out why
+    #if MAIN_TRAP_RMPIC_ONDEMAND//will crash with VIRQ installed, do it temporarily. TODO: figure out why
     BOOL QEMMInstalledVIRQ = TRUE;
     #else
     BOOL QEMMInstalledVIRQ = !enableRM || QEMM_Install_IOPortTrap(MAIN_VIRQ_IODT, countof(MAIN_VIRQ_IODT), &MAIN_VIRQ_IOPT);
@@ -883,7 +891,7 @@ int main(int argc, char* argv[])
     BOOL HDPMIInstalledVHDMA1 = !enablePM || HDPMIPT_Install_IOPortTrap(0xC0, 0xDE, MAIN_VDMA_IODT+20, 16, &MAIN_VHDMA_IOPT_PM1);
     BOOL HDPMIInstalledVHDMA2 = !enablePM || HDPMIPT_Install_IOPortTrap(0x89, 0x8B, MAIN_VDMA_IODT+36, 3, &MAIN_VHDMA_IOPT_PM2);
     BOOL HDPMIInstalledVHDMA3 = !enablePM || HDPMIPT_Install_IOPortTrap(0x8F, 0x8F, MAIN_VDMA_IODT+39, 1, &MAIN_VHDMA_IOPT_PM3);
-    #if MAIN_TRAP_PIC_ONDEMAND
+    #if MAIN_TRAP_PMPIC_ONDEMAND
     BOOL HDPMIInstalledVIRQ1 = TRUE;
     BOOL HDPMIInstalledVIRQ2 = TRUE;
     #else
@@ -952,7 +960,7 @@ int main(int argc, char* argv[])
         if(!QEMMInstalledVDMA || !QEMMInstalledVIRQ || !QEMMInstalledSB)
             printf("Error: Failed installing IO port trap for QEMM.\n");
         if(enableRM && QEMMInstalledVDMA) QEMM_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT);
-        #if !MAIN_TRAP_PIC_ONDEMAND
+        #if !MAIN_TRAP_RMPIC_ONDEMAND
         if(enableRM && QEMMInstalledVIRQ) QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
         #endif
         if(enableRM && QEMMInstalledSB) QEMM_Uninstall_IOPortTrap(&MAIN_SB_IOPT);
@@ -965,7 +973,7 @@ int main(int argc, char* argv[])
         if(enablePM && HDPMIInstalledVHDMA1) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VHDMA_IOPT_PM1);
         if(enablePM && HDPMIInstalledVHDMA2) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VHDMA_IOPT_PM2);
         if(enablePM && HDPMIInstalledVHDMA3) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VHDMA_IOPT_PM3);
-        #if !MAIN_TRAP_PIC_ONDEMAND
+        #if !MAIN_TRAP_PMPIC_ONDEMAND
         if(enablePM && HDPMIInstalledVIRQ1) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM1);
         if(enablePM && HDPMIInstalledVIRQ2) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM2);
         #endif
@@ -999,7 +1007,7 @@ int main(int argc, char* argv[])
 static void MAIN_InterruptPM()
 {
     const uint8_t irq = PIC_GetIRQ();
-    if(irq != aui.card_irq) //shared IRQ handled by other handlers(EOI sent) or new irq arrived but not for us
+    if(irq != aui.card_irq) //shared IRQ handled by other handlers(EOI sent) or new irq arrived after EOI but not for us
         return;
 
     //if(MAIN_InINT&MAIN_ININT_PM) return; //skip reentrance. go32 will do this so actually we don't need it
@@ -1023,9 +1031,7 @@ static void MAIN_InterruptPM()
     if(/*!(MAIN_InINT&MAIN_ININT_RM) && */aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
     {
         MAIN_Interrupt();
-        #if !MAIN_ISR_CHAINED
-        PIC_SendEOIWithIRQ(aui.card_irq);
-        #endif
+        PIC_SendEOIWithIRQ(aui.card_irq); //some BIOS driver doesn't works well if not sending EOI, there's extra check for EOI in DPMI_RMISR_ChainedWrapper
     }
     #if !MAIN_ISR_CHAINED
     else
@@ -1044,7 +1050,7 @@ static void MAIN_InterruptPM()
 static void MAIN_InterruptRM()
 {
     const uint8_t irq = PIC_GetIRQ();
-    if(irq != aui.card_irq) //shared IRQ handled by other handlers(EOI sent) or new irq arrived but not for us
+    if(irq != aui.card_irq) //shared IRQ handled by other handlers(EOI sent) or new irq arrived after EOI but not for us
         return;
     
     //if(MAIN_InINT&MAIN_ININT_RM) return; //skip reentrance. go32 will do this so actually we don't need it
@@ -1056,9 +1062,7 @@ static void MAIN_InterruptRM()
         MAIN_IntContext.regs = MAIN_RMIntREG;
         MAIN_IntContext.EFLAGS = MAIN_RMIntREG.w.flags | CPU_VMFLAG;
         MAIN_Interrupt();
-        #if !MAIN_ISR_CHAINED
-        PIC_SendEOIWithIRQ(aui.card_irq);
-        #endif
+        PIC_SendEOIWithIRQ(aui.card_irq); //some BIOS driver doesn't works well if not sending EOI, there's extra check for EOI in DPMI_RMISR_ChainedWrapper
     }
     #if !MAIN_ISR_CHAINED
     else
@@ -1509,7 +1513,7 @@ static void MAIN_TSR_Interrupt()
                 if(MAIN_Options[OPT_OPL].value) QEMM_Uninstall_IOPortTrap(&OPL3IOPT);
                 if(MAIN_Options[OPT_MPUADDR].value && MAIN_Options[OPT_MPUCOMPORT].value) QEMM_Uninstall_IOPortTrap(&MPUIOPT);
                 QEMM_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT);
-                #if !MAIN_TRAP_PIC_ONDEMAND
+                #if !MAIN_TRAP_RMPIC_ONDEMAND
                 QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
                 #endif
                 QEMM_Uninstall_IOPortTrap(&MAIN_SB_IOPT);
@@ -1525,7 +1529,7 @@ static void MAIN_TSR_Interrupt()
                 HDPMIPT_Uninstall_IOPortTrap(&MAIN_VHDMA_IOPT_PM1);
                 HDPMIPT_Uninstall_IOPortTrap(&MAIN_VHDMA_IOPT_PM2);
                 HDPMIPT_Uninstall_IOPortTrap(&MAIN_VHDMA_IOPT_PM3);
-                #if !MAIN_TRAP_PIC_ONDEMAND
+                #if !MAIN_TRAP_PMPIC_ONDEMAND
                 HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM1);
                 HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM2);
                 #endif
@@ -1565,7 +1569,7 @@ static void MAIN_TSR_Interrupt()
                 _LOG("install qemm\n");
                 QEMM_Install_IOPortTrap(MAIN_VDMA_IODT, countof(MAIN_VDMA_IODT), &MAIN_VDMA_IOPT);
                 QEMM_Install_IOPortTrap(SB_Iodt, SB_IodtCount, &MAIN_SB_IOPT);
-                #if !MAIN_TRAP_PIC_ONDEMAND
+                #if !MAIN_TRAP_RMPIC_ONDEMAND
                 QEMM_Install_IOPortTrap(MAIN_VIRQ_IODT, countof(MAIN_VIRQ_IODT), &MAIN_VIRQ_IOPT);
                 #endif
             }
@@ -1579,7 +1583,7 @@ static void MAIN_TSR_Interrupt()
                 HDPMIPT_Install_IOPortTrap(0xC0, 0xDE, MAIN_VDMA_IODT+20, 16, &MAIN_VHDMA_IOPT_PM1);
                 HDPMIPT_Install_IOPortTrap(0x89, 0x8B, MAIN_VDMA_IODT+36, 3, &MAIN_VHDMA_IOPT_PM2);
                 HDPMIPT_Install_IOPortTrap(0x8F, 0x8F, MAIN_VDMA_IODT+39, 1, &MAIN_VHDMA_IOPT_PM3);
-                #if !MAIN_TRAP_PIC_ONDEMAND
+                #if !MAIN_TRAP_PMPIC_ONDEMAND
                 HDPMIPT_Install_IOPortTrap(0x20, 0x21, MAIN_VIRQ_IODT, 2, &MAIN_VIRQ_IOPT_PM1);
                 HDPMIPT_Install_IOPortTrap(0xA0, 0xA1, MAIN_VIRQ_IODT+2, 2, &MAIN_VIRQ_IOPT_PM2);
                 #endif
