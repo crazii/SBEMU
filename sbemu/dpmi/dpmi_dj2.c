@@ -488,10 +488,35 @@ static void __NAKED DPMI_RMISR_ChainedWrapper()
     _ASM_BEGIN16
         _ASM(pushf) //calling iret
         _ASM(call dword ptr cs:[0]) //call target
+
+        _ASM(push ax)
+
+        //now EOI is allowed for the previous called target
+        //skip calling next if not the same IRQ pending
+        //read pic
+        _ASM(xor ah, ah)
+        _ASM(mov al, 0x0B) //read isr
+        _ASM(out 0x20, al)
+        _ASM(in al, 0x20)
+        _ASM(test al, 0x04)
+        _ASM(jz noslave1)
+        _ASM(and al, ~0x04)
+        _ASM(mov ah, al)
+        _ASM(mov al, 0x0B) //read slave isr
+        _ASM(out 0xA0, al)
+        _ASM(in al, 0xA0)
+        _ASM(xchg ah, al)
+    _ASMLBL(noslave1:)
+        _ASM(test ax, ax)
+        _ASM(jz done) //no pending irq in pic isr, done
+        _ASM(bsf ax, ax)
+        _ASM(cmp al, byte ptr cs:[10]) //compare with irq
+        _ASM(jne done) //different irq pending, done
+
+
         _ASM(pushf) //calling iret
         _ASM(call dword ptr cs:[4]) //call chained next
 
-        _ASM(push ax)
 
         //unmask IRQ because default entry in IVT may mask the irq out
         _ASM(in al, 0x21)
