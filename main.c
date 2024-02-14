@@ -392,7 +392,7 @@ struct MAIN_OPT
     "/O", "Select output. 0: headphone, 1: speaker. Intel HDA only", 1, 0,
     "/VOL", "Set master volume (0-9)", 7, 0,
 
-    "/K", "Internal sample rate (22050 or 44100)", 0x22050, 0,
+    "/K", "Internal sample rate (default 22050)", 22050, 0,
     "/FIXTC", "Fix time constant to match 11/22/44 kHz sample rate", FALSE, 0,
     "/SCL", "List installed sound cards", 0, MAIN_SETCMD_HIDDEN,
     "/SC", "Select sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN,
@@ -706,7 +706,7 @@ int main(int argc, char* argv[])
         printf("Error: Invalid Volume.\n");
         return 1;
     }
-    if(MAIN_Options[OPT_RATE].value != 0x22050 && MAIN_Options[OPT_RATE].value != 0x44100)
+    if(MAIN_Options[OPT_RATE].value < 4000 || MAIN_Options[OPT_RATE].value > 192000)
     {
         printf("Error: Invalid Sample rate.\n");
         return 1;
