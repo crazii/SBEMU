@@ -380,7 +380,7 @@ struct MAIN_OPT
     "/DBG", "Debug output (0=console, 1=COM1, 2=COM2, 3=COM3, 4=COM4, otherwise base address)", 0, 0,
 
     "/A", "IO address (220 or 240) [*]", 0x220, 0,
-    "/I", "IRQ number (5 or 7) [*]", 7, 0,
+    "/I", "IRQ number (5 or 7 or 9) [*]", 7, 0,
     "/D", "8-bit DMA channel (0, 1 or 3) [*]", 1, 0,
     "/T", "SB Type (1, 2 or 3=SB; 4 or 5=SBPro; 6=SB16) [*]", 5, 0,
     "/H", "16-bit (\"high\") DMA channel (5, 6 or 7) [*]", 5, 0,
@@ -662,7 +662,7 @@ int main(int argc, char* argv[])
         printf("Error: Invalid IO port address: %x.\n", MAIN_Options[OPT_ADDR].value);
         return 1;
     }
-    if(MAIN_Options[OPT_IRQ].value != 0x5 && MAIN_Options[OPT_IRQ].value != 0x7)
+    if(MAIN_Options[OPT_IRQ].value != 0x5 && MAIN_Options[OPT_IRQ].value != 0x7 && MAIN_Options[OPT_IRQ].value != 0x9)
     {
         printf("Error: invalid IRQ: %d.\n", MAIN_Options[OPT_IRQ].value);
         return 1;
