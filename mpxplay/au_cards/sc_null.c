@@ -18,13 +18,11 @@
 
 static int NUL_init(struct mpxplay_audioout_info_s *aui)
 {
- aui->card_port=aui->card_isa_dma=aui->card_irq=aui->card_isa_hidma=aui->card_type=0;
  return 1;
 }
 
 static int NUL_detect(struct mpxplay_audioout_info_s *aui)
 {
- aui->card_port=aui->card_isa_dma=aui->card_irq=aui->card_isa_hidma=aui->card_type=0;
  return 1;
 }
 

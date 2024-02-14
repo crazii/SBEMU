@@ -213,7 +213,7 @@ void MDma_interrupt_monitor(struct mpxplay_audioout_info_s *aui)
 
 //------------------------------------------------------------------------
 //ISA
-#ifdef AU_CARDS_LINK_ISA
+#if defined(AU_CARDS_LINK_ISA) && !defined(SBEMU)
 
 #define MDMA_ISA_DMABUFSIZE_MAX 65535
 #define MDMA_ISA_BLOCKSIZE       4608 // PCM_OUTSAMPLES*2*2  (4608%256==0 for GUS!)
