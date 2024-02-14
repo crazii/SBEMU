@@ -424,15 +424,33 @@ enum EOption
     OPT_RATE,
     OPT_FIX_TC,
     OPT_SCLIST,
+    OPT_SCFM,
+    OPT_SCMPU,
     OPT_SC,
     OPT_RESET,
     OPT_MPUADDR,
     OPT_MPUCOMPORT,
     OPT_COMPORTLIST,
+#if MPU_DEBUG
     OPT_MDBG,
+#endif
 
     OPT_COUNT,
 };
+
+static inline
+int opt_base (int i)
+{
+  switch (i) {
+  case OPT_RATE:
+  case OPT_SCFM:
+  case OPT_SCMPU:
+  case OPT_SC:
+    return 10;
+  default:
+    return 16;
+  }
+}
 
 //T1~T6 maps
 static const char* MAIN_SBTypeString[] =
@@ -630,7 +648,8 @@ int main(int argc, char* argv[])
             if(memicmp(argv[i], MAIN_Options[j].option, len) == 0)
             {
                 int arglen = strlen(argv[i]);
-                MAIN_Options[j].value = arglen == len ? 1 : strtol(&argv[i][len], NULL, 16);
+                int base = opt_base(j);
+                MAIN_Options[j].value = arglen == len ? 1 : strtol(&argv[i][len], NULL, base);
                 MAIN_Options[j].setcmd |= MAIN_SETCMD_SET;
                 break;
             }
@@ -922,7 +941,7 @@ int main(int argc, char* argv[])
     _LOG("sound card IRQ: %d\n", aui.card_irq);
     PIC_MaskIRQ(aui.card_irq);
     AU_ini_interrupts(&aui);
-    int samplerate = (MAIN_Options[OPT_RATE].value == 0x22050) ? 22050 : 44100;
+    int samplerate = MAIN_Options[OPT_RATE].value;
     mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, samplerate, SBEMU_CHANNELS, SBEMU_CHANNELS, NULL, SBEMU_BITS, SBEMU_BITS/8, 0};
     AU_setrate(&aui, &adi);
     AU_setmixer_init(&aui);
@@ -1344,7 +1363,8 @@ void MAIN_TSR_InstallationCheck()
             {
                 if((MAIN_Options[j].setcmd==MAIN_SETCMD_SET) && MAIN_Options[j].value != opt[j].value)
                 {
-                    printf("%s changed from %x to %x\n", MAIN_Options[j].option, opt[j].value, MAIN_Options[j].value);
+                    printf(opt_base(j) == 10 ? "%s changed from %d to %d\n" : "%s changed from %x to %x\n",
+                           MAIN_Options[j].option, opt[j].value, MAIN_Options[j].value);
                     opt[j].value = MAIN_Options[j].value;
                 }
             }
@@ -1367,8 +1387,9 @@ void MAIN_TSR_InstallationCheck()
             printf("Current settings:\n");
             for(int i = OPT_Help+1; i < OPT_COUNT; ++i)
             {
+                int base = opt_base(i);
                 if(!(MAIN_Options[i].setcmd&MAIN_SETCMD_HIDDEN))
-                    printf("%-8s: %x\n", MAIN_Options[i].option, opt[i].value);
+                    printf(base==10?"%-8s: %d\n":"%-8s: %x\n", MAIN_Options[i].option, opt[i].value);
             }
             free(opt);
             exit(0);
@@ -1446,7 +1467,7 @@ static void MAIN_TSR_Interrupt()
                 _LOG("Change sample rate\n");
                 _LOG("FLAGS:%x\n",CPU_FLAGS());
 
-                int samplerate = (opt[OPT_RATE].value == 0x22050) ? 22050 : 44100;
+                int samplerate = opt[OPT_RATE].value;
                 mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, samplerate, SBEMU_CHANNELS, SBEMU_CHANNELS, NULL, SBEMU_BITS, SBEMU_BITS/8, 0};
                 AU_setrate(&aui, &adi);
                 if(MAIN_Options[OPT_RATE].value != opt[OPT_RATE].value)
