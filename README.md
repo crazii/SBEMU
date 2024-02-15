@@ -15,11 +15,11 @@ Enabled and working:
  * `sc_via82`: VIA VT82C686, VT8233/37
  * `sc_sbliv`: SB Live! / Audigy
  * `sc_sbl24`: SB Audigy LS (CA0106)
+ * `sc_es1371`: Ensoniq ES1371/1373
+ * `sc_cmi`: C-Media CMI8338/8738
 
 Support compiled-in, but untested:
 
- * `sc_es1371`: Ensoniq ES1371/1373
- * `sc_cmi`: C-Media CMI8338/8738
  * `sc_via82`: VIA VT8235
 
 Source code exists, but "doesn't work yet":
