@@ -516,8 +516,6 @@ static int INTELICH_adetect(struct mpxplay_audioout_info_s *aui)
   uint16_t cmd = pcibios_ReadConfig_Word(card->pci_dev, PCIR_PCICMD);
   mpxplay_debugf(ICH_DEBUG_OUTPUT,"PCI COMMAND: %X", cmd);
   pcibios_WriteConfig_Byte(card->pci_dev, 0x41, 1); //IOSE:enable IO space
-  // Set the secondary codec ID
-  pcibios_WriteConfig_Byte(card->pci_dev, 0x40, 0x39);
   pcibios_enable_memmap_set_master_all(card->pci_dev); // Enable IO
   uint32_t bar0 = pcibios_ReadConfig_Dword(card->pci_dev, 0x10);
   uint32_t bar1 = pcibios_ReadConfig_Dword(card->pci_dev, 0x14);
