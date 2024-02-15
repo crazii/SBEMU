@@ -363,6 +363,7 @@ QEMM_IOPT MAIN_SB_IOPT_PM;
 
 #define MAIN_SETCMD_SET 0x01 //set in command line
 #define MAIN_SETCMD_HIDDEN 0x02 //hidden flag on report
+#define MAIN_SETCMD_BASE10 0x04 //use decimal value (default hex)
 
 struct MAIN_OPT
 {
@@ -388,12 +389,12 @@ struct MAIN_OPT
     "/O", "Select output. 0: headphone, 1: speaker. Intel HDA only", 1, 0,
     "/VOL", "Set master volume (0-9)", 7, 0,
 
-    "/K", "Internal sample rate (default 22050)", 22050, 0,
+    "/K", "Internal sample rate (default 22050)", 22050, MAIN_SETCMD_BASE10,
     "/FIXTC", "Fix time constant to match 11/22/44 kHz sample rate", FALSE, 0,
     "/SCL", "List installed sound cards", 0, MAIN_SETCMD_HIDDEN,
-    "/SCFM", "Select FM(OPL) sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN,
-    "/SCMPU", "Select MPU-401 sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN,
-    "/SC", "Select sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN,
+    "/SCFM", "Select FM(OPL) sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN|MAIN_SETCMD_BASE10,
+    "/SCMPU", "Select MPU-401 sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN|MAIN_SETCMD_BASE10,
+    "/SC", "Select sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN|MAIN_SETCMD_BASE10,
     "/R", "Reset sound card driver", 0, MAIN_SETCMD_HIDDEN,
     "/P", "UART mode MPU-401 IO address (default 330) [*]", 0x330, 0,
     "/MCOM", "UART mode MPU-401 COM port (1=COM1, 2=COM2, 3=COM3, 4=COM4, 9:HW MPU only, otherwise base address)", 9, 0,
@@ -435,20 +436,6 @@ enum EOption
 
     OPT_COUNT,
 };
-
-static inline
-int opt_base (int i)
-{
-  switch (i) {
-  case OPT_RATE:
-  case OPT_SCFM:
-  case OPT_SCMPU:
-  case OPT_SC:
-    return 10;
-  default:
-    return 16;
-  }
-}
 
 //T1~T6 maps
 static const char* MAIN_SBTypeString[] =
@@ -646,7 +633,7 @@ int main(int argc, char* argv[])
             if(memicmp(argv[i], MAIN_Options[j].option, len) == 0)
             {
                 int arglen = strlen(argv[i]);
-                int base = opt_base(j);
+                int base = (MAIN_Options[j].setcmd&MAIN_SETCMD_BASE10) ? 10 : 16;
                 MAIN_Options[j].value = arglen == len ? 1 : strtol(&argv[i][len], NULL, base);
                 MAIN_Options[j].setcmd |= MAIN_SETCMD_SET;
                 break;
@@ -1381,7 +1368,7 @@ void MAIN_TSR_InstallationCheck()
             {
                 if((MAIN_Options[j].setcmd==MAIN_SETCMD_SET) && MAIN_Options[j].value != opt[j].value)
                 {
-                    printf(opt_base(j) == 10 ? "%s changed from %d to %d\n" : "%s changed from %x to %x\n",
+                    printf((MAIN_Options[j].setcmd&MAIN_SETCMD_BASE10) ? "%s changed from %d to %d\n" : "%s changed from %x to %x\n",
                            MAIN_Options[j].option, opt[j].value, MAIN_Options[j].value);
                     opt[j].value = MAIN_Options[j].value;
                 }
@@ -1405,9 +1392,8 @@ void MAIN_TSR_InstallationCheck()
             printf("Current settings:\n");
             for(int i = OPT_Help+1; i < OPT_COUNT; ++i)
             {
-                int base = opt_base(i);
                 if(!(MAIN_Options[i].setcmd&MAIN_SETCMD_HIDDEN))
-                    printf(base==10?"%-8s: %d\n":"%-8s: %x\n", MAIN_Options[i].option, opt[i].value);
+                    printf( (MAIN_Options[i].setcmd&MAIN_SETCMD_BASE10) ? "%-8s: %d\n":"%-8s: %x\n", MAIN_Options[i].option, opt[i].value);
             }
             free(opt);
             exit(0);
