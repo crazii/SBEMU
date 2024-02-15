@@ -37,7 +37,9 @@ PROGNAME = "SBEMU";
 #define MAIN_TSR_INT 0x2D   //AMIS multiplex. TODO: 0x2F?
 #define MAIN_TSR_INTSTART_ID 0x01 //start id
 
-mpxplay_audioout_info_s aui = {0};
+static mpxplay_audioout_info_s aui = {0};
+static mpxplay_audioout_info_s fm_aui = {0};
+static mpxplay_audioout_info_s mpu401_aui = {0};
 
 #define MAIN_PCM_SAMPLESIZE 16384
 
@@ -74,61 +76,52 @@ static const char MAIN_ISR_DOSID_String[] = "Crazii  SBEMU   Sound Blaster emula
 static void MAIN_TSR_InstallationCheck();
 static void MAIN_TSR_Interrupt();
 
-uint16_t main_hw_fmport = 0;
-#define hw_fm_outb(reg,data) outp(main_hw_fmport+reg,data)
-#define hw_fm_inb(reg) inp(main_hw_fmport+reg)
-
-uint16_t main_hw_mpuport = 0;
-#define hw_mpu_outb(reg,data) outp(main_hw_mpuport+reg,data)
-#define hw_mpu_inb(reg) inp(main_hw_mpuport+reg)
+#define HW_FM_HANDLER(n) do {\
+  if (fm_aui.fm) {                                                      \
+    if (out) {                                                          \
+      if (fm_aui.card_handler->card_fm_write) {                         \
+        fm_aui.card_handler->card_fm_write(&fm_aui, n, (uint8_t)(val & 0xff)); \
+        return val;                                                     \
+      }                                                                 \
+    } else {                                                            \
+      if (fm_aui.card_handler->card_fm_read)                            \
+        return fm_aui.card_handler->card_fm_read(&fm_aui, n);              \
+    }                                                                   \
+    return 0;                                                           \
+  } } while (0)
 
 static uint32_t MAIN_OPL3_388(uint32_t port, uint32_t val, uint32_t out)
 {
-  if (main_hw_fmport) {
-    if (out) {
-      hw_fm_outb(0, val & 0xff);
-      return val;
-    } else {
-      return hw_fm_inb(0);
-    }
-  }
   return out ? OPL3EMU_PrimaryWriteIndex(val) : OPL3EMU_PrimaryRead(val);
 }
 static uint32_t MAIN_OPL3_389(uint32_t port, uint32_t val, uint32_t out)
 {
-  if (main_hw_fmport) {
-    if (out) {
-      hw_fm_outb(1, val & 0xff);
-      return val;
-    } else {
-      return hw_fm_inb(1);
-    }
-  }
   return out ? OPL3EMU_PrimaryWriteData(val) : OPL3EMU_PrimaryRead(val);
 }
 static uint32_t MAIN_OPL3_38A(uint32_t port, uint32_t val, uint32_t out)
 {
-  if (main_hw_fmport) {
-    if (out) {
-      hw_fm_outb(2, val & 0xff);
-      return val;
-    } else {
-      return hw_fm_inb(2);
-    }
-  }
   return out ? OPL3EMU_SecondaryWriteIndex(val) : OPL3EMU_SecondaryRead(val);
 }
 static uint32_t MAIN_OPL3_38B(uint32_t port, uint32_t val, uint32_t out)
 {
-  if (main_hw_fmport) {
-    if (out) {
-      hw_fm_outb(3, val & 0xff);
-      return val;
-    } else {
-      return hw_fm_inb(3);
-    }
-  }
   return out ? OPL3EMU_SecondaryWriteData(val) : OPL3EMU_SecondaryRead(val);
+}
+
+static uint32_t MAIN_HW_OPL3_388(uint32_t port, uint32_t val, uint32_t out)
+{
+  HW_FM_HANDLER(0);
+}
+static uint32_t MAIN_HW_OPL3_389(uint32_t port, uint32_t val, uint32_t out)
+{
+  HW_FM_HANDLER(1);
+}
+static uint32_t MAIN_HW_OPL3_38A(uint32_t port, uint32_t val, uint32_t out)
+{
+  HW_FM_HANDLER(2);
+}
+static uint32_t MAIN_HW_OPL3_38B(uint32_t port, uint32_t val, uint32_t out)
+{
+  HW_FM_HANDLER(3);
 }
 
 static uint32_t MAIN_DMA(uint32_t port, uint32_t val, uint32_t out)
@@ -197,16 +190,14 @@ static uint32_t MAIN_MPU_330(uint32_t port, uint32_t val, uint32_t out)
   }
 #endif
   if (out) {
-    if (main_hw_mpuport) {
-      hw_mpu_outb(0, (unsigned char)(val & 0xff));
-    }
+    if (mpu401_aui.mpu401 && mpu401_aui.card_handler->card_mpu401_write)
+      mpu401_aui.card_handler->card_mpu401_write(&mpu401_aui, 0, (uint8_t)(val & 0xff));
     ser_putbyte((int)(val & 0xff));
     return 0;
   } else {
     uint8_t val, hwval;
-    if (main_hw_mpuport) {
-      hwval = hw_mpu_inb(0);
-    }
+    if (mpu401_aui.mpu401 && mpu401_aui.card_handler->card_mpu401_read)
+      hwval = mpu401_aui.card_handler->card_mpu401_read(&mpu401_aui, 0);
     if (mpu_state == 1) {
       mpu_state = 0;
       val = 0xfe;
@@ -216,10 +207,10 @@ static uint32_t MAIN_MPU_330(uint32_t port, uint32_t val, uint32_t out)
     } else {
       val = 0;
     }
-    if (main_hw_mpuport) {
-      val = hwval;
-    }
-    return val;
+    if (mpu401_aui.mpu401 && mpu401_aui.card_handler->card_mpu401_read)
+      return hwval;
+    else
+      return val;
   }
 }
 static uint32_t MAIN_MPU_331(uint32_t port, uint32_t val, uint32_t out)
@@ -237,9 +228,8 @@ static uint32_t MAIN_MPU_331(uint32_t port, uint32_t val, uint32_t out)
   }
 #endif
   if (out) {
-    if (main_hw_mpuport) {
-      hw_mpu_outb(1, (unsigned char)(val & 0xff));
-    }
+    if (mpu401_aui.mpu401 && mpu401_aui.card_handler->card_mpu401_write)
+      mpu401_aui.card_handler->card_mpu401_write(&mpu401_aui, 1, (uint8_t)(val & 0xff));
     if (val == 0xff) { // Reset
 #if MPU_DEBUG
       mpu_dbg_ctr = 0;
@@ -253,10 +243,8 @@ static uint32_t MAIN_MPU_331(uint32_t port, uint32_t val, uint32_t out)
     }
     return 0;
   }
-  if (main_hw_mpuport) {
-    uint8_t hwval = hw_mpu_inb(1);
-    return hwval;
-  }
+  if (mpu401_aui.mpu401 && mpu401_aui.card_handler->card_mpu401_read)
+    return mpu401_aui.card_handler->card_mpu401_read(&mpu401_aui, 1);
   if ((mpu_state & 3) == 0) {
     return 0x80;
   } else {
@@ -276,6 +264,14 @@ static QEMM_IODT MAIN_OPL3IODT[4] =
     0x389, &MAIN_OPL3_389,
     0x38A, &MAIN_OPL3_38A,
     0x38B, &MAIN_OPL3_38B
+};
+
+static QEMM_IODT MAIN_HW_OPL3IODT[4] =
+{
+    0x388, &MAIN_HW_OPL3_388,
+    0x389, &MAIN_HW_OPL3_389,
+    0x38A, &MAIN_HW_OPL3_38A,
+    0x38B, &MAIN_HW_OPL3_38B
 };
 
 static QEMM_IODT MAIN_VDMA_IODT[40] =
@@ -380,7 +376,7 @@ struct MAIN_OPT
     "/DBG", "Debug output (0=console, 1=COM1, 2=COM2, 3=COM3, 4=COM4, otherwise base address)", 0, 0,
 
     "/A", "IO address (220 or 240) [*]", 0x220, 0,
-    "/I", "IRQ number (5 or 7) [*]", 7, 0,
+    "/I", "IRQ number (5 or 7 or 9) [*]", 7, 0,
     "/D", "8-bit DMA channel (0, 1 or 3) [*]", 1, 0,
     "/T", "SB Type (1, 2 or 3=SB; 4 or 5=SBPro; 6=SB16) [*]", 5, 0,
     "/H", "16-bit (\"high\") DMA channel (5, 6 or 7) [*]", 5, 0,
@@ -392,13 +388,15 @@ struct MAIN_OPT
     "/O", "Select output. 0: headphone, 1: speaker. Intel HDA only", 1, 0,
     "/VOL", "Set master volume (0-9)", 7, 0,
 
-    "/K", "Internal sample rate (22050 or 44100)", 0x22050, 0,
+    "/K", "Internal sample rate (default 22050)", 22050, 0,
     "/FIXTC", "Fix time constant to match 11/22/44 kHz sample rate", FALSE, 0,
     "/SCL", "List installed sound cards", 0, MAIN_SETCMD_HIDDEN,
+    "/SCFM", "Select FM(OPL) sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN,
+    "/SCMPU", "Select MPU-401 sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN,
     "/SC", "Select sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN,
     "/R", "Reset sound card driver", 0, MAIN_SETCMD_HIDDEN,
     "/P", "UART mode MPU-401 IO address (default 330) [*]", 0x330, 0,
-    "/MCOM", "UART mode MPU-401 COM port (1=COM1, 2=COM2, 3=COM3, 4=COM4, 9:HW MPU only, otherwise base address)", 0, 0,
+    "/MCOM", "UART mode MPU-401 COM port (1=COM1, 2=COM2, 3=COM3, 4=COM4, 9:HW MPU only, otherwise base address)", 9, 0,
     "/COML", "List installed COM ports", 0, MAIN_SETCMD_HIDDEN,
 #if MPU_DEBUG
     "/MDBG", "Enable MPU-401 debugging (0 to disable, 1 or 2 to enable)", 0, 0,
@@ -424,15 +422,33 @@ enum EOption
     OPT_RATE,
     OPT_FIX_TC,
     OPT_SCLIST,
+    OPT_SCFM,
+    OPT_SCMPU,
     OPT_SC,
     OPT_RESET,
     OPT_MPUADDR,
     OPT_MPUCOMPORT,
     OPT_COMPORTLIST,
+#if MPU_DEBUG
     OPT_MDBG,
+#endif
 
     OPT_COUNT,
 };
+
+static inline
+int opt_base (int i)
+{
+  switch (i) {
+  case OPT_RATE:
+  case OPT_SCFM:
+  case OPT_SCMPU:
+  case OPT_SC:
+    return 10;
+  default:
+    return 16;
+  }
+}
 
 //T1~T6 maps
 static const char* MAIN_SBTypeString[] =
@@ -554,7 +570,7 @@ static void MAIN_Cleanup()
     if(OldRoutedHandle.valid)
         HDPMIPT_InstallIRQRoutedHandlerH(aui.card_irq, &OldRoutedHandle);
     AU_stop(&aui);
-    AU_close(&aui);
+    AU_close(&aui, &fm_aui, &mpu401_aui);
     if(OPLRMInstalled)
         QEMM_Uninstall_IOPortTrap(&OPL3IOPT);
     if(OPLPMInstalled)
@@ -630,7 +646,8 @@ int main(int argc, char* argv[])
             if(memicmp(argv[i], MAIN_Options[j].option, len) == 0)
             {
                 int arglen = strlen(argv[i]);
-                MAIN_Options[j].value = arglen == len ? 1 : strtol(&argv[i][len], NULL, 16);
+                int base = opt_base(j);
+                MAIN_Options[j].value = arglen == len ? 1 : strtol(&argv[i][len], NULL, base);
                 MAIN_Options[j].setcmd |= MAIN_SETCMD_SET;
                 break;
             }
@@ -662,7 +679,7 @@ int main(int argc, char* argv[])
         printf("Error: Invalid IO port address: %x.\n", MAIN_Options[OPT_ADDR].value);
         return 1;
     }
-    if(MAIN_Options[OPT_IRQ].value != 0x5 && MAIN_Options[OPT_IRQ].value != 0x7)
+    if(MAIN_Options[OPT_IRQ].value != 0x5 && MAIN_Options[OPT_IRQ].value != 0x7 && MAIN_Options[OPT_IRQ].value != 0x9)
     {
         printf("Error: invalid IRQ: %d.\n", MAIN_Options[OPT_IRQ].value);
         return 1;
@@ -687,7 +704,7 @@ int main(int argc, char* argv[])
         printf("Error: Invalid Volume.\n");
         return 1;
     }
-    if(MAIN_Options[OPT_RATE].value != 0x22050 && MAIN_Options[OPT_RATE].value != 0x44100)
+    if(MAIN_Options[OPT_RATE].value < 4000 || MAIN_Options[OPT_RATE].value > 192000)
     {
         printf("Error: Invalid Sample rate.\n");
         return 1;
@@ -745,10 +762,14 @@ int main(int argc, char* argv[])
 
     if(MAIN_Options[OPT_SCLIST].value)
         aui.card_controlbits |= AUINFOS_CARDCNTRLBIT_TESTCARD; //note: this bit will make aui.card_handler == NULL and quit.
+    if(MAIN_Options[OPT_SCFM].value)
+        aui.card_select_index_fm = MAIN_Options[OPT_SCFM].value;
+    if(MAIN_Options[OPT_SCMPU].value)
+        aui.card_select_index_mpu401 = MAIN_Options[OPT_SCMPU].value;
     if(MAIN_Options[OPT_SC].value)
-        aui.card_select_index = MAIN_Options[OPT_SC].value; //TODO: this is a HEX in commandline, it's OK to not inform user since there's might not be over 10 (0xA) sound cards installed
+        aui.card_select_index = MAIN_Options[OPT_SC].value;
     aui.card_select_config = MAIN_Options[OPT_OUTPUT].value;
-    AU_init(&aui);
+    AU_init(&aui, &fm_aui, &mpu401_aui);
     if(!aui.card_handler)
         return 1;
     atexit(&MAIN_Cleanup);
@@ -812,20 +833,25 @@ int main(int argc, char* argv[])
 
     if(MAIN_Options[OPT_OPL].value)
     {
-        if(enableRM && !(OPLRMInstalled=QEMM_Install_IOPortTrap(MAIN_OPL3IODT, 4, &OPL3IOPT)))
+        QEMM_IODT *iodt = fm_aui.fm ? MAIN_HW_OPL3IODT : MAIN_OPL3IODT;
+        if(enableRM && !(OPLRMInstalled=QEMM_Install_IOPortTrap(iodt, 4, &OPL3IOPT)))
         {
             printf("Error: Failed installing IO port trap for QEMM.\n");
             return 1;
         }
-        if(enablePM && !(OPLPMInstalled=HDPMIPT_Install_IOPortTrap(0x388, 0x38B, MAIN_OPL3IODT, 4, &OPL3IOPT_PM)))
+        if(enablePM && !(OPLPMInstalled=HDPMIPT_Install_IOPortTrap(0x388, 0x38B, iodt, 4, &OPL3IOPT_PM)))
         {
             printf("Error: Failed installing IO port trap for HDPMI.\n");
             return 1;          
         }
 
         //OPL3EMU_Init(aui.freq_card);
-        char *emutype = (main_hw_fmport != 0) ? "hardware" : "emulation";
-        printf("OPL3 %s at port 388: ", emutype);
+        char *emutype = fm_aui.fm ? "hardware" : "emulation";
+        char hwdesc[64];
+        hwdesc[0] = '\0';
+        if (fm_aui.fm)
+          sprintf(hwdesc, "(%d:%s)", fm_aui.card_test_index, fm_aui.card_handler->shortname);
+        printf("OPL3 %s%s at port 388: ", emutype, hwdesc);
         MAIN_Print_Enabled_Newline(true);
     }
     
@@ -843,9 +869,13 @@ int main(int argc, char* argv[])
             return 1;
         }
 
-        char *emutype = (main_hw_mpuport != 0) ? "hardware" : "emulation";
-        printf("MPU-401 UART %s at address %x: ",
-               emutype, MAIN_Options[OPT_MPUADDR].value);
+        char *emutype = mpu401_aui.mpu401 ? "hardware" : "emulation";
+        char hwdesc[64];
+        hwdesc[0] = '\0';
+        if (mpu401_aui.mpu401)
+          sprintf(hwdesc, "(%d:%s)", mpu401_aui.card_test_index, mpu401_aui.card_handler->shortname);
+        printf("MPU-401 UART %s%s at address %x: ",
+               emutype, hwdesc, MAIN_Options[OPT_MPUADDR].value);
         MAIN_Print_Enabled_Newline(true);
     }
 
@@ -870,11 +900,18 @@ int main(int argc, char* argv[])
     QEMM_IODT* SB_Iodt = MAIN_Options[OPT_OPL].value ? MAIN_SB_IODT : MAIN_SB_IODT+4;
     int SB_IodtCount = MAIN_Options[OPT_OPL].value ? countof(MAIN_SB_IODT) : countof(MAIN_SB_IODT)-4;
 
-    printf("SB %s emulation at address %x, IRQ %x, DMA %x: ",
-            MAIN_SBTypeString[MAIN_Options[OPT_TYPE].value],
-            MAIN_Options[OPT_ADDR].value,
-            MAIN_Options[OPT_IRQ].value,
-            MAIN_Options[OPT_DMA].value);
+    {
+      char hwdesc[64];
+      hwdesc[0] = '\0';
+      if (aui.pcm)
+        sprintf(hwdesc, "(%d:%s)", aui.card_test_index, aui.card_handler->shortname);
+      printf("SB %s%s emulation at address %x, IRQ %x, DMA %x: ",
+             MAIN_SBTypeString[MAIN_Options[OPT_TYPE].value],
+             hwdesc,
+             MAIN_Options[OPT_ADDR].value,
+             MAIN_Options[OPT_IRQ].value,
+             MAIN_Options[OPT_DMA].value);
+    }
     MAIN_Print_Enabled_Newline(true);
 
     BOOL QEMMInstalledVDMA = !enableRM || QEMM_Install_IOPortTrap(MAIN_VDMA_IODT, countof(MAIN_VDMA_IODT), &MAIN_VDMA_IOPT);
@@ -922,7 +959,7 @@ int main(int argc, char* argv[])
     _LOG("sound card IRQ: %d\n", aui.card_irq);
     PIC_MaskIRQ(aui.card_irq);
     AU_ini_interrupts(&aui);
-    int samplerate = (MAIN_Options[OPT_RATE].value == 0x22050) ? 22050 : 44100;
+    int samplerate = MAIN_Options[OPT_RATE].value;
     mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, samplerate, SBEMU_CHANNELS, SBEMU_CHANNELS, NULL, SBEMU_BITS, SBEMU_BITS/8, 0};
     AU_setrate(&aui, &adi);
     AU_setmixer_init(&aui);
@@ -1344,7 +1381,8 @@ void MAIN_TSR_InstallationCheck()
             {
                 if((MAIN_Options[j].setcmd==MAIN_SETCMD_SET) && MAIN_Options[j].value != opt[j].value)
                 {
-                    printf("%s changed from %x to %x\n", MAIN_Options[j].option, opt[j].value, MAIN_Options[j].value);
+                    printf(opt_base(j) == 10 ? "%s changed from %d to %d\n" : "%s changed from %x to %x\n",
+                           MAIN_Options[j].option, opt[j].value, MAIN_Options[j].value);
                     opt[j].value = MAIN_Options[j].value;
                 }
             }
@@ -1367,8 +1405,9 @@ void MAIN_TSR_InstallationCheck()
             printf("Current settings:\n");
             for(int i = OPT_Help+1; i < OPT_COUNT; ++i)
             {
+                int base = opt_base(i);
                 if(!(MAIN_Options[i].setcmd&MAIN_SETCMD_HIDDEN))
-                    printf("%-8s: %x\n", MAIN_Options[i].option, opt[i].value);
+                    printf(base==10?"%-8s: %d\n":"%-8s: %x\n", MAIN_Options[i].option, opt[i].value);
             }
             free(opt);
             exit(0);
@@ -1432,12 +1471,14 @@ static void MAIN_TSR_Interrupt()
                 if(opt[OPT_OUTPUT].value != MAIN_Options[OPT_OUTPUT].value || opt[OPT_RESET].value)
                 {
                     _LOG("Reset\n");
-                    AU_close(&aui);
+                    AU_close(&aui, &fm_aui, &mpu401_aui);
                     memset(&aui, 0, sizeof(aui));
+                    memset(&fm_aui, 0, sizeof(fm_aui));
+                    memset(&mpu401_aui, 0, sizeof(mpu401_aui));
                     aui.card_select_config = MAIN_Options[OPT_OUTPUT].value = opt[OPT_OUTPUT].value;
                     aui.card_select_index =  MAIN_Options[OPT_SC].value;
                     aui.card_controlbits |= AUINFOS_CARDCNTRLBIT_SILENT; //don't print anything in interrupt
-                    AU_init(&aui);
+                    AU_init(&aui, &fm_aui, &mpu401_aui);
                     AU_ini_interrupts(&aui);
                     AU_setmixer_init(&aui);
                     AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 100);
@@ -1446,7 +1487,7 @@ static void MAIN_TSR_Interrupt()
                 _LOG("Change sample rate\n");
                 _LOG("FLAGS:%x\n",CPU_FLAGS());
 
-                int samplerate = (opt[OPT_RATE].value == 0x22050) ? 22050 : 44100;
+                int samplerate = opt[OPT_RATE].value;
                 mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, samplerate, SBEMU_CHANNELS, SBEMU_CHANNELS, NULL, SBEMU_BITS, SBEMU_BITS/8, 0};
                 AU_setrate(&aui, &adi);
                 if(MAIN_Options[OPT_RATE].value != opt[OPT_RATE].value)
@@ -1541,8 +1582,9 @@ static void MAIN_TSR_Interrupt()
             if(opt[OPT_OPL].value)
             {
                 _LOG("install opl\n");
-                if(opt[OPT_RM].value) QEMM_Install_IOPortTrap(MAIN_OPL3IODT, 4, &OPL3IOPT);
-                if(opt[OPT_PM].value) HDPMIPT_Install_IOPortTrap(0x388, 0x38B, MAIN_OPL3IODT, 4, &OPL3IOPT_PM);
+                QEMM_IODT *iodt = fm_aui.fm ? MAIN_HW_OPL3IODT : MAIN_OPL3IODT;
+                if(opt[OPT_RM].value) QEMM_Install_IOPortTrap(iodt, 4, &OPL3IOPT);
+                if(opt[OPT_PM].value) HDPMIPT_Install_IOPortTrap(0x388, 0x38B, iodt, 4, &OPL3IOPT_PM);
             }
 
             if(opt[OPT_MPUADDR].value && opt[OPT_MPUCOMPORT].value)

@@ -7,8 +7,8 @@ VERSION ?= $(shell git describe --tags)
 
 INCLUDES := -I./mpxplay -I./sbemu
 DEFINES := -D__DOS__ -DSBEMU -DDEBUG=$(DEBUG) -DMAIN_SBEMU_VER=\"$(VERSION)\"
-CFLAGS := -fcommon -march=i386 -O2 -flto=auto -Wno-attributes $(INCLUDES) $(DEFINES)
-LDFLAGS := -lstdc++ -lm -save-temps
+CFLAGS := -fcommon -march=i386 -Os -flto=auto -Wno-attributes $(INCLUDES) $(DEFINES)
+LDFLAGS := -lstdc++ -lm
 
 ifeq ($(DEBUG),0)
 LDFLAGS += -s
@@ -34,6 +34,7 @@ CARDS_SRC := mpxplay/au_cards/ac97_def.c \
 	     mpxplay/au_cards/au_cards.c \
 	     mpxplay/au_cards/dmairq.c \
 	     mpxplay/au_cards/pcibios.c \
+	     mpxplay/au_cards/ioport.c \
 	     mpxplay/au_cards/sc_e1371.c \
 	     mpxplay/au_cards/sc_ich.c \
 	     mpxplay/au_cards/sc_cmi.c \
