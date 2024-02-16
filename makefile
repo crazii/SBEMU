@@ -8,13 +8,13 @@ VERSION ?= $(shell git describe --tags)
 INCLUDES := -I./mpxplay -I./sbemu
 DEFINES := -D__DOS__ -DSBEMU -DDEBUG=$(DEBUG) -DMAIN_SBEMU_VER=\"$(VERSION)\"
 #CFLAGS := -fcommon -march=i386 -Os -flto -Wno-attributes $(INCLUDES) $(DEFINES)
-AU_BASE_CFLAGS := -fcommon -march=i386 -Os -flto -Wno-attributes $(INCLUDES) $(DEFINES)
-AU_CFLAGS := -fcommon -march=i386 -O2 -flto -Wno-attributes $(INCLUDES) $(DEFINES)
-SC_CFLAGS := -fcommon -march=i386 -O2 -flto -Wno-attributes $(INCLUDES) $(DEFINES)
-MPXPLAY_CFLAGS := -fcommon -march=i386 -O2 -flto -Wno-attributes $(INCLUDES) $(DEFINES)
-SBEMU_CFLAGS := -fcommon -march=i386 -O2 -flto -Wno-attributes $(INCLUDES) $(DEFINES)
-CFLAGS := -fcommon -march=i386 -O2 -flto -Wno-attributes $(INCLUDES) $(DEFINES)
-LDFLAGS := -lstdc++ -lm
+AU_BASE_CFLAGS := -fcommon -march=i386 -Os -flto  $(INCLUDES) $(DEFINES)
+AU_CFLAGS := -fcommon -march=i386 -O2 -flto $(INCLUDES) $(DEFINES)
+SC_CFLAGS := -fcommon -march=i386 -O2 -flto $(INCLUDES) $(DEFINES)
+MPXPLAY_CFLAGS := -fcommon -march=i386 -O2 -flto $(INCLUDES) $(DEFINES)
+SBEMU_CFLAGS := -fcommon -march=i386 -O2 -flto $(INCLUDES) $(DEFINES)
+CFLAGS := -fcommon -march=i386 -O2 -flto $(INCLUDES) $(DEFINES)
+LDFLAGS := -lstdc++ -lm -Wno-attributes
 
 ifeq ($(DEBUG),0)
 LDFLAGS += -s

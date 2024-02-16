@@ -35,7 +35,8 @@ extern unsigned long __djgpp_selector_limit;
 //dummy symbol to keep original code unmodified
 #ifdef __DOS__
 #include <dos.h>
-void (__far *oldint08_handler)();
+//void (__far *oldint08_handler)();
+#define oldint08_handler 0
 volatile unsigned long int08counter;
 unsigned long mpxplay_signal_events;
 #endif
@@ -156,7 +157,7 @@ static __dpmi_meminfo physicalmaps[PHYSICAL_MAP_COUNT];
 
 unsigned long pds_dpmi_map_physical_memory(unsigned long phys_addr,unsigned long memsize)
 {
- memsize = (memsize+1023)/1024*1024;
+ memsize = (memsize+0xFFF)&~0xFFF;
  __dpmi_meminfo info = {0, memsize, phys_addr};
  int i = 0;
  for(; i < PHYSICAL_MAP_COUNT; ++i)
@@ -182,7 +183,7 @@ unsigned long pds_dpmi_map_physical_memory(unsigned long phys_addr,unsigned long
         }
         __dpmi_meminfo remap = info;
         remap.address = 0;
-        remap.size = (memsize+4095)/4096;
+        remap.size = memsize/4096;
         if(__dpmi_map_device_in_memory_block(&remap, phys_addr) != 0)
         {
             __dpmi_free_memory(info.handle);
@@ -237,6 +238,7 @@ static int pds_xms_init(void)
     pds_xms_regs.x.cs = pds_xms_regs.x.es;
     pds_xms_regs.x.ip = pds_xms_regs.x.bx;
     pds_xms_regs.x.ss = pds_xms_regs.x.sp = 0;
+    pds_xms_regs.x.ax = pds_xms_regs.x.dx = 0;
     return 1;
 }
 
@@ -264,6 +266,7 @@ unsigned short pds_xms_alloc(unsigned short sizeKB, unsigned long* addr)
     {
         r = pds_xms_regs;
         r.h.ah = 0x0A; //free XMS
+        r.x.dx = handle;
         __dpmi_simulate_real_mode_procedure_retf(&r);
         return 0;
     }
@@ -429,17 +432,20 @@ static int pds_strchknull(char *strp1,char *strp2)
  register const unsigned char *s2 = (const unsigned char *) strp2;
 
  if(!s1 || !s1[0])
+ {
   if(s2 && s2[0])
    return -1;
   else
    return 0;
+ }
 
  if(!s2 || !s2[0])
+ {
   if(s1 && s1[0])
    return 1;
   else
    return 0;
-
+ }
  return 2;
 }
 
@@ -452,14 +458,14 @@ int pds_strcmp(char *strp1,char *strp2)
  if(retcode!=2)
   return retcode;
 
-  do{
+ do{
    c1 = (unsigned char) *s1++;
    c2 = (unsigned char) *s2++;
    if(!c1)
     break;
-  }while (c1 == c2);
+ }while (c1 == c2);
 
-  return c1 - c2;
+ return c1 - c2;
 }
 
 int pds_stricmp(char *strp1,char *strp2)
@@ -582,10 +588,12 @@ int pds_strncmp(char *strp1,char *strp2,unsigned int counter)
   c1=*strp1;
   c2=*strp2;
   if(c1!=c2)
+  {
    if(c1<c2)
     return -1;
    else
     return 1;
+  }
   strp1++;strp2++;
  }while(c1 && c2 && --counter);
  return 0;
@@ -1019,7 +1027,7 @@ unsigned int mixer_speed_lq(PCM_CV_TYPE_S* dest, unsigned int destsample, const 
  const unsigned int instep=((samplerate/newrate)<<12) | (((4096*(samplerate%newrate)-1)/(newrate-1))&0xFFF);
  const unsigned int inend=(sourcesample/channels - 1) << 12; //for n samples, interpolation n-1 steps
  int16_t *pcm; int16_t const* intmp;
- unsigned long ipi;
+ //unsigned long ipi;
  unsigned int inpos = 0;//(samplerate<newrate) ? instep/2 : 0;
  if(!sourcesample)
   return 0;
@@ -1032,7 +1040,7 @@ unsigned int mixer_speed_lq(PCM_CV_TYPE_S* dest, unsigned int destsample, const 
 
  pcm = buff;
  intmp = source;
- int total = sourcesample/channels;
+ //int total = sourcesample/channels;
 
  do{
   int m1,m2;
@@ -1168,7 +1176,9 @@ void pds_delay_10us(unsigned int ticks) //each tick is 10us
 #ifdef DJGPP
   if(intr)
 #endif
-  _enable();
+  {
+   _enable();
+  }
 
   do{
 #ifdef DJGPP
@@ -1181,7 +1191,9 @@ void pds_delay_10us(unsigned int ticks) //each tick is 10us
 #ifdef DJGPP
   if(intr2)
 #endif
-   _enable();
+  {
+    _enable();
+  }
    if(tsctemp<=oldtsc)
     tscdif=oldtsc-tsctemp; // handle overflow
    else
