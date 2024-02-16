@@ -7,7 +7,13 @@ VERSION ?= $(shell git describe --tags)
 
 INCLUDES := -I./mpxplay -I./sbemu
 DEFINES := -D__DOS__ -DSBEMU -DDEBUG=$(DEBUG) -DMAIN_SBEMU_VER=\"$(VERSION)\"
-CFLAGS := -fcommon -march=i386 -Os -flto -Wno-attributes $(INCLUDES) $(DEFINES)
+#CFLAGS := -fcommon -march=i386 -Os -flto -Wno-attributes $(INCLUDES) $(DEFINES)
+AU_BASE_CFLAGS := -fcommon -march=i386 -Os -flto -Wno-attributes $(INCLUDES) $(DEFINES)
+AU_CFLAGS := -fcommon -march=i386 -O2 -flto -Wno-attributes $(INCLUDES) $(DEFINES)
+SC_CFLAGS := -fcommon -march=i386 -O2 -flto -Wno-attributes $(INCLUDES) $(DEFINES)
+MPXPLAY_CFLAGS := -fcommon -march=i386 -O2 -flto -Wno-attributes $(INCLUDES) $(DEFINES)
+SBEMU_CFLAGS := -fcommon -march=i386 -O2 -flto -Wno-attributes $(INCLUDES) $(DEFINES)
+CFLAGS := -fcommon -march=i386 -O2 -flto -Wno-attributes $(INCLUDES) $(DEFINES)
 LDFLAGS := -lstdc++ -lm
 
 ifeq ($(DEBUG),0)
@@ -73,6 +79,31 @@ $(TARGET): $(OBJS)
 	@mkdir -p $(dir $@)
 	$(SILENTMSG) "LINK\t$@\n"
 	$(SILENTCMD)$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+output/mpxplay/au_cards/sc_%.o: mpxplay/au_cards/sc_%.c
+	@mkdir -p $(dir $@)
+	$(SILENTMSG) "CC\t$@\n"
+	$(SILENTCMD)$(CC) $(SC_CFLAGS) -c $< -o $@
+
+output/mpxplay/au_cards/au_base.o: mpxplay/au_cards/au_base.c
+	@mkdir -p $(dir $@)
+	$(SILENTMSG) "CC\t$@\n"
+	$(CC) $(AU_BASE_CFLAGS) -c $< -o $@
+
+output/mpxplay/au_cards/au_%.o: mpxplay/au_cards/au_%.c
+	@mkdir -p $(dir $@)
+	$(SILENTMSG) "CC\t$@\n"
+	$(SILENTCMD)$(CC) $(AU_CFLAGS) -c $< -o $@
+
+output/mpxplay/%.o: mpxplay/%.c
+	@mkdir -p $(dir $@)
+	$(SILENTMSG) "CC\t$@\n"
+	$(SILENTCMD)$(CC) $(MPXPLAY_CFLAGS) -c $< -o $@
+
+output/sbemu/%.o: sbemu/%.c
+	@mkdir -p $(dir $@)
+	$(SILENTMSG) "CC\t$@\n"
+	$(SILENTCMD)$(CC) $(SBEMU_CFLAGS) -c $< -o $@
 
 output/%.o: %.c
 	@mkdir -p $(dir $@)
