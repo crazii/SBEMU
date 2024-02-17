@@ -236,7 +236,7 @@ typedef struct mpxplay_audioout_info_s{
  struct pci_config_s* card_pci_dev;
  uint16_t fm_port;
  uint16_t mpu401_port;
- unsigned int pcm: 1, fm: 1, mpu401: 1;
+ unsigned int pcm: 1, fm: 1, mpu401: 1, mpu401_softread;
  #endif
  struct one_sndcard_info *card_handler; // function structure of the card
  void *card_private_data;        // extra private datas can be pointed here (with malloc)

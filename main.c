@@ -196,9 +196,12 @@ static uint32_t MAIN_MPU_330(uint32_t port, uint32_t val, uint32_t out)
     ser_putbyte((int)(val & 0xff));
     return 0;
   } else {
-    uint8_t val, hwval;
-    if (mpu401_aui.mpu401 && mpu401_aui.card_handler->card_mpu401_read)
+    uint8_t val, hwval, hwval_valid = 0;
+    if (mpu401_aui.mpu401 && mpu401_aui.card_handler->card_mpu401_read) {
       hwval = mpu401_aui.card_handler->card_mpu401_read(&mpu401_aui, 0);
+      if (!mpu401_aui.mpu401_softread)
+        hwval_valid = 1;
+    }
     if (mpu_state == 1) {
       mpu_state = 0;
       val = 0xfe;
@@ -208,7 +211,7 @@ static uint32_t MAIN_MPU_330(uint32_t port, uint32_t val, uint32_t out)
     } else {
       val = 0;
     }
-    if (mpu401_aui.mpu401 && mpu401_aui.card_handler->card_mpu401_read)
+    if (hwval_valid)
       return hwval;
     else
       return val;
@@ -244,8 +247,11 @@ static uint32_t MAIN_MPU_331(uint32_t port, uint32_t val, uint32_t out)
     }
     return 0;
   }
-  if (mpu401_aui.mpu401 && mpu401_aui.card_handler->card_mpu401_read)
-    return mpu401_aui.card_handler->card_mpu401_read(&mpu401_aui, 1);
+  if (mpu401_aui.mpu401 && mpu401_aui.card_handler->card_mpu401_read) {
+    uint8_t hwval = mpu401_aui.card_handler->card_mpu401_read(&mpu401_aui, 1);
+    if (!mpu401_aui.mpu401_softread)
+      return hwval;
+  }
   if ((mpu_state & 3) == 0) {
     return 0x80;
   } else {
