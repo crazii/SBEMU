@@ -23,5 +23,14 @@ uint8_t ioport_mpu401_read (struct mpxplay_audioout_info_s *aui, unsigned int id
 
 void ioport_mpu401_write (struct mpxplay_audioout_info_s *aui, unsigned int idx, uint8_t data)
 {
+  if (idx == 0) {
+    int timeout = 10000; // 100ms
+    do {
+      uint8_t st = hw_mpu_inb(1);
+      if (!(st & 0x40)) break;
+      // still full
+      pds_delay_10us(1);
+    } while (--timeout);
+  }
   hw_mpu_outb(idx, data);
 }
