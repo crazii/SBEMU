@@ -448,7 +448,7 @@ static void snd_cmipci_ch_reset(cmi8x38_card *cm, int ch) //reset channel ch
  int reset = CM_RST_CH0 << ch;
  int adcch = CM_CHADC0 << ch;
  snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, adcch|reset);
- do {pds_delay_10us(10); printf("%x\n",snd_cmipci_read_32(cm,CM_REG_FUNCTRL0));} while(!(snd_cmipci_read_32(cm,CM_REG_FUNCTRL0)&reset));
+ do {pds_delay_10us(10); uint32_t x = snd_cmipci_read_32(cm,CM_REG_FUNCTRL0);} while(!(snd_cmipci_read_32(cm,CM_REG_FUNCTRL0)&reset));
  snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, adcch&(~reset));
  do {pds_delay_10us(10);} while((snd_cmipci_read_32(cm,CM_REG_FUNCTRL0)&reset));
  pds_mdelay(5); 
@@ -683,6 +683,34 @@ static int CMI8X38_adetect(struct mpxplay_audioout_info_s *aui)
 
  // init chip
  cmi8x38_chip_init(card);
+
+ uint16_t fmport = card->iobase + CM_REG_FM_PCI;
+ if (aui->card_select_index_fm && aui->card_select_index_fm == aui->card_test_index) {
+#define OPL_write(reg, val) do { outp(fmport, reg); pds_delay_10us(1); outp(fmport+1, val); pds_delay_10us(3); } while (0)
+#define OPL_status() (inp(fmport) & 0xe0)
+  OPL_write(0x04, 0x60); // Reset Timer 1 and Timer 2
+  OPL_write(0x04, 0x80); // Reset the IRQ
+  uint8_t fmsts1 = OPL_status();
+  //printf("fmsts1: %x\n", fmsts1);
+  OPL_write(0x02, 0xff); // Set Timer 1 to ff
+  OPL_write(0x04, 0x21); // Unmask and start Timer 1
+  pds_delay_10us(8); // Delay at least 80us
+  uint8_t fmsts2 = OPL_status();
+  OPL_write(0x04, 0x60); // Reset Timer 1 and Timer 2
+  OPL_write(0x04, 0x80); // Reset the IRQ
+  //printf("fmsts2: %x\n", fmsts2);
+  if (!(fmsts1 == 0 && fmsts2 == 0xc0)) {
+   printf("CMI: No OPL detected\n");
+  } else {
+   uint8_t fmsts3 = inp(fmport) & 0x06;
+   //printf("fmsts3: %x\n", fmsts3);
+   if (fmsts3 == 0) {
+    //printf("CMI: OPL3 detected\n");
+    aui->fm_port = fmport;
+    aui->fm = 1;
+   }
+  }
+ }
 
  mpxplay_debugf(CMI_DEBUG_OUTPUT, "did init, IRQ: %d, iobase: %x", card->irq, card->iobase);
 
@@ -990,7 +1018,12 @@ one_sndcard_info CMI8X38_sndcard_info={
 
  &CMI8X38_writeMIXER,
  &CMI8X38_readMIXER,
- &cmi8x38_mixerset[0]
+ &cmi8x38_mixerset[0],
+
+ &ioport_fm_write,
+ &ioport_fm_read,
+ &ioport_mpu401_write,
+ &ioport_mpu401_read,
 };
 
 #endif
