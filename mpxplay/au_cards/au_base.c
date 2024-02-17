@@ -331,9 +331,11 @@ int pds_dpmi_xms_allocmem(xmsmem_t * mem,unsigned int size)
                 unsigned long newlimit = info.address + size - base - 1;
                 newlimit = ((newlimit+1+0xFFF)&~0xFFF) - 1;//__dpmi_set_segment_limit must be page aligned
                 //printf("addr: %08x, limit: %08x\n",mem->linearptr, newlimit);
+                int intr = disable();
                 __dpmi_set_segment_limit(_my_ds(), max(limit, newlimit));
                 __dpmi_set_segment_limit(__djgpp_ds_alias, max(limit, newlimit));
                 __djgpp_selector_limit = max(limit, newlimit);
+                if (intr) enable();
                 return 1;
             }
         }while(0);
