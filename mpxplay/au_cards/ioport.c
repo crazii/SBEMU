@@ -23,7 +23,8 @@ uint8_t ioport_mpu401_read (struct mpxplay_audioout_info_s *aui, unsigned int id
 
 void ioport_mpu401_write (struct mpxplay_audioout_info_s *aui, unsigned int idx, uint8_t data)
 {
-  if (idx == 0) {
+#if 0 // shouldn't DOS programs be doing this themselves if it was really necessary?
+  if (idx == 0 && aui->) {
     int timeout = 10000; // 100ms
     do {
       uint8_t st = hw_mpu_inb(1);
@@ -32,5 +33,6 @@ void ioport_mpu401_write (struct mpxplay_audioout_info_s *aui, unsigned int idx,
       pds_delay_10us(1);
     } while (--timeout);
   }
+#endif
   hw_mpu_outb(idx, data);
 }
