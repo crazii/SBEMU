@@ -85,10 +85,11 @@ static void MAIN_TSR_Interrupt();
       }                                                                 \
     } else {                                                            \
       if (fm_aui.card_handler->card_fm_read)                            \
-        return fm_aui.card_handler->card_fm_read(&fm_aui, n);              \
+        return fm_aui.card_handler->card_fm_read(&fm_aui, n);           \
     }                                                                   \
-    return 0;                                                           \
-  } } while (0)
+  }                                                                     \
+  return 0;                                                             \
+  } while (0)
 
 static uint32_t MAIN_OPL3_388(uint32_t port, uint32_t val, uint32_t out)
 {
@@ -765,7 +766,7 @@ int main(int argc, char* argv[])
     {
         printf("Invalid Sound card IRQ: ");
         MAIN_CPrintf(RED, "%d", aui.card_irq);
-        printf(", Trying to assign a valid IRQ...\n", aui.card_irq);
+        printf(", Trying to assign a valid IRQ...\n");
         aui.card_irq = pcibios_AssignIRQ(aui.card_pci_dev);
         if(aui.card_irq == 0xFF)
         {

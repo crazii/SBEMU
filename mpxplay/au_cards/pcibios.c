@@ -715,7 +715,7 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
                     if(intpin-1 == j)
                     {
                         linkedIRQ = pcibios_ReadConfig_Byte(&cfg, PCIR_INTR_LN);
-                        assert(linkedIRQ == 0xFF || ((1<<linkedIRQ)&&table[i].intpins[j].map) != 0);
+                        assert(linkedIRQ == 0xFF || ((1<<linkedIRQ)&table[i].intpins[j].map) != 0);
                         if(linkedIRQ != 0xFF)
                         {
                             _LOG("Found shared IRQ: %d, pin: INT%c# on bdf %d %d %d\n", linkedIRQ, 'A'+j, cfg.bBus, cfg.bDev, cfg.bFunc);

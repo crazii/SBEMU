@@ -921,8 +921,8 @@ static int CMI8X38_IRQRoutine(mpxplay_audioout_info_s* aui)
   cmi8x38_card *card=aui->card_private_data;
   int status = snd_cmipci_read_32(card, CM_REG_INT_STATUS); //read only reg (R)
   while(status == -1) snd_cmipci_read_32(card, CM_REG_INT_STATUS);
-  if ( card->chip_version > 37 && !(status&CM_INTR) ||
-      card->chip_version <= 37 && !(status & CM_INTR_MASK)) { //the summary bit is incorrect for PCI-SX, the interrupt be chained to other shared IRQ device with invalid interrupts
+  if ((card->chip_version > 37 && !(status&CM_INTR)) ||
+      (card->chip_version <= 37 && !(status & CM_INTR_MASK))) { //the summary bit is incorrect for PCI-SX, the interrupt be chained to other shared IRQ device with invalid interrupts
     return 0;
   }
   if(status&CM_MCBINT) //Abort conditions occur during PCI Bus Target/Master Access
