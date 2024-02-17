@@ -378,6 +378,8 @@ typedef struct cmi8x38_card
  int shift;
  //int ac3_shift;    /* extra shift: 1 on soft ac3 mode */
 
+ uint8_t midi_in_data;
+ uint8_t midi_in_data_valid:1;
 }cmi8x38_card;
 
 extern unsigned int intsoundconfig,intsoundcontrol;
@@ -711,6 +713,16 @@ static int CMI8X38_adetect(struct mpxplay_audioout_info_s *aui)
    }
   }
  }
+ uint16_t mpuport = card->iobase + CM_REG_MPU_PCI;
+ if (card->chip_version >= 39) {
+  uint8_t val = inp(card->iobase + CM_REG_MPU_PCI + 1);
+  if (val != 0x00 && val != 0xff) {
+   //printf("CMI: MPU-401 detected\n");
+   aui->mpu401_port = mpuport;
+   aui->mpu401 = 1;
+   aui->mpu401_softread = 1; // Needed for Duke Nukem 3D
+  }
+ }
 
  mpxplay_debugf(CMI_DEBUG_OUTPUT, "did init, IRQ: %d, iobase: %x", card->irq, card->iobase);
 
@@ -948,7 +960,13 @@ static int CMI8X38_IRQRoutine(mpxplay_audioout_info_s* aui)
 {
   cmi8x38_card *card=aui->card_private_data;
   int status = snd_cmipci_read_32(card, CM_REG_INT_STATUS); //read only reg (R)
-  while(status == -1) snd_cmipci_read_32(card, CM_REG_INT_STATUS);
+  if (status == -1) {
+    int timeout = 2000;
+    do {
+      status = snd_cmipci_read_32(card, CM_REG_INT_STATUS);
+      if (status != -1) break;
+    } while (--timeout);
+  }
   if ((card->chip_version > 37 && !(status&CM_INTR)) ||
       (card->chip_version <= 37 && !(status & CM_INTR_MASK))) { //the summary bit is incorrect for PCI-SX, the interrupt be chained to other shared IRQ device with invalid interrupts
     return 0;
@@ -957,9 +975,11 @@ static int CMI8X38_IRQRoutine(mpxplay_audioout_info_s* aui)
   {
     //nothing we can do
   }
-  if(status&CM_UARTINT)
+  if(status&CM_UARTINT && aui->mpu401_port)
   {
-
+    card->midi_in_data = inp(aui->mpu401_port);
+    card->midi_in_data_valid = 1;
+    //DBG_Logi("uartint %x\n", card->midi_in_data);
   }
   unsigned int mask = 0;
   if (status & CM_CHINT0)
@@ -993,6 +1013,38 @@ static aucards_allmixerchan_s cmi8x38_mixerset[]={
  NULL
 };
 
+#if 0 // use ioport_mpu401_write
+static void cmi8x38_mpu401_write (struct mpxplay_audioout_info_s *aui, unsigned int idx, uint8_t data)
+{
+  if (idx == 0) {
+    int timeout = 10000; // 100ms
+    do {
+      uint8_t st = inp(aui->mpu401_port+1);
+      if (!(st & 0x40)) break;
+      // still full
+      pds_delay_10us(1);
+    } while (--timeout);
+  }
+  outp(aui->mpu401_port+idx, data);
+}
+#endif
+
+static uint8_t cmi8x38_mpu401_read (struct mpxplay_audioout_info_s *aui, unsigned int idx)
+{
+  struct cmi8x38_card *card=aui->card_private_data;
+  if (idx == 0) {
+    //uint8_t midi_in_data = inp(aui->mpu401_port);
+    uint8_t midi_in_data = card->midi_in_data_valid ? card->midi_in_data : inp(aui->mpu401_port);
+    card->midi_in_data_valid = 0;
+    //DBG_Logi(" r %u %2.2X\n", idx, midi_in_data);
+    return midi_in_data;
+  } else {
+    uint8_t data = inp(aui->mpu401_port+idx);
+    //if (data != 0xbf) DBG_Logi(" r %u %2.2X\n", idx, data);
+    return data;
+  }
+}
+
 one_sndcard_info CMI8X38_sndcard_info={
  "CMI 8338/8738",
  SNDCARD_LOWLEVELHAND|SNDCARD_INT08_ALLOWED,
@@ -1022,8 +1074,9 @@ one_sndcard_info CMI8X38_sndcard_info={
 
  &ioport_fm_write,
  &ioport_fm_read,
+ //&cmi8x38_mpu401_write,
  &ioport_mpu401_write,
- &ioport_mpu401_read,
+ &cmi8x38_mpu401_read,
 };
 
 #endif
