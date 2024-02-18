@@ -195,9 +195,11 @@ unsigned long pds_dpmi_map_physical_memory(unsigned long phys_addr,unsigned long
     physicalmaps[i] = info;
     unsigned long newlimit = info.address + memsize - 1;
     newlimit = ((newlimit+1+0xFFF)&~0xFFF)-1;//__dpmi_set_segment_limit need page aligned
+    int intr = disable();
     __dpmi_set_segment_limit(_my_ds(), max(limit, newlimit));
     __dpmi_set_segment_limit(__djgpp_ds_alias, max(limit, newlimit));
     __djgpp_selector_limit = max(limit, newlimit);
+    if (intr) enable();
     return info.address;
  }
  return 0;
