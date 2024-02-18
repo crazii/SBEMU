@@ -228,15 +228,15 @@ typedef struct mpxplay_audioout_info_s{
 
  char *card_selectname;          // select card by name - NOT used by SBEMU
  #ifdef SBEMU
- int card_test_index;            //current test index for main card
+ int card_test_index;            //current test index
  int card_select_index;          //user selection for main card
  int card_select_index_fm;       //user selection for FM(OPL) card
- int card_select_index_mpu401;   //user selection via MPU-401 card
+ int card_select_index_mpu401;   //user selection for MPU-401 card
  int card_samples_per_int;  //samples per interrupt
  struct pci_config_s* card_pci_dev;
  uint16_t fm_port;
  uint16_t mpu401_port;
- unsigned int pcm: 1, fm: 1, mpu401: 1;
+ unsigned int pcm: 1, fm: 1, mpu401: 1, mpu401_softread;
  #endif
  struct one_sndcard_info *card_handler; // function structure of the card
  void *card_private_data;        // extra private datas can be pointed here (with malloc)

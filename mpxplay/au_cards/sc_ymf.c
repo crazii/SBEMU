@@ -869,10 +869,10 @@ static int snd_ymfpci_memalloc (struct mpxplay_audioout_info_s *aui)
     return -1;
 
   memset(card->dm->linearptr, 0, size);
-  ptr = card->dm->linearptr;
+  ptr = (uint8_t *)card->dm->linearptr;
   ptr_addr = (dma_addr_t)ptr;
 
-  ptr = (char *)ALIGN((unsigned long)ptr, 0x100);
+  ptr = (uint8_t *)ALIGN((unsigned long)ptr, 0x100);
   ptr_addr = ALIGN(ptr_addr, 0x100);
 
   card->bank_base_playback = ptr;
@@ -892,7 +892,7 @@ static int snd_ymfpci_memalloc (struct mpxplay_audioout_info_s *aui)
       ptr_addr += card->bank_size_playback;
     }
   }
-  ptr = (char *)ALIGN((unsigned long)ptr, 0x100);
+  ptr = (uint8_t *)ALIGN((unsigned long)ptr, 0x100);
   ptr_addr = ALIGN(ptr_addr, 0x100);
   card->bank_base_capture = ptr;
   card->bank_base_capture_addr = (uint32_t)pds_cardmem_physicalptr(card->dm, ptr_addr);
@@ -903,7 +903,7 @@ static int snd_ymfpci_memalloc (struct mpxplay_audioout_info_s *aui)
       ptr_addr += card->bank_size_capture;
     }
   }
-  ptr = (char *)ALIGN((unsigned long)ptr, 0x100);
+  ptr = (uint8_t *)ALIGN((unsigned long)ptr, 0x100);
   ptr_addr = ALIGN(ptr_addr, 0x100);
   card->bank_base_effect = ptr;
   card->bank_base_effect_addr = (uint32_t)pds_cardmem_physicalptr(card->dm, ptr_addr);
@@ -914,14 +914,14 @@ static int snd_ymfpci_memalloc (struct mpxplay_audioout_info_s *aui)
       ptr_addr += card->bank_size_effect;
     }
   }
-  ptr = (char *)ALIGN((unsigned long)ptr, 0x100);
+  ptr = (uint8_t *)ALIGN((unsigned long)ptr, 0x100);
   ptr_addr = ALIGN(ptr_addr, 0x100);
   card->work_base = ptr;
   card->work_base_addr = (uint32_t)pds_cardmem_physicalptr(card->dm, ptr_addr);
 
   card->pcmout_buffer = card->work_base + card->work_size;
   card->pcmout_buffer_physaddr = (uint32_t)pds_cardmem_physicalptr(card->dm, card->pcmout_buffer);
-  aui->card_DMABUFF = card->pcmout_buffer;
+  aui->card_DMABUFF = (char *)card->pcmout_buffer;
 
 #if YMF_DEBUG
   DBG_Logi("playback base: %8.8X\n", card->bank_base_playback_addr);
