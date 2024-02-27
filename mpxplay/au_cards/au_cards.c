@@ -465,7 +465,7 @@ auinit_retry:
  aui->freq_card=aui->chan_card=aui->bits_card=0;
  return;
 
-err_out_auinit:
+err_out_auinit:;
 #ifndef SBEMU
 #ifdef MPXPLAY_GUI_CONSOLE
  mpxplay_close_program(error_code);

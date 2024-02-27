@@ -97,7 +97,7 @@ _go32_dpmi_seginfo old_addr = intaddr_go32[intno];
  {
     intaddr_go32[intno].pm_selector = vect.sel;
     intaddr_go32[intno].pm_offset = vect.off;
-    _go32_interrupt_stack_size = 4096; //512 minimal
+    //_go32_interrupt_stack_size = 4096; //512 minimal
     if(_go32_dpmi_allocate_iret_wrapper(&intaddr_go32[intno]) != 0)
         return;
     _go32_dpmi_set_protected_mode_interrupt_vector(intno, &intaddr_go32[intno]);

@@ -124,13 +124,12 @@ static uint32_t HDPMI_Internal_InstallTrap(const HDPMIPT_ENTRY* entry, int start
 {
     uint32_t handle = 0;
     int count = end - start + 1;
-    const HDPMIPT_ENTRY ent = *entry; //avoid gcc using ebx
     asm(
     "pushl %%ebx \n\t"
     "pushl %%esi \n\t"
     "pushl %%edi \n\t"
-    "movl %1, %%esi \n\t" //ESI: starting port
-    "movl %2, %%edi \n\t"    //EDI: port count
+    "pushl %1 \n\t pushl %2 \n\t" //"movl %1, %%esi \n\t" //ESI: starting port
+    "popl %%edi \n\t popl %%esi \n\t" //"movl %2, %%edi \n\t"    //EDI: port count
     "xor %%ecx, %%ecx \n\t"
     "mov %%cs, %%cx \n\t" //CX: handler code seg
     "xor %%ebx, %%ebx \n\t"
@@ -138,13 +137,13 @@ static uint32_t HDPMI_Internal_InstallTrap(const HDPMIPT_ENTRY* entry, int start
     "movl %3, %%edx \n\t"  //EDX: handler addr
     "movl $6, %%eax \n\t" //ax=6, install port trap
     "lcall *%4\n\t"
-    "jc 1f \n\t"
-    "movl %%eax, %0 \n\t"
-    "1: popl %%edi \n\t"
+    "popl %%edi \n\t"
     "popl %%esi \n\t"
     "popl %%ebx \n\t"
-    :"=m"(handle)
-    :"m"(start),"m"(count),"m"(handler),"m"(ent)
+    "jc 1f \n\t"
+    "movl %%eax, %0 \n\t 1:"
+    :"=g"(handle)
+    :"g"(start),"g"(count),"g"(handler),"m"(*entry)
     :"eax","ebx","ecx","edx","memory"
     );
     return handle;
