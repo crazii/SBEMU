@@ -220,6 +220,9 @@ uint32_t DPMI_CallOldISR(DPMI_ISR_HANDLE* inputp handle);
 uint32_t DPMI_CallOldISRWithContext(DPMI_ISR_HANDLE* inputp handle, const DPMI_REG* regs); //do not call it with VM context (vm context cannot be restored)
 uint32_t DPMI_CallRealModeOldISR(DPMI_ISR_HANDLE* inputp handle, DPMI_REG* regs);
 
+uint16_t DPMI_InstallRealModeISR_Direct(uint8_t i, uint16_t seg, uint16_t off, DPMI_ISR_HANDLE* outputp handle, BOOL rawIVT);
+uint16_t DPMI_UninstallRealModeISR_Direct(DPMI_ISR_HANDLE* inputp handle);
+
 uint32_t DPMI_GetISR(uint8_t i, DPMI_ISR_HANDLE* outputp handle);
 
 //allocate realmode callback. return: hiword: segment, lowword: offset. return 0 if fail

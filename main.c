@@ -17,6 +17,7 @@
 #include "qemm.h"
 #include "hdpmipt.h"
 #include "serial.h"
+#include "irqguard.h"
 
 #include <au_cards/au_cards.h>
 #include <au_cards/pcibios.h>
@@ -480,7 +481,9 @@ static void MAIN_InvokeIRQ(uint8_t irq) //generate virtual IRQ
     #endif
 
     HDPMIPT_DisableIRQRouting(irq); //disable routing
+    IRQGUARD_Enable();
     VIRQ_Invoke(irq, &MAIN_IntContext.regs, MAIN_IntContext.EFLAGS&CPU_VMFLAG);
+    IRQGUARD_Disable();
     HDPMIPT_EnableIRQRouting(irq); //restore routing
 
     #if MAIN_TRAP_RMPIC_ONDEMAND
@@ -586,6 +589,8 @@ static void MAIN_Cleanup()
         QEMM_Uninstall_IOPortTrap(&MPUIOPT);
     if(MPUPMInstalled)
         HDPMIPT_Uninstall_IOPortTrap(&MPUIOPT_PM);
+
+    IRQGUARD_Uninstall();
 }
 
 int main(int argc, char* argv[])
@@ -985,6 +990,7 @@ int main(int argc, char* argv[])
     MAIN_IntHandleRM.wrapper_cs = MAIN_IntHandleRM.wrapper_offset = -1; //skip for HDPMIPT_InstallIRQRouteHandler
     #endif
     
+    IRQGUARD_Install(MAIN_Options[OPT_IRQ].value);
     struct
     {
         int irq;
@@ -1556,6 +1562,9 @@ static void MAIN_TSR_Interrupt()
                 MAIN_Options[OPT_IRQ].value = opt[OPT_IRQ].value;
                 MAIN_Options[OPT_TYPE].value = opt[OPT_TYPE].value;
                 MAIN_Options[OPT_FIX_TC].value = opt[OPT_FIX_TC].value;
+                HDPMIPT_LockIRQRouting(FALSE);
+                IRQGUARD_Install(MAIN_Options[OPT_IRQ].value);
+                HDPMIPT_LockIRQRouting(TRUE);
                 SBEMU_Init(
                     MAIN_Options[OPT_IRQ].value,
                     MAIN_Options[OPT_DMA].value,

@@ -669,6 +669,76 @@ uint16_t DPMI_InstallRealModeISR(uint8_t i, void(*ISR_RM)(void), DPMI_REG* RMReg
     return (uint16_t)result;
 }
 
+uint16_t DPMI_InstallRealModeISR_Direct(uint8_t i, uint16_t seg, uint16_t off, DPMI_ISR_HANDLE* outputp handle, BOOL rawIVT)
+{
+    if(i < 0 || i > 255 || handle == NULL)
+        return -1;
+        
+    __dpmi_raddr ra;
+    if(rawIVT)
+    {
+        CLIS();
+        ra.offset16 = DPMI_LoadW(i*4);
+        ra.segment = DPMI_LoadW(i*4+2);
+        STIL();
+    }
+    else
+        __dpmi_get_real_mode_interrupt_vector(i, &ra);
+    
+    int result = -1;
+    if(rawIVT)
+    {
+        CLIS();
+        DPMI_StoreW(i*4, off);
+        DPMI_StoreW(i*4+2, seg);
+        STIL();
+        result = 0;
+    }
+    else
+    {
+        __dpmi_raddr ra2;
+        ra2.segment = seg;
+        ra2.offset16 = off;
+        result = __dpmi_set_real_mode_interrupt_vector(i, &ra2);
+    }
+
+    if(result == 0)
+    {
+        handle->old_offset = 0;
+        handle->old_cs = 0;
+        handle->old_rm_cs = ra.segment;
+        handle->old_rm_offset = ra.offset16;
+        handle->n = i;
+        handle->chained = 0;
+        memset(handle->internal1, 0, sizeof(handle->internal1));
+        memset(handle->internal2, 0, sizeof(handle->internal2));
+        handle->internal1[0] = rawIVT;
+    }
+    else
+        memset(handle, 0, sizeof(*handle));
+    return (uint16_t)result;
+}
+
+uint16_t DPMI_UninstallRealModeISR_Direct(DPMI_ISR_HANDLE* inputp handle)
+{
+    BOOL rawIVT = handle->internal1[0];
+    if(rawIVT)
+    {
+        CLIS();
+        DPMI_StoreW(handle->n*4, handle->old_rm_offset);
+        DPMI_StoreW(handle->n*4+2, handle->old_rm_cs);
+        STIL();
+        return 0;
+    }
+    else
+    {
+        __dpmi_raddr ra2;
+        ra2.segment = handle->old_rm_cs;
+        ra2.offset16 = handle->old_rm_offset;
+        return (uint16_t)__dpmi_set_real_mode_interrupt_vector(handle->n, &ra2);
+    }
+}
+
 uint16_t DPMI_UninstallISR(DPMI_ISR_HANDLE* inputp handle)
 {
      _go32_dpmi_seginfo go32pa;
