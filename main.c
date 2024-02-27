@@ -559,10 +559,23 @@ update_serial_mpu_output()
 
 static BOOL OPLRMInstalled, OPLPMInstalled, MPURMInstalled, MPUPMInstalled;
 static HDPMIPT_IRQRoutedHandle OldRoutedHandle = HDPMIPT_IRQRoutedHandle_Default;
+static HDPMIPT_IRQRoutedHandle OldRoutedHandle5 = HDPMIPT_IRQRoutedHandle_Default;
+static HDPMIPT_IRQRoutedHandle OldRoutedHandle7 = HDPMIPT_IRQRoutedHandle_Default;
+static HDPMIPT_IRQRoutedHandle OldRoutedHandle9 = HDPMIPT_IRQRoutedHandle_Default;
 static void MAIN_Cleanup()
 {
     if(OldRoutedHandle.valid)
         HDPMIPT_InstallIRQRoutedHandlerH(aui.card_irq, &OldRoutedHandle);
+    //must be after OldRoutedHandle in case aui.card_irq is 5/7/9
+    //because OldRoutedHandle is inited after those three
+    //need to restore in reversed order.
+    if(OldRoutedHandle5.valid)
+        HDPMIPT_InstallIRQRoutedHandlerH(5, &OldRoutedHandle5);
+    if(OldRoutedHandle7.valid)
+        HDPMIPT_InstallIRQRoutedHandlerH(7, &OldRoutedHandle7);
+    if(OldRoutedHandle9.valid)
+        HDPMIPT_InstallIRQRoutedHandlerH(9, &OldRoutedHandle9);
+
     AU_stop(&aui);
     AU_close(&aui, &fm_aui, &mpu401_aui);
     if(OPLRMInstalled)
@@ -814,7 +827,7 @@ int main(int argc, char* argv[])
     printf("Protected mode support: ");
     MAIN_Print_Enabled_Newline(enablePM);
 
-    if(enablePM) //prefer PM IO since there's no mode switch and thus more faster. previously QEEM IO was used to avoid bugs/crashes.
+    if(enablePM) //prefer PM IO since there's no mode switch and thus more faster. previously QEMM IO was used to avoid bugs/crashes.
     {
         UntrappedIO_OUT_Handler = &HDPMIPT_UntrappedIO_Write;
         UntrappedIO_IN_Handler = &HDPMIPT_UntrappedIO_Read;
@@ -971,10 +984,30 @@ int main(int argc, char* argv[])
     BOOL RM_ISR = TRUE;
     MAIN_IntHandleRM.wrapper_cs = MAIN_IntHandleRM.wrapper_offset = -1; //skip for HDPMIPT_InstallIRQRouteHandler
     #endif
+    
+    struct
+    {
+        int irq;
+        HDPMIPT_IRQRoutedHandle* handle;
+    }SBIRQRouting[] =
+    {
+        5, &OldRoutedHandle5,
+        7, &OldRoutedHandle7,
+        9, &OldRoutedHandle9,
+    };
+    for(int i = 0; i < countof(SBIRQRouting); ++i)
+    {
+        HDPMIPT_GetIRQRoutedHandlerH(SBIRQRouting[i].irq, SBIRQRouting[i].handle);
+        DPMI_ISR_HANDLE handle;
+        DPMI_GetISR(SBIRQRouting[i].irq, &handle);
+        //force irq routing to default, skip games. only route to game if the virtual IRQ happens
+        HDPMIPT_InstallIRQRoutedHandler(SBIRQRouting[i].irq, handle.old_cs, handle.old_offset, handle.old_rm_cs, handle.old_rm_offset);
+    }
 
     HDPMIPT_GetIRQRoutedHandlerH(aui.card_irq, &OldRoutedHandle);
     HDPMIPT_InstallIRQRoutedHandler(aui.card_irq, MAIN_IntHandlePM.wrapper_cs, MAIN_IntHandlePM.wrapper_offset,
         MAIN_IntHandleRM.wrapper_cs, (uint16_t)MAIN_IntHandleRM.wrapper_offset);
+
     HDPMIPT_LockIRQRouting(TRUE);
     PIC_UnmaskIRQ(aui.card_irq);
 

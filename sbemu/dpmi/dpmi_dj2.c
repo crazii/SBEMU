@@ -758,7 +758,14 @@ uint32_t DPMI_GetISR(uint8_t i, DPMI_ISR_HANDLE* outputp handle)
     memset(handle, 0, sizeof(*handle));
     
     __dpmi_raddr ra;
+    #if RAW_HOOK
+    CLIS();
+    ra.offset16 = DPMI_LoadW(i*4);
+    ra.segment = DPMI_LoadW(i*4+2);
+    STIL();
+    #else
     __dpmi_get_real_mode_interrupt_vector(i, &ra);
+    #endif
     __dpmi_paddr pa;
     __dpmi_get_protected_mode_interrupt_vector(i, &pa);
 
