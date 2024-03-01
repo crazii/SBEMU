@@ -31,9 +31,9 @@ PROGNAME = "SBEMU";
 
 #define MAIN_TRAP_PMPIC_ONDEMAND 0 //now we need a Virtual PIC to hide some IRQ for protected mode games (doom especially)
 #define MAIN_TRAP_RMPIC_ONDEMAND 1 //don't hide IRQ for rm, as some driver(i.e.usbuhci) will use it
-#define MAIN_INSTALL_RM_ISR 1 //not needed. but to workaround some rm games' problem. need RAW_HOOk in dpmi_dj2.c
+#define MAIN_INSTALL_RM_ISR 0 //not needed. but to workaround some rm games' problem. need RAW_HOOk in dpmi_dj2.c - disble for more tests.
 #define MAIN_DOUBLE_OPL_VOLUME 1 //hack: double the amplitude of OPL PCM. should be 1 or 0
-#define MAIN_ISR_CHAINED 1 //auto calls next handler AFTER current handler exits
+#define MAIN_ISR_CHAINED 0 //auto calls next handler AFTER current handler exits - cause more mode switches, disable for more tests.
 
 #define MAIN_TSR_INT 0x2D   //AMIS multiplex. TODO: 0x2F?
 #define MAIN_TSR_INTSTART_ID 0x01 //start id
@@ -807,23 +807,6 @@ int main(int argc, char* argv[])
         printf("Please try use /i5 or /i7 switch, or disable some onboard devices in the BIOS settings to release IRQs.\n");
         return 1;
     }
-    #if 0
-    if(aui.card_irq <= 0x07) //SBPCI/CMI use irq 5/7 to gain DOS compatility?
-    {
-        printf("WARNING: Low IRQ %d used for sound card, higher IRQ number(8~15) is recommended.\n", aui.card_irq);
-        //TODO: do we need to do this? 
-        #if 0
-        printf("Trying to enable Level triggered mode...");
-        if(aui.card_irq > 2) //don't use level triggering for legacy ISA IRQ (timer/kbd etc)
-        {
-            uint16_t elcr = ((uint16_t)inp(0x4D1)<<8) | (inp(0x4D0)); //edge level control reg
-            elcr |= (1<<aui.card_irq);
-            outpw(0x4D0, elcr);
-            printf("done.\n");
-        }
-        #endif
-    }
-    #endif
     pcibios_enable_interrupt(aui.card_pci_dev);
 
     printf("Real mode support: ");
@@ -857,7 +840,6 @@ int main(int argc, char* argv[])
             return 1;          
         }
 
-        //OPL3EMU_Init(aui.freq_card);
         char *emutype = fm_aui.fm ? "hardware" : "emulation";
         char hwdesc[64];
         hwdesc[0] = '\0';
@@ -1011,6 +993,14 @@ int main(int argc, char* argv[])
     }
 
     HDPMIPT_GetIRQRoutedHandlerH(aui.card_irq, &OldRoutedHandle);
+    #if !MAIN_INSTALL_RM_ISR
+    {
+        DPMI_ISR_HANDLE handle;
+        DPMI_GetISR(aui.card_irq, &handle);
+        //need preset irq routing for RM since MAIN_IntHandleRM.wrapper_cs/wrapper_offset is not valid.
+        HDPMIPT_InstallIRQRoutedHandler(aui.card_irq, handle.old_cs, handle.old_offset, handle.old_rm_cs, handle.old_rm_offset);
+    }
+    #endif
     HDPMIPT_InstallIRQRoutedHandler(aui.card_irq, MAIN_IntHandlePM.wrapper_cs, MAIN_IntHandlePM.wrapper_offset,
         MAIN_IntHandleRM.wrapper_cs, (uint16_t)MAIN_IntHandleRM.wrapper_offset);
 

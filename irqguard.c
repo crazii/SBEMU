@@ -49,7 +49,7 @@ BOOL IRQGUARD_Install(uint8_t irq)
     int vec = PIC_IRQ2VEC(irq);
     CLIS();
     //install handler
-    //need install to DPMI because PM games may install DPMI handler
+    //need install to DPMI because PM games may install RM handler (rm mode sound card drivers) to DPMI
     //if rawIVT is used, it will prevent DPMI and PM games to process it
     DPMI_InstallRealModeISR_Direct(vec, (uint16_t)(IRQGUARD_DOSMEM&0xFFFF), datasize, &IRQGUARD_Handle, FALSE);
     //far ptr
