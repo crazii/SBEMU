@@ -394,7 +394,7 @@ struct MAIN_OPT
     "/PM", "Enable protected mode support (requires HDPMI32I)", TRUE, 0,
     "/RM", "Enable real mode support (requires QEMM or JEMM+QPIEMU)", TRUE, 0,
 
-    "/O", "Select output. 0: headphone, 1: speaker. Intel HDA only", 1, 0,
+    "/O", "Select output. 0: headphone, 1: speaker (Intel HDA) or S/PDIF (Xonar DG)", 1, 0,
     "/VOL", "Set master volume (0-9)", 7, 0,
 
     "/K", "Internal sample rate (default 22050)", 22050, MAIN_SETCMD_BASE10,
@@ -828,16 +828,20 @@ int main(int argc, char* argv[])
 
     if(MAIN_Options[OPT_OPL].value)
     {
-        QEMM_IODT *iodt = fm_aui.fm ? MAIN_HW_OPL3IODT : MAIN_OPL3IODT;
-        if(enableRM && !(OPLRMInstalled=QEMM_Install_IOPortTrap(iodt, 4, &OPL3IOPT)))
-        {
-            printf("Error: Failed installing IO port trap for QEMM.\n");
-            return 1;
-        }
-        if(enablePM && !(OPLPMInstalled=HDPMIPT_Install_IOPortTrap(0x388, 0x38B, iodt, 4, &OPL3IOPT_PM)))
-        {
-            printf("Error: Failed installing IO port trap for HDPMI.\n");
-            return 1;          
+        if (!(fm_aui.fm && fm_aui.fm_port == 0x388)) {
+            QEMM_IODT *iodt = fm_aui.fm ? MAIN_HW_OPL3IODT : MAIN_OPL3IODT;
+            if(enableRM && !(OPLRMInstalled=QEMM_Install_IOPortTrap(iodt, 4, &OPL3IOPT)))
+            {
+                printf("Error: Failed installing IO port trap for QEMM.\n");
+                return 1;
+            }
+            if(enablePM && !(OPLPMInstalled=HDPMIPT_Install_IOPortTrap(0x388, 0x38B, iodt, 4, &OPL3IOPT_PM)))
+            {
+                printf("Error: Failed installing IO port trap for HDPMI.\n");
+                return 1;
+            }
+        } else {
+            printf("Not installing IO port trap. Using hardware OPL3 at port 388.\n");
         }
 
         char *emutype = fm_aui.fm ? "hardware" : "emulation";
@@ -848,7 +852,7 @@ int main(int argc, char* argv[])
         printf("OPL3 %s%s at port 388: ", emutype, hwdesc);
         MAIN_Print_Enabled_Newline(true);
     }
-    
+
     if(MAIN_Options[OPT_MPUADDR].value && MAIN_Options[OPT_MPUCOMPORT].value)
     {
         for(int i = 0; i < countof(MAIN_MPUIODT); ++i) MAIN_MPUIODT[i].port = MAIN_Options[OPT_MPUADDR].value+i;
@@ -1013,7 +1017,7 @@ int main(int argc, char* argv[])
     BOOL TSR = TRUE;
     if(!PM_ISR || !RM_ISR || !TSR_ISR
     || !QEMMInstalledVDMA || !QEMMInstalledVIRQ || !QEMMInstalledSB
-    || !HDPMIInstalledVDMA1 || !HDPMIInstalledVDMA2 || !HDPMIInstalledVDMA3 || !HDPMIInstalledVHDMA1 || !HDPMIInstalledVHDMA2 || !HDPMIInstalledVHDMA3 
+    || !HDPMIInstalledVDMA1 || !HDPMIInstalledVDMA2 || !HDPMIInstalledVDMA3 || !HDPMIInstalledVHDMA1 || !HDPMIInstalledVHDMA2 || !HDPMIInstalledVHDMA3
     || !HDPMIInstalledVIRQ1 || !HDPMIInstalledVIRQ2 || !HDPMIInstalledSB
     || !(TSR=DPMI_TSR()))
     {
@@ -1076,16 +1080,16 @@ static void MAIN_InterruptPM()
 
     //note: we have full control of the calling chain, if the irq belongs to the sound card,
     //we send EOI and skip calling the chain - it will be a little faster. if other devices raises irq at the same time,
-    //the interrupt handler will enterred again (not nested) so won't be a problem.
+    //the interrupt handler will entered again (not nested) so won't be a problem.
     //also we send EOI on our own and terminate, this doesn't rely on the default implementation in IVT - some platform (i.e. VirtualBox)
     //don't send EOI on default handler in IVT.
     //
     //it has one problem that if other drivers (shared IRQ) enables interrupts (because it needs wait or is time consuming)
-    //then because we're still in MAIN_InterruptPM, so MAIN_InterruptPM is never enterred agian (guarded by go32 or MAIN_ININT_PM), 
+    //then because we're still in MAIN_InterruptPM, so MAIN_InterruptPM is never entered again (guarded by go32 or MAIN_ININT_PM),
     //so the newly coming irq will never be processed and the IRQ will flood the system (freeze)
     //an alternative chained methods will EXIT MAIN_InterruptPM FIRST and calls next handler, which will avoid this case, see @MAIN_ISR_CHAINED
     //but we need a hack if the default handler in IVT doesn't send EOI or masks the irq - this is done in the RM final wrapper, see @DPMI_RMISR_ChainedWrapper
-    
+
     //MAIN_IntContext.EFLAGS |= (MAIN_InINT&MAIN_ININT_RM) ? (MAIN_IntContext.EFLAGS&CPU_VMFLAG) : 0;
     HDPMIPT_GetInterrupContext(&MAIN_IntContext);
     if(/*!(MAIN_InINT&MAIN_ININT_RM) && */aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
@@ -1112,11 +1116,11 @@ static void MAIN_InterruptRM()
     const uint8_t irq = PIC_GetIRQ();
     if(irq != aui.card_irq) //shared IRQ handled by other handlers(EOI sent) or new irq arrived after EOI but not for us
         return;
-    
+
     //if(MAIN_InINT&MAIN_ININT_RM) return; //skip reentrance. go32 will do this so actually we don't need it
     //DBG_Log("INTRM %d\n", MAIN_InINT);
     MAIN_InINT |= MAIN_ININT_RM;
-    
+
     if(/*!(MAIN_InINT&MAIN_ININT_PM) && */aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
     {
         MAIN_IntContext.regs = MAIN_RMIntREG;
@@ -1140,7 +1144,7 @@ static void MAIN_Interrupt()
 {
     if(!(aui.card_infobits&AUINFOS_CARDINFOBIT_PLAYING))
         return;
-        
+
     if(SBEMU_IRQTriggered())
     {
         MAIN_InvokeIRQ(SBEMU_GetIRQ());
@@ -1189,7 +1193,7 @@ static void MAIN_Interrupt()
     //_LOG("samples:%d\n",samples);
     if(samples == 0)
         return;
-    
+
     BOOL digital = SBEMU_HasStarted();
     int dma = (SBEMU_GetBits() <= 8 || MAIN_Options[OPT_TYPE].value < 6) ? SBEMU_GetDMA() : SBEMU_GetHDMA();
     int32_t DMA_Count = VDMA_GetCounter(dma); //count in bytes
@@ -1280,7 +1284,7 @@ static void MAIN_Interrupt()
                 if(!SBEMU_GetAuto())
                     SBEMU_Stop();
                 SB_Pos = SBEMU_SetPos(0);
-                
+
                 MAIN_InvokeIRQ(SBEMU_GetIRQ());
                 if(SB_Bytes <= 32) //detection routine?
                 {
@@ -1290,7 +1294,7 @@ static void MAIN_Interrupt()
                     SBEMU_SetDetectionCounter(c);
                     break; //fix crash in virtualbox.
                 }
-                
+
                 SB_Bytes = SBEMU_GetSampleBytes();
                 SB_Pos = SBEMU_GetPos();
                 SB_Rate = SBEMU_GetSampleRate();
@@ -1571,12 +1575,12 @@ static void MAIN_TSR_Interrupt()
                 free(opt);
                 return;
             }
-            
+
             //re-install all
             if(MAIN_Options[OPT_RM].value)
             {
                 _LOG("uninstall qemm\n");
-                if(MAIN_Options[OPT_OPL].value) QEMM_Uninstall_IOPortTrap(&OPL3IOPT);
+                if(MAIN_Options[OPT_OPL].value && OPLRMInstalled) QEMM_Uninstall_IOPortTrap(&OPL3IOPT);
                 if(MAIN_Options[OPT_MPUADDR].value && MAIN_Options[OPT_MPUCOMPORT].value) QEMM_Uninstall_IOPortTrap(&MPUIOPT);
                 QEMM_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT);
                 #if !MAIN_TRAP_RMPIC_ONDEMAND
@@ -1587,7 +1591,7 @@ static void MAIN_TSR_Interrupt()
             if(MAIN_Options[OPT_PM].value)
             {
                 _LOG("uninstall hdpmi\n");
-                if(MAIN_Options[OPT_OPL].value) HDPMIPT_Uninstall_IOPortTrap(&OPL3IOPT_PM);
+                if(MAIN_Options[OPT_OPL].value && OPLPMInstalled) HDPMIPT_Uninstall_IOPortTrap(&OPL3IOPT_PM);
                 if(MAIN_Options[OPT_MPUADDR].value && MAIN_Options[OPT_MPUCOMPORT].value) HDPMIPT_Uninstall_IOPortTrap(&MPUIOPT_PM);
                 HDPMIPT_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT_PM1);
                 HDPMIPT_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT_PM2);
@@ -1604,7 +1608,7 @@ static void MAIN_TSR_Interrupt()
             opt[OPT_PM].value = opt[OPT_PM].value && MAIN_HDPMI_Present;
             opt[OPT_RM].value = opt[OPT_RM].value && MAIN_QEMM_Present;
 
-            if(opt[OPT_OPL].value)
+            if(opt[OPT_OPL].value && !(fm_aui.fm && fm_aui.fm_port == 0x388))
             {
                 _LOG("install opl\n");
                 QEMM_IODT *iodt = fm_aui.fm ? MAIN_HW_OPL3IODT : MAIN_OPL3IODT;

@@ -461,6 +461,7 @@ extern char *pds_getfilename_from_fullname(char *fullname);
 #define pds_memcpy(t,s,l)   memcpy(t,s,l)
 extern void pds_memxch(char *,char *,unsigned int);
 extern void *pds_malloc(unsigned int bufsize);
+extern void *pds_zalloc(unsigned int bufsize);
 extern void *pds_calloc(unsigned int nitems,unsigned int itemsize);
 extern void *pds_realloc(void *bufptr,unsigned int bufsize);
 extern void pds_free(void *bufptr);
@@ -469,6 +470,7 @@ extern unsigned long pds_gettimeh(void); // clock time in hsec
 extern mpxp_int64_t pds_gettimem(void);  // clock time in msec
 extern mpxp_int64_t pds_gettimeu(void);  // clock time in usec
 extern void pds_delay_10us(unsigned int ticks);
+extern void pds_delay_1695ns (unsigned int ticks); //each tick is approximately 1695ns
 extern void pds_mdelay(unsigned long msec);
 #define pds_textdisplay_printf(text) { fprintf(stdout, "%s", (text)); fprintf(stdout, "\n"); fflush(stdout); }
 //-newfunc
