@@ -160,7 +160,13 @@ typedef struct au_cardconfig_v0154_s{
  #endif
  #ifdef AU_CARDS_LINK_PCI
   #define AU_CARDS_LINK_CMI8X38 1
-  #define AU_CARDS_LINK_EMU20KX 1
+  //#define AU_CARDS_LINK_EMU20KX 1
+  #define AU_CARDS_LINK_CTXFI 1
+  #define AU_CARDS_LINK_EMU10K1X 1
+  #define AU_CARDS_LINK_TRIDENT 1
+  #define AU_CARDS_LINK_ALS4000 1
+  #define AU_CARDS_LINK_OXYGEN 1
+  #define AU_CARDS_LINK_ALLEGRO 1
   #define AU_CARDS_LINK_ES1371  1
   #define AU_CARDS_LINK_ICH     1
   #define AU_CARDS_LINK_IHD     1
@@ -237,6 +243,8 @@ typedef struct mpxplay_audioout_info_s{
  uint16_t fm_port;
  uint16_t mpu401_port;
  unsigned int pcm: 1, fm: 1, mpu401: 1, mpu401_softread;
+ unsigned int dma_addr_bits:6, buffer_size_shift:2, period_size_shift:2;
+ void *substream_private_data;
  #endif
  struct one_sndcard_info *card_handler; // function structure of the card
  void *card_private_data;        // extra private datas can be pointed here (with malloc)
@@ -313,6 +321,8 @@ extern uint8_t ioport_fm_read (struct mpxplay_audioout_info_s *aui, unsigned int
 extern void ioport_fm_write (struct mpxplay_audioout_info_s *aui, unsigned int idx, uint8_t data);
 extern uint8_t ioport_mpu401_read (struct mpxplay_audioout_info_s *aui, unsigned int idx);
 extern void ioport_mpu401_write (struct mpxplay_audioout_info_s *aui, unsigned int idx, uint8_t data);
+extern void ioport_mpu401_write_when_ready (struct mpxplay_audioout_info_s *aui, unsigned int idx, uint8_t data);
+extern int ioport_detect_opl (uint16_t fmport);
 #endif
 
 #ifdef __cplusplus

@@ -889,6 +889,21 @@ void *pds_malloc(unsigned int bufsize)
  return bufptr;
 }
 
+void *pds_zalloc(unsigned int bufsize)
+{
+ //unsigned int intsoundcntrl_save;
+ void *bufptr;
+ if(!bufsize)
+  return NULL;
+ //MPXPLAY_INTSOUNDDECODER_DISALLOW;
+ //_disable();
+ bufptr=malloc(bufsize + 8);
+ memset(bufptr, 0, bufsize+8);
+ //_enable();
+ //MPXPLAY_INTSOUNDDECODER_ALLOW;
+ return bufptr;
+}
+
 void *pds_calloc(unsigned int nitems,unsigned int itemsize)
 {
  //unsigned int intsoundcntrl_save;
@@ -1203,6 +1218,38 @@ void pds_delay_10us(unsigned int ticks) //each tick is 10us
    else
     tscdif=divisor+oldtsc-tsctemp;
   }while(tscdif<12); //wait for 10us  (12/(65536*18) sec)
+ }
+#else
+ pds_mdelay((ticks+99)/100);
+ //unsigned int oldclock=clock();
+ //while(oldclock==clock()){} // 1ms not 0.01ms (10us)
+#endif
+}
+
+void pds_delay_1695ns (unsigned int ticks) //each tick is approximately 1695ns
+{
+#ifdef __DOS__
+ unsigned int divisor=(oldint08_handler)? INT08_DIVISOR_NEW:INT08_DIVISOR_DEFAULT; // ???
+ unsigned int i,oldtsc, tsctemp, tscdif;
+
+ for(i=0;i<ticks;i++){
+  disable();
+  outp(0x43,0x04);
+  oldtsc=inp(0x40);
+  oldtsc+=inp(0x40)<<8;
+  enable();
+
+  do{
+   disable();
+   outp(0x43,0x04);
+   tsctemp=inp(0x40);
+   tsctemp+=inp(0x40)<<8;
+   enable();
+   if(tsctemp<=oldtsc)
+    tscdif=oldtsc-tsctemp; // handle overflow
+   else
+    tscdif=divisor+oldtsc-tsctemp;
+  }while(tscdif<2); //wait for 1695.421ns  (2/(65536*18) sec) // XXX
  }
 #else
  pds_mdelay((ticks+99)/100);

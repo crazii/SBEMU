@@ -117,7 +117,7 @@
 #define CM_INT_CLEAR        0x00000001
 
 #define CM_REG_INT_STATUS    0x10 //(R)
-#define CM_INTR            0x80000000 //Interrupt reflected from any sources. 
+#define CM_INTR            0x80000000 //Interrupt reflected from any sources.
 #define CM_VCO            0x08000000    /* Voice Control? CMI8738 */
 #define CM_MCBINT        0x04000000    /* Master Control Block abort cond.? */
 #define CM_UARTINT        0x00010000
@@ -172,7 +172,7 @@
 #define CM_SPDFLOOPI        0x00100000    /* int. SPDIF-IN -> int. OUT */
 #define CM_FM_EN        0x00080000    /* enalbe FM */
 #define CM_AC3EN2        0x00040000    /* enable AC3: model 039 */
-#define CM_VIDWPDSB        0x00010000 
+#define CM_VIDWPDSB        0x00010000
 #define CM_SPDF_AC97        0x00008000    /* 0: SPDIF/OUT 44.1K, 1: 48K */
 #define CM_MASK_EN        0x00004000
 #define CM_VIDWPPRT        0x00002000
@@ -413,7 +413,7 @@ static void snd_cmipci_clear_bit(cmi8x38_card *cm, unsigned int cmd, unsigned in
  unsigned int val;
  do {
  val = snd_cmipci_read_32(cm, cmd);
- _LOG("%x %x\n",cmd, val); 
+ _LOG("%x %x\n",cmd, val);
  } while(val == -1 && cm->chip_version <= 37);
  val&= ~flag;
  snd_cmipci_write_32(cm, cmd, val);
@@ -453,7 +453,7 @@ static void snd_cmipci_ch_reset(cmi8x38_card *cm, int ch) //reset channel ch
  do {pds_delay_10us(10); uint32_t x = snd_cmipci_read_32(cm,CM_REG_FUNCTRL0);} while(!(snd_cmipci_read_32(cm,CM_REG_FUNCTRL0)&reset));
  snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, adcch&(~reset));
  do {pds_delay_10us(10);} while((snd_cmipci_read_32(cm,CM_REG_FUNCTRL0)&reset));
- pds_mdelay(5); 
+ pds_mdelay(5);
 }
 
 static int set_dac_channels(cmi8x38_card *cm, int channels)
@@ -561,7 +561,7 @@ static void cmi8x38_chip_init(struct cmi8x38_card *cm)
  mpxplay_debugf(CMI_DEBUG_OUTPUT, "FUNCTRL1: %x",  snd_cmipci_read_32(cm, CM_REG_FUNCTRL1));
  mpxplay_debugf(CMI_DEBUG_OUTPUT, "LEGCCTRL: %x",  snd_cmipci_read_32(cm, CM_REG_LEGACY_CTRL));
  mpxplay_debugf(CMI_DEBUG_OUTPUT, "MISCCTRL: %x",  snd_cmipci_read_32(cm, CM_REG_MISC_CTRL));
- 
+
  if(cm->chip_version <= 37)
   pcibios_WriteConfig_Dword(cm->pci_dev, 0x40, 0); //disable DMA slave
 
@@ -606,7 +606,7 @@ static void cmi8x38_chip_init(struct cmi8x38_card *cm)
  mpxplay_debugf(CMI_DEBUG_OUTPUT, "FUNCTRL1: %x",  snd_cmipci_read_32(cm, CM_REG_FUNCTRL1));
  mpxplay_debugf(CMI_DEBUG_OUTPUT, "LEGCCTRL: %x",  snd_cmipci_read_32(cm, CM_REG_LEGACY_CTRL));
  mpxplay_debugf(CMI_DEBUG_OUTPUT, "MISCCTRL: %x",  snd_cmipci_read_32(cm, CM_REG_MISC_CTRL));
- 
+
 }
 
 static void cmi8x38_chip_close(struct cmi8x38_card *cm)
@@ -841,20 +841,20 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
  mpxplay_debugf(CMI_DEBUG_OUTPUT, "FUNCTRL1: %x",  snd_cmipci_read_32(card, CM_REG_FUNCTRL1));
  mpxplay_debugf(CMI_DEBUG_OUTPUT, "LEGCCTRL: %x",  snd_cmipci_read_32(card, CM_REG_LEGACY_CTRL));
  mpxplay_debugf(CMI_DEBUG_OUTPUT, "MISCCTRL: %x",  snd_cmipci_read_32(card, CM_REG_MISC_CTRL));
- 
+
 
  // set format
  do {
   val = snd_cmipci_read_32(card, CM_REG_CHFORMAT);
  }while(card->chip_version <= 37 && val == -1);
- 
+
  //val &= CM_ADCDACLEN_MASK;
  //val |= CM_ADCDACLEN_130; //adc sample resolution, also 00 will work (highest)
 
  val &= ~CM_CH0FMT_MASK;
  val |= card->fmt << CM_CH0FMT_SHIFT;
  snd_cmipci_write_32m(card, CM_REG_CHFORMAT, val, 0xFFFFFF);
- pds_mdelay(10); 
+ pds_mdelay(10);
  mpxplay_debugf(CMI_DEBUG_OUTPUT, "3CHFORMAT: %x",  snd_cmipci_read_32(card, CM_REG_CHFORMAT));
  mpxplay_debugf(CMI_DEBUG_OUTPUT, "FUNCTRL0: %x",  snd_cmipci_read_32(card, CM_REG_FUNCTRL0));
  mpxplay_debugf(CMI_DEBUG_OUTPUT, "FUNCTRL1: %x",  snd_cmipci_read_32(card, CM_REG_FUNCTRL1));
@@ -1013,20 +1013,6 @@ static aucards_allmixerchan_s cmi8x38_mixerset[]={
  NULL
 };
 
-static void cmi8x38_mpu401_write (struct mpxplay_audioout_info_s *aui, unsigned int idx, uint8_t data)
-{
-  if (idx == 0) {
-    int timeout = 10000; // 100ms
-    do {
-      uint8_t st = inp(aui->mpu401_port+1);
-      if (!(st & 0x40)) break;
-      // still full
-      pds_delay_10us(1);
-    } while (--timeout);
-  }
-  outp(aui->mpu401_port+idx, data);
-}
-
 static uint8_t cmi8x38_mpu401_read (struct mpxplay_audioout_info_s *aui, unsigned int idx)
 {
   struct cmi8x38_card *card=aui->card_private_data;
@@ -1072,7 +1058,7 @@ one_sndcard_info CMI8X38_sndcard_info={
 
  &ioport_fm_write,
  &ioport_fm_read,
- &cmi8x38_mpu401_write,
+ &ioport_mpu401_write_when_ready,
  &cmi8x38_mpu401_read,
 };
 
