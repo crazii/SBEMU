@@ -6,7 +6,7 @@
 
 static BOOL IRQGUARD_Installed;
 static uint32_t IRQGUARD_DOSMEM;
-static DPMI_ISR_HANDLE IRQGUARD_Handle; //big structure not needed for now, but maybe for future use.
+static DPMI_ISR_HANDLE IRQGUARD_Handle;
 static uint8_t IRQGUARD_IRQ = 0xFF;
 #define IRQGUARD_BYTE_LOC 4
 

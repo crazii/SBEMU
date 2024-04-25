@@ -592,7 +592,7 @@ uint16_t DPMI_InstallRealModeISR(uint8_t i, void(*ISR_RM)(void), DPMI_REG* RMReg
     {
         uint32_t codesize = (uintptr_t)&DPMI_RMISR_ChainedWrapperEnd - (uintptr_t)&DPMI_RMISR_ChainedWrapper;
         const uint32_t extra_size = 11;  //+target + chained next (both real mode far ptr) + irqunmask + irq
-        handle->chainedDOSMem = DPMI_HighMalloc((codesize + extra_size + 15)>>4, FALSE);
+        handle->chainedDOSMem = DPMI_HighMalloc((codesize + extra_size + 15)>>4, TRUE);
         if(handle->chainedDOSMem == 0)
         {
             _go32_dpmi_free_real_mode_callback(&go32pa_rm);
