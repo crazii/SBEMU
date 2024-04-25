@@ -26,7 +26,7 @@
 #include <sys/exceptn.h>
 extern unsigned long __djgpp_selector_limit;
 
-//the djgpp disable/enable uses CLI/STI, change it to hdpmi std method.
+//the djgpp disable/enable uses CLI/STI, change it to dpmi std method.
 #define disable __dpmi_get_and_disable_virtual_interrupt_state
 #define enable __dpmi_get_and_enable_virtual_interrupt_state
 
@@ -172,7 +172,7 @@ unsigned long pds_dpmi_map_physical_memory(unsigned long phys_addr,unsigned long
 
  if(i < PHYSICAL_MAP_COUNT && __dpmi_physical_address_mapping(&info) == 0)
  {
-    if(info.address < base)
+    if(info.address < base && 0) //not needed, limit will be expanded for the overflow
     {
         __dpmi_free_physical_address_mapping(&info);
         info.address = base + limit + 1;
@@ -191,12 +191,16 @@ unsigned long pds_dpmi_map_physical_memory(unsigned long phys_addr,unsigned long
         }
         info.size = 0;
     }
+    else
+        info.size = info.address;
+
     info.address -= base;
     physicalmaps[i] = info;
     unsigned long newlimit = info.address + memsize - 1;
     newlimit = ((newlimit+1+0xFFF)&~0xFFF)-1;//__dpmi_set_segment_limit need page aligned
     int intr = disable();
     __dpmi_set_segment_limit(_my_ds(), max(limit, newlimit));
+    __dpmi_set_segment_limit(_my_cs(), max(limit, newlimit));
     __dpmi_set_segment_limit(__djgpp_ds_alias, max(limit, newlimit));
     __djgpp_selector_limit = max(limit, newlimit);
     if (intr) enable();
@@ -205,21 +209,26 @@ unsigned long pds_dpmi_map_physical_memory(unsigned long phys_addr,unsigned long
  return 0;
 }
 
-void pds_dpmi_unmap_physycal_memory(unsigned long linear_addr)
+void pds_dpmi_unmap_physycal_memory(unsigned long offset32)
 {
  int i = 0;
  for(; i < PHYSICAL_MAP_COUNT; ++i)
  {
-    if(physicalmaps[i].handle != 0 && physicalmaps[i].address == linear_addr)
+    if(physicalmaps[i].address == offset32)
         break;
  }
  if(i >= PHYSICAL_MAP_COUNT)
     return;
 if(physicalmaps[i].size != 0)
+{
+    physicalmaps[i].address = physicalmaps[i].size;
     __dpmi_free_physical_address_mapping(&physicalmaps[i]);
+}
 else
     __dpmi_free_memory(physicalmaps[i].handle);
  physicalmaps[i].handle = 0;
+ physicalmaps[i].address = 0;
+ physicalmaps[i].size = 0;
 }
 
 //copied from USBDDOS
@@ -298,36 +307,44 @@ int pds_xms_free(unsigned short handle)
 int pds_dpmi_xms_allocmem(xmsmem_t * mem,unsigned int size)
 {
     unsigned long addr;
-    size = (size+0xFFF)&~0xFFF; //align to 4K
+    size = ((size+0xFFF)&~0xFFF) + 4096; //align to 4K
     if( (mem->xms=pds_xms_alloc(size/1024, &addr)) )
     {
+        addr = ((addr+0xFFF)&~0xFFF);
+
         unsigned long base = 0;
         unsigned long limit = __dpmi_get_segment_limit(_my_ds());
         __dpmi_get_segment_base_address(_my_ds(), &base);
-        
         __dpmi_meminfo info = {0, size, addr};
         mem->remap = 0;
         do {
-            if( __dpmi_physical_address_mapping(&info) == 0)
+            if( __dpmi_physical_address_mapping(&info) == 0 )
             {
-                if(info.address < base)
+                if(info.address < base && 0) //not needed, limit will be expanded for the overflow
                 {
-                    printf("DPMI remap base address\n");
+                    printf("DPMI remap base address %x\n", addr);
                     __dpmi_free_physical_address_mapping(&info);
-                    info.address = base + limit + 1;
-                    if(__dpmi_allocate_linear_memory(&info, 0) != 0)//TODO: handle error
+                    //info.address = base + limit + 1;
+                    info.address = 0;
+                    info.size = size;
+                    if(__dpmi_allocate_linear_memory(&info, 0) != 0)
                     {
                         printf("DPMI Failed allocate linear memory.\n");
                         break;
                     }
                     __dpmi_meminfo remap = info;
                     remap.address = 0;
-                    remap.size = size/4096;
+                    remap.size /= 4096;
                     if(__dpmi_map_device_in_memory_block(&remap, addr) != 0)
                         break;
                     mem->remap = 1;
+                    mem->handle = info.handle;
                 }
-                mem->handle = info.handle;
+                else
+                {
+                    mem->remap = 0;
+                    mem->handle = info.address;
+                }
                 mem->physicalptr = (char*)addr;
                 mem->linearptr = (char*)(info.address - base);
                 unsigned long newlimit = info.address + size - base - 1;
@@ -335,6 +352,7 @@ int pds_dpmi_xms_allocmem(xmsmem_t * mem,unsigned int size)
                 //printf("addr: %08x, limit: %08x\n",mem->linearptr, newlimit);
                 int intr = disable();
                 __dpmi_set_segment_limit(_my_ds(), max(limit, newlimit));
+                __dpmi_set_segment_limit(_my_cs(), max(limit, newlimit));
                 __dpmi_set_segment_limit(__djgpp_ds_alias, max(limit, newlimit));
                 __djgpp_selector_limit = max(limit, newlimit);
                 if (intr) enable();
@@ -354,7 +372,7 @@ void pds_dpmi_xms_freemem(xmsmem_t * mem)
         __dpmi_free_memory(mem->handle);
     else
     {
-        __dpmi_meminfo info = {mem->handle, 0, 0};
+        __dpmi_meminfo info = {0, 0, mem->handle};
         __dpmi_free_physical_address_mapping(&info);
     }
     pds_xms_free(mem->xms);

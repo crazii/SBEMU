@@ -376,7 +376,7 @@ typedef struct rminfo{
 typedef struct xmsmem_t{
  unsigned short remap;
  unsigned short xms;
- unsigned short handle;
+ unsigned long handle;
  char *physicalptr;
  char *linearptr;
 }xmsmem_t;

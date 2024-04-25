@@ -344,8 +344,6 @@ BOOL DPMI_UnmappMemory(uint32_t mappedaddr)
     if(index == -1)
         return FALSE;
     AddressMap* map = &AddresMapTable[index];
-    if(map->Handle == 0 || map->Handle == ~0x0UL)
-        return FALSE;
     __dpmi_meminfo info;
     info.handle = map->Handle;
     info.address = map->LinearAddr;
@@ -770,7 +768,7 @@ uint16_t DPMI_UninstallISR(DPMI_ISR_HANDLE* inputp handle)
             DPMI_HighFree(handle->chainedDOSMem);
         return (uint16_t)result;
     }
-    else
+    else if(go32pa.pm_offset)
         return (uint16_t)(_go32_dpmi_free_iret_wrapper(&go32pa) | result);
 }
 
