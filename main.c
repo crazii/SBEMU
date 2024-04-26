@@ -518,11 +518,13 @@ static void MAIN_CPrintf(int color, const char* fmt, ...)
     int n = vsnprintf(buf, sizeof(buf), fmt, aptr);
     va_end(aptr);
     int crlf = strcmp(buf+n-2,"\r\n") == 0 || strcmp(buf+n-2,"\n\r") == 0;
+    int lf = !crlf && buf[n-1] == '\n';
     buf[n-2] = crlf ? '\0' : buf[n-2];
+    buf[n-1] = lf ? '\0' : buf[n-1];
     textcolor(color);
     cprintf("%s", buf); //more safe with a fmt string, incase buf contains any fmt.
     textcolor(LIGHTGRAY);
-    if(crlf) cprintf("\r\n");
+    if(crlf || lf) cprintf("\r\n");
 }
 
 static void
@@ -539,7 +541,11 @@ update_serial_debug_output()
     if (!enabled) {
         _LOG("Serial port debugging disabled.\n");
     }
+    #if MPU_DEBUG
     int err = ser_setup(MAIN_Options[OPT_MDBG].value ? SBEMU_SERIAL_TYPE_FASTDBG : SBEMU_SERIAL_TYPE_DBG, MAIN_Options[OPT_DEBUG_OUTPUT].value);
+    #else
+    int err = ser_setup(SBEMU_SERIAL_TYPE_DBG, MAIN_Options[OPT_DEBUG_OUTPUT].value);
+    #endif
     if (enabled) {
         _LOG("Serial port debugging enabled.\n");
     }
@@ -688,37 +694,37 @@ int main(int argc, char* argv[])
 
     if(MAIN_Options[OPT_ADDR].value != 0x220 && MAIN_Options[OPT_ADDR].value != 0x240)
     {
-        printf("Error: Invalid IO port address: %x.\n", MAIN_Options[OPT_ADDR].value);
+        MAIN_CPrintf(RED, "Error: Invalid IO port address: %x.\n", MAIN_Options[OPT_ADDR].value);
         return 1;
     }
     if(MAIN_Options[OPT_IRQ].value != 0x5 && MAIN_Options[OPT_IRQ].value != 0x7 && MAIN_Options[OPT_IRQ].value != 0x9)
     {
-        printf("Error: invalid IRQ: %d.\n", MAIN_Options[OPT_IRQ].value);
+        MAIN_CPrintf(RED, "Error: invalid IRQ: %d.\n", MAIN_Options[OPT_IRQ].value);
         return 1;
     }
     if(MAIN_Options[OPT_DMA].value != 0x0 && MAIN_Options[OPT_DMA].value != 0x1 && MAIN_Options[OPT_DMA].value != 0x3)
     {
-        printf("Error: invalid DMA channel.\n");
+        MAIN_CPrintf(RED, "Error: invalid DMA channel.\n");
         return 1;
     }
     if(MAIN_Options[OPT_TYPE].value <= 0 || MAIN_Options[OPT_TYPE].value > 6)
     {
-        printf("Error: invalid SB Type.\n");
+        MAIN_CPrintf(RED, "Error: invalid SB Type.\n");
         return 1;
     }
     if(MAIN_Options[OPT_OUTPUT].value != 0 && MAIN_Options[OPT_OUTPUT].value != 1)
     {
-        printf("Error: Invalid Output.\n");
+        MAIN_CPrintf(RED, "Error: Invalid Output.\n");
         return 1;
     }
     if(MAIN_Options[OPT_VOL].value < 0 || MAIN_Options[OPT_VOL].value > 9)
     {
-        printf("Error: Invalid Volume.\n");
+        MAIN_CPrintf(RED, "Error: Invalid Volume.\n");
         return 1;
     }
     if(MAIN_Options[OPT_RATE].value < 4000 || MAIN_Options[OPT_RATE].value > 192000)
     {
-        printf("Error: Invalid Sample rate.\n");
+        MAIN_CPrintf(RED, "Error: Invalid Sample rate.\n");
         return 1;
     }
     if(MAIN_Options[OPT_TYPE].value != 6)
@@ -794,7 +800,7 @@ int main(int argc, char* argv[])
         aui.card_irq = pcibios_AssignIRQ(aui.card_pci_dev);
         if(aui.card_irq == 0xFF)
         {
-            printf("Failed to assign a valid IRQ for sound card, abort.\n");
+            MAIN_CPrintf(RED, "Failed to assign a valid IRQ for sound card, abort.\n");
             return 1;
         }
         printf("Sound card IRQ assigned: ");
@@ -832,12 +838,12 @@ int main(int argc, char* argv[])
             QEMM_IODT *iodt = fm_aui.fm ? MAIN_HW_OPL3IODT : MAIN_OPL3IODT;
             if(enableRM && !(OPLRMInstalled=QEMM_Install_IOPortTrap(iodt, 4, &OPL3IOPT)))
             {
-                printf("Error: Failed installing IO port trap for QEMM.\n");
+                MAIN_CPrintf(RED, "Error: Failed installing IO port trap for QEMM.\n");
                 return 1;
             }
             if(enablePM && !(OPLPMInstalled=HDPMIPT_Install_IOPortTrap(0x388, 0x38B, iodt, 4, &OPL3IOPT_PM)))
             {
-                printf("Error: Failed installing IO port trap for HDPMI.\n");
+                MAIN_CPrintf(RED, "Error: Failed installing IO port trap for HDPMI.\n");
                 return 1;
             }
         } else {
@@ -858,12 +864,12 @@ int main(int argc, char* argv[])
         for(int i = 0; i < countof(MAIN_MPUIODT); ++i) MAIN_MPUIODT[i].port = MAIN_Options[OPT_MPUADDR].value+i;
         if(enableRM && !(MPURMInstalled=QEMM_Install_IOPortTrap(MAIN_MPUIODT, 2, &MPUIOPT)))
         {
-            printf("Error: Failed installing MPU-401 IO port trap for QEMM.\n");
+            MAIN_CPrintf(RED, "Error: Failed installing MPU-401 IO port trap for QEMM.\n");
             return 1;
         }
         if(enablePM && !(MPUPMInstalled=HDPMIPT_Install_IOPortTrap(MAIN_Options[OPT_MPUADDR].value, MAIN_Options[OPT_MPUADDR].value+1, MAIN_MPUIODT, 2, &MPUIOPT_PM)))
         {
-            printf("Error: Failed installing MPU-401 IO port trap for HDPMI.\n");
+            MAIN_CPrintf(RED, "Error: Failed installing MPU-401 IO port trap for HDPMI.\n");
             return 1;
         }
 
@@ -1022,7 +1028,7 @@ int main(int argc, char* argv[])
     || !(TSR=DPMI_TSR()))
     {
         if(!QEMMInstalledVDMA || !QEMMInstalledVIRQ || !QEMMInstalledSB)
-            printf("Error: Failed installing IO port trap for QEMM.\n");
+            MAIN_CPrintf(RED, "Error: Failed installing IO port trap for QEMM.\n");
         if(enableRM && QEMMInstalledVDMA) QEMM_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT);
         #if !MAIN_TRAP_RMPIC_ONDEMAND
         if(enableRM && QEMMInstalledVIRQ) QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
@@ -1030,7 +1036,7 @@ int main(int argc, char* argv[])
         if(enableRM && QEMMInstalledSB) QEMM_Uninstall_IOPortTrap(&MAIN_SB_IOPT);
 
         if(!HDPMIInstalledVDMA1 || !HDPMIInstalledVDMA2 || !HDPMIInstalledVDMA3 || !HDPMIInstalledVHDMA1 || !HDPMIInstalledVHDMA2 || !HDPMIInstalledVHDMA3 || !HDPMIInstalledVIRQ1 || !HDPMIInstalledVIRQ2 || !HDPMIInstalledSB)
-            printf("Error: Failed installing IO port trap for HDPMI.\n");
+            MAIN_CPrintf(RED, "Error: Failed installing IO port trap for HDPMI.\n");
         if(enablePM && HDPMIInstalledVDMA1) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT_PM1);
         if(enablePM && HDPMIInstalledVDMA2) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT_PM2);
         if(enablePM && HDPMIInstalledVDMA3) HDPMIPT_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT_PM3);
@@ -1044,19 +1050,19 @@ int main(int argc, char* argv[])
         if(enablePM && HDPMIInstalledSB) HDPMIPT_Uninstall_IOPortTrap(&MAIN_SB_IOPT_PM);
 
         if(!PM_ISR)
-            printf("Error: Failed installing sound card ISR.\n");
+            MAIN_CPrintf(RED, "Error: Failed installing sound card ISR.\n");
         if(!RM_ISR)
-            printf("Error: Failed installing sound card ISR.\n");
+            MAIN_CPrintf(RED, "Error: Failed installing sound card ISR.\n");
         #if MAIN_INSTALL_RM_ISR
         if(RM_ISR) DPMI_UninstallISR(&MAIN_IntHandleRM); //note: orders are important: reverse order of installation
         #endif
         if(PM_ISR) DPMI_UninstallISR(&MAIN_IntHandlePM);
         if(!TSR_ISR)
-            printf("Error: Failed installing TSR interrupt.\n");
+            MAIN_CPrintf(RED, "Error: Failed installing TSR interrupt.\n");
         if(TSR_ISR) DPMI_UninstallISR(&MAIN_TSRIntHandle);
 
         if(!TSR)
-            printf("Error: Failed installing TSR.\n");
+            MAIN_CPrintf(RED, "Error: Failed installing TSR.\n");
     }
     return 1;
 }
