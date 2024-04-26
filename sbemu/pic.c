@@ -59,11 +59,10 @@ uint8_t PIC_GetIRQ(void)
     //get irq mask
     outp(PIC_PORT1, PIC_READISR);
     uint16_t mask = inp(PIC_PORT1);
-    if(mask&0x4)
+    if((mask&0x4) && !(mask&0x03))
     {
         outp(PIC_PORT2, PIC_READISR);
-        mask &= ~0x04;
-        mask = (uint16_t)(inp(PIC_PORT2)<<8) | mask;
+        mask = (uint16_t)(inp(PIC_PORT2)<<8);
     }
     STIL();
     if(mask == 0)
