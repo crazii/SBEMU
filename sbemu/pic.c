@@ -23,10 +23,6 @@
 
 void PIC_SendEOIWithIRQ(uint8_t irq)
 {
-    if(PIC_GetIRQ() != irq) //not gonna happen but just incase that SMM handles a shared interrupt and we don't need send it again
-        return;             //or it's possbile that SMM only process the interrupt without sending EOI, leaving it to IVT
-                            //just make it safe
-
     if(irq == 7 || irq == 15) //check spurious irq
         return PIC_SendEOI();
     CLIS();

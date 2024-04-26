@@ -242,15 +242,16 @@ void VDMA_WriteData(int channel, uint8_t data)
     {
         uint32_t addr = VDMA_GetAddress(channel);
         int32_t index = VDMA_GetIndex(channel);
-        
+
+        uint32_t laddr = addr;        
         if(addr>1024*1024)
-            addr = DPMI_MapMemory(addr, 65536);
+            laddr = DPMI_MapMemory(addr, 65536);
 
         _LOG("dmaw: %x, %d\n", addr+index, data);
-        DPMI_CopyLinear(addr+index, DPMI_PTR2L(&data), 1);
+        DPMI_CopyLinear(laddr+index, DPMI_PTR2L(&data), 1);
 
         if(addr>1024*1024)
-            DPMI_UnmappMemory(addr);
+            DPMI_UnmappMemory(laddr);
         VDMA_SetIndexCounter(channel, index+1, VDMA_GetCounter(channel)-1);
     }
 }
