@@ -619,7 +619,10 @@ int main(int argc, char* argv[])
         {
             printf(" %-7s: %s", MAIN_Options[i].option, MAIN_Options[i].desc);
             if (i != 0) {
-                printf(", default: %x.\n", MAIN_Options[i].value);
+                if(MAIN_Options[i].setcmd&MAIN_SETCMD_BASE10)
+                    printf(", default: %d.\n", MAIN_Options[i].value);
+                else
+                    printf(", default: %x.\n", MAIN_Options[i].value);
             } else {
                 printf(".\n");
             }
