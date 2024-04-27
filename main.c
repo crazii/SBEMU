@@ -729,6 +729,13 @@ int main(int argc, char* argv[])
     }
     if(MAIN_Options[OPT_TYPE].value != 6)
         MAIN_Options[OPT_HDMA].value = MAIN_Options[OPT_DMA].value; //16 bit transfer through 8 bit dma
+    else if(MAIN_Options[OPT_HDMA].value < 5 && MAIN_Options[OPT_HDMA].value != MAIN_Options[OPT_DMA].value) //16 bit transfer through 8 bit dma
+    {
+        printf("Warning: HDMA using 8 bit channel: H=%d, "
+        "using 5/6/7 is recommended.\n"
+        "set both DMA & HDMA to %d to resolve conflicts\n", MAIN_Options[OPT_HDMA].value, MAIN_Options[OPT_DMA].value);
+        MAIN_Options[OPT_HDMA].value = MAIN_Options[OPT_DMA].value; //only one low DMA channel allowed, use same channel for hdma & low dma.
+    }
 
     DPMI_Init();
 
