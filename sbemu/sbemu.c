@@ -110,6 +110,11 @@ void SBEMU_Mixer_Write(uint16_t port, uint8_t value)
     SBEMU_MixerRegs[SBEMU_MixerRegIndex] = value;
     if(SBEMU_MixerRegIndex == SBEMU_MIXERREG_RESET)
     {
+        //special IRQ&DMA regs
+        SBEMU_MixerRegs[SBEMU_MIXERREG_INT_SETUP] = 1<<SBEMU_Indexof(SBEMU_IRQMap,countof(SBEMU_IRQMap),SBEMU_IRQ);
+        SBEMU_MixerRegs[SBEMU_MIXERREG_DMA_SETUP] = ((1<<SBEMU_DMA)|(SBEMU_HDMA?(1<<SBEMU_HDMA):0))&0xEB;
+        SBEMU_MixerRegs[SBEMU_MIXERREG_MODEFILTER] = 0xFD; //mask out stereo
+
         // Mixer Registers are documented here:
         // https://pdos.csail.mit.edu/6.828/2018/readings/hardware/SoundBlaster.pdf
 
@@ -196,8 +201,6 @@ void SBEMU_DSP_Reset(uint16_t port, uint8_t value)
     if(value == 1)
     {
         SBEMU_ResetState = SBEMU_RESET_START;
-        SBEMU_MixerRegs[SBEMU_MIXERREG_INT_SETUP] = 1<<SBEMU_Indexof(SBEMU_IRQMap,countof(SBEMU_IRQMap),SBEMU_IRQ);
-        SBEMU_MixerRegs[SBEMU_MIXERREG_DMA_SETUP] = ((1<<SBEMU_DMA)|(SBEMU_HDMA?(1<<SBEMU_HDMA):0))&0xEB;
         SBEMU_MixerRegs[SBEMU_MIXERREG_MODEFILTER] = 0xFD; //mask out stereo
         SBEMU_MixerRegIndex = 0;
         SBEMU_DSPCMD = SBEMU_DSPCMD_INVALID;
