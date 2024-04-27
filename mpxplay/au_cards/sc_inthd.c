@@ -805,8 +805,10 @@ static struct hda_gnode *parse_output_jack(struct intelhd_card_s *card,int jack_
    if(node->wid_caps&AC_WCAP_DIGITAL)
     continue;
   }else{
+#ifndef SBEMU //it's logical conflict with the following code that set AC_PINCTL_OUT_EN
    if(!(node->pin_ctl&AC_PINCTL_OUT_EN))
     continue;
+#endif
   }
   clear_check_flags(card);
   err = parse_output_path(card, node, 0);
