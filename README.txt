@@ -68,7 +68,7 @@ If 'VALUE' is not present, then VALUE equals 1, to make it easy on simple switch
 
 /D: DMA channel of SB used, valid value: 0,1,3. usually /D1 works fine. 
     To get maximum compatibility, /D0 is not recommended becuase
-    DMA channel 0 is for legacy floppy disk controller, and should be avoided.
+    DMA channel 2 is for legacy floppy disk controller, and should be avoided.
 
 /H: 16 bit "high" DMA channel for SB16/AWE, usually 5, 6, or 7. default: /H5.
 
@@ -76,7 +76,7 @@ If 'VALUE' is not present, then VALUE equals 1, to make it easy on simple switch
     one controller (channel 0-3) uses 8 bit transfer and another (channel 4-7) is 16 bit.
     The 16 bit channels are so called "high" DMA channels.
 
-    /H4 is not vaid because DMA channel 4 is used for cascading the other DMA controller.
+    /H4 (/D4) is not vaid because DMA channel 4 is used for cascading the other DMA controller.
 
     Some game will use, or be configured to use 16 bit DMA
     transfer, on such case, this value is used. 
