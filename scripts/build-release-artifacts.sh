@@ -29,6 +29,7 @@ mkdir /tmp/mnt/sbemu
 cp "$FULL_PATH_TO_SBEMU_EXE" /tmp/mnt/sbemu
 cp "$FULL_PATH_TO_SBEMU_EXE" /tmp/SBEMU
 cp "$FULL_PATH_TO_README_TXT" /tmp/SBEMU
+cat "$FULL_PATH_TO_README_TXT"
 pushd /tmp/mnt
 mkdir jemm
 cd jemm
