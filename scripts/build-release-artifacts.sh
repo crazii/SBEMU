@@ -3,6 +3,7 @@ set -e
 PATH_TO_SBEMU_EXE=${1?param 1 missing - path to SBEMU.EXE}
 test -f "$PATH_TO_SBEMU_EXE" || (echo "File $PATH_TO_SBEMU_EXE does not exit"; exit 1)
 FULL_PATH_TO_SBEMU_EXE=$(readlink -f "$PATH_TO_SBEMU_EXE")
+FULL_PATH_TO_README_TXT=${FULL_PATH_TO_SBEMU_EXE%/*}"/README.txt"
 PATH_TO_OUTPUT_ARTIFACTS=${2?param 2 missing - path to output directory}
 test -d "$PATH_TO_OUTPUT_ARTIFACTS" || (echo "Directory $PATH_TO_OUTPUT_ARTIFACTS does not exit"; exit 1)
 FULL_PATH_TO_OUTPUT_ARTIFACTS=$(readlink -f "$PATH_TO_OUTPUT_ARTIFACTS")
@@ -27,6 +28,7 @@ sudo mount FD13LITE.img /tmp/mnt -t vfat -o loop,offset=$((63*512)),rw,uid="$(id
 mkdir /tmp/mnt/sbemu
 cp "$FULL_PATH_TO_SBEMU_EXE" /tmp/mnt/sbemu
 cp "$FULL_PATH_TO_SBEMU_EXE" /tmp/SBEMU
+cp "$FULL_PATH_TO_README_TXT" /tmp/SBEMU
 pushd /tmp/mnt
 mkdir jemm
 cd jemm
