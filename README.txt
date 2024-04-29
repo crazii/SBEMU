@@ -73,6 +73,7 @@ NOTE: after SBEMU installs, you can change them by a another run of SBEMU with n
     DMA channel 2 is for legacy floppy disk controller, and should be avoided.
 
 /H: 16 bit "high" DMA channel for SB16/AWE, usually 5, 6, or 7. default: /H5.
+    Used for SB16 emulation only.
 
     IBM ATs have 2 DMA controller cascaded, each have 4 channels, 
     one controller (channel 0-3) uses 8 bit transfer and another (channel 4-7) is 16 bit.
@@ -87,6 +88,16 @@ NOTE: after SBEMU installs, you can change them by a another run of SBEMU with n
     but it is no recommended for compatibility reason. And if H0 through H3 is set, 
     then both the /H and /D parameter will be forced to be the same value.
 
+/T: Set sound blaster emulation type (1-6), type has the same meaning as in BLASTER env.
+    1: SB 1.0/1.5
+    2: SB Pro 1 (or old)
+    3: SB 2.0
+    4: SB Pro 2 (or Pro new, with OPL3)
+    5: SB Pro 2 (MCA - microchannel)
+    6: SB16
+    NOTE:   For compatibility reason, SBEMU won't set 'Tx' in BLASTER environment variable, except T6 for /T6.
+            Some games will ignore the 'T' settings in BLASTER, especially for auto-detection. SBEMU should
+            work for such cases, because no matter what '/T' is set, the full emulation is not stripped.
 
 /OPL: Enable the OPL FM emulation, usually for music. default: 1.
 
@@ -132,9 +143,12 @@ NOTE: after SBEMU installs, you can change them by a another run of SBEMU with n
     By default SBEMU will use the number 1 card it detects, but if you want to use the 2nd one, use
     '/SCL2' to select the 2nd card for SB emulation.
 
-/SCFM: if a PCI sound card has harware FM (like YMF 7x4 or some CMI cards), /SCFM is used to choose the card for hardware FM.
+/SCFM: if a PCI sound card has hardware FM (like YMF 7x4 or some CMI cards), /SCFM is used to choose the card for hardware FM.
     Example: like /SC above, because the 1st sound card 'Intel HDA' has no HW FM, but assmue the 2nd one (CMI) has HW FM,
     then you can use /SCFM2 to use it for FM output, while keep /SC1 to use Intel HDA for the SB digital SFX emualtion.
+    NOTE: for CMI cards, this option is not effective if it is not specified in command line, 
+    i.e. you have only 1 CMI card, and by default hardware FM is not enabled unless you set /SCFM (or /SCFM1).
+    for YMF cards, hardware FM will be enabled by default.
 
 /SCMPU: like /SCFM but for MPU401 General MIDI support.
 
@@ -201,6 +215,9 @@ SET BLASTER=A220 I5 D1
 SBEMU /I7
 `
 There're IRQ in both BLASTER (I5) and commandline (/I7), then IRQ7 will be the working one.
+
+NOTE: For compatibiliy reason, SBEMU won't set T in BLASTER unless /T6 is used, if you need T in BLASTER,
+you can set it manually AFTER SBEMU installs.
 
 
 Q2: DO I need LH for SBEMU to load it into UMB?
