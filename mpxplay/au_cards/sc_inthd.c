@@ -805,10 +805,8 @@ static struct hda_gnode *parse_output_jack(struct intelhd_card_s *card,int jack_
    if(node->wid_caps&AC_WCAP_DIGITAL)
     continue;
   }else{
-#ifndef SBEMU //it's logical conflict with the following code that set AC_PINCTL_OUT_EN
    if(!(node->pin_ctl&AC_PINCTL_OUT_EN))
     continue;
-#endif
   }
   clear_check_flags(card);
   err = parse_output_path(card, node, 0);
@@ -1621,14 +1619,14 @@ static long INTELHD_getbufpos(struct mpxplay_audioout_info_s *aui)
 static void INTELHD_writeMIXER(struct mpxplay_audioout_info_s *aui,unsigned long reg, unsigned long val)
 {
  struct intelhd_card_s *card=aui->card_private_data;
- snd_hda_put_vol_mute(card,reg,0,HDA_OUTPUT,0,val);
- snd_hda_put_vol_mute(card,reg,1,HDA_OUTPUT,0,val);
+ snd_hda_put_vol_mute(card,reg,0,HDA_OUTPUT,0,val&0x7f); //force clear mute bit(7)
+ snd_hda_put_vol_mute(card,reg,1,HDA_OUTPUT,0,val&0x7f); //force clear mute bit(7)
 }
 
 static unsigned long INTELHD_readMIXER(struct mpxplay_audioout_info_s *aui,unsigned long reg)
 {
  struct intelhd_card_s *card=aui->card_private_data;
- return snd_hda_get_vol_mute(card,reg,0,HDA_OUTPUT,0);
+ return snd_hda_get_vol_mute(card,reg,0,HDA_OUTPUT,0)&0x7f; //force clear mute bit(7)
 }
 
 #ifdef SBEMU
