@@ -6,11 +6,11 @@ Drivers: Add support for ICH5/AD1980 sound output, by thp (Thomas Perl).
 CD-Audio mixer support, by thp (Thomas Perl).
 Runtime debugging over serial port, by thp (Thomas Perl).
 Text-mode UI: Nice display of sound card name, and highlight important messsge with color, by thp (Thomas Perl).
-Add PIO support to Intel HDA, by jiyunomegami.
+Drivers: Add PIO support to Intel HDA, by jiyunomegami.
 Drivers: Ensoniq ES1371 supported.
 MPU-401 UART emulation with serial MIDI output, by jiyunomegami.
 Drivers: C-Media CMI 8338/8738 supported, by crazii & jiyunomegami.
-Expermimental: IRQ assignment if intial PCI sound card IRQ is invalid or above 15.
+Expermimental: IRQ assignment if PCI sound card IRQ is invalid or above 15.
 Drivers: YAMAHA YMF supported, by jiyunomegami.
 PCM resampling improvements and fix low-frequency interpolation (Skyroads SFX).
 HDPMI: PCI IRQ client bypass, send to SBEMU/BIOS directly and hide from games - fix freeze for DOOM. Thanks to veelstekel for testing.
@@ -25,12 +25,12 @@ Drivers: new set of Linux sound card drivers ported, by jiyunomegami. New dirver
     EMU10K1X (Dell SB0200)
     X-Fi (both EMU20K1 and EMU20K2)
     OXYGEN(CMI8788) (Only tested with Asus Xonar DG)
-    ESS Allegro-1 (ES1988S/ES1989S) 
+    ESS Allegro-1 (ES1988S/ES1989S)
     Trident 4D Wave
 IRQ guard to prevent the virtual SB IRQ sending to BIOS.
 Bugfix: crash on calling HDPMI functions, and crash on error exiting.
 Bugfix: DMA address mapping using DPMI_MapMemory/DPMI_UnmapMemory that doesn't work properly and cause leaks.
-Bugfix: SB16: IRQ/DMA mixer register not inited properly, seen in TOMBRAIDER's SETUP.
+Bugfix: SB16: IRQ/DMA mixer registers not initialized properly, seen in TOMBRAIDER's SETUP.
 Add high DMA check, force /Hx=/Dx when /Hx uses low DMA for 16 bit PCM.
 Bugfix: prevent compiler optimization on MMIO reads/writes.
 Bugfix: fix for some Intel HDA chips that mutes the sound for unkown reason.

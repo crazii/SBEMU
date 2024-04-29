@@ -32,6 +32,7 @@ jobs:
         run: |
           shellcheck $GITHUB_WORKSPACE/src/scripts/build-release-artifacts.sh
           cp -f $GITHUB_WORKSPACE/src/README.txt $GITHUB_WORKSPACE/src/output/
+          cp -f $GITHUB_WORKSPACE/src/CHANGELOG.txt $GITHUB_WORKSPACE/src/output/
           $GITHUB_WORKSPACE/src/scripts/build-release-artifacts.sh $GITHUB_WORKSPACE/src/output/sbemu.exe $GITHUB_WORKSPACE/
       - name: Generate release tag
         id: tag
