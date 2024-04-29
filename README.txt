@@ -59,15 +59,17 @@ AUTOEXEX.BAT:
 The command line options format is `/OPTION[VALUE]`, there's NO space, or ':' or '='.
 If 'VALUE' is not present, then VALUE equals 1, to make it easy on simple switches.
 
+NOTE: after SBEMU installs, you can change them by a another run of SBEMU with new changed options.
+
 /?: Show a brief description on the command line options.
 
 /A: Specify the SB base IO address, usually 220 will work, i.e. /A220, default: 220
 
-/I: SB interrupt request number, valid values: /I5 or /I7. if one is not working properly due to hardware conflicts,
+/I: SB interrupt request number, valid values: /I5, /I7 /I9. if one is not working properly due to hardware conflicts,
     you may try to use another one. Default: 7
 
 /D: DMA channel of SB used, valid value: 0,1,3. usually /D1 works fine. 
-    To get maximum compatibility, /D0 is not recommended becuase
+    To get maximum compatibility, /D2 is not recommended becuase
     DMA channel 2 is for legacy floppy disk controller, and should be avoided.
 
 /H: 16 bit "high" DMA channel for SB16/AWE, usually 5, 6, or 7. default: /H5.
@@ -76,7 +78,7 @@ If 'VALUE' is not present, then VALUE equals 1, to make it easy on simple switch
     one controller (channel 0-3) uses 8 bit transfer and another (channel 4-7) is 16 bit.
     The 16 bit channels are so called "high" DMA channels.
 
-    /H4 (/D4) is not vaid because DMA channel 4 is used for cascading the other DMA controller.
+    /H4 (or /D4) is not vaid because DMA channel 4 is used for cascading the other DMA controller.
 
     Some game will use, or be configured to use 16 bit DMA
     transfer, on such case, this value is used. 
@@ -108,7 +110,7 @@ If 'VALUE' is not present, then VALUE equals 1, to make it easy on simple switch
     But you may try to set it higher if your want, or for music players.
 
 /FIXTC: Use fixed time constant. Default: /FIXTC0 (disabled)
-    Old SB hardwares cannot set sample reate directly, but using a byte of 'time-constant' to calculate smaple rate indirectly,
+    Old SB hardwares don't set sample reate directly, but using a byte of 'time-constant' to calculate smaple rate indirectly,
     when 'time-constant' is used, there's some inevitable PRECISION LOSS: if a game set sample rate to 22050 through time-constant,
     the real sample rate caclulated back from the time constant is not exactly 22050, and SBEMU will try to fix it using
     the most near and commonly used sample rates (11025/22050 etc.)
@@ -157,11 +159,12 @@ Some protected mode games refuse to work if there're too much DPMI memory, so th
 used to limit the DPMI memory. it is always recommeded to get max compatiblity for gaming.
 'HDPMI32i -r -x'
 NOTE: -r will make HDPMI resident (TSR).
+-x will limit the DPMI memory to 256M, -x1 will make it 128M, and so on.
 
 Some real mode games won't work either if XMS is too much, so it is recommended to set XMS for JEMMEX to 8192K in CONFIG.SYS.
-Some real games won't work properly if the XMS is more than 8192.
+Some real games won't work properly (i.e. no SFX) if the XMS is more than 8192.
 `DEVICE=JEMMEX.EXE X2MAX=8192`
-NOTE: this option is not tested for all rm games, you can find out if it works for you.
+NOTE: this option is not tested for all rm games, you can find out a value that works for you.
 
 
 c) Other
@@ -180,7 +183,7 @@ i.e. WOLF3D won't work properly on Thinkapd T540p with EMS enabled, use
 FAQ:
 
 
-Q1: DO I needs to set BLASTER environment variable before running SBEMU?
+Q1: Do I need to set BLASTER environment variable before running SBEMU?
 
 Usually it is not needed. After SBEMU installs, it will set the BLASTER for you.
 But if you set it before running SBEMU, SBEMU will read it and use as options,
