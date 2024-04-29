@@ -65,8 +65,8 @@ struct intelhd_card_s
  uint32_t *table_buffer;
  char *pcmout_buffer;
  long pcmout_bufsize;
- uint32_t* corb_buffer;
- uint64_t* rirb_buffer;
+ volatile uint32_t* corb_buffer;
+ volatile uint64_t* rirb_buffer;
  unsigned int  rirb_index;
  unsigned int  is_count; //input stream count in gcap
  unsigned int  os_count; //output stream count
@@ -320,6 +320,8 @@ static void azx_corb_init(struct intelhd_card_s *chip)  // setup CORB command DM
 
     if(!(chip->config_select&AUCARDSCONFIG_IHD_USE_PIO))
     {
+      azx_writew(chip, RIRBWP, RIRBWPRST);
+      azx_writew(chip, CORBWP, 0);
       chip->rirb_index = 0;
       
       azx_writew(chip, CORBRP, CORBRPRST); //reset corb read ptr
