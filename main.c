@@ -1357,7 +1357,7 @@ static void MAIN_Interrupt()
     else if(!MAIN_Options[OPT_OPL].value)
         memset(MAIN_PCM, 0, samples*sizeof(int16_t)*2); //output muted samples.
 
-    if(MAIN_Options[OPT_OPL].value)
+    if(MAIN_Options[OPT_OPL].value && !fm_aui.fm)
     {
         int16_t* pcm = digital ? MAIN_OPLPCM : MAIN_PCM;
         OPL3EMU_GenSamples(pcm, samples); //will generate samples*2 if stereo
