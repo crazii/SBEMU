@@ -730,9 +730,7 @@ int main(int argc, char* argv[])
         MAIN_CPrintf(RED, "Error: Invalid Sample rate.\n");
         return 1;
     }
-    if(MAIN_Options[OPT_TYPE].value != 6)
-        MAIN_Options[OPT_HDMA].value = MAIN_Options[OPT_DMA].value; //16 bit transfer through 8 bit dma
-    else if(MAIN_Options[OPT_HDMA].value < 5 && MAIN_Options[OPT_HDMA].value != MAIN_Options[OPT_DMA].value) //16 bit transfer through 8 bit dma
+    if(MAIN_Options[OPT_HDMA].value < 5 && MAIN_Options[OPT_HDMA].value != MAIN_Options[OPT_DMA].value) //16 bit transfer through 8 bit dma
     {
         printf("Warning: HDMA using 8 bit channel: H=%d, "
         "using 5/6/7 is recommended.\n"
@@ -907,8 +905,7 @@ int main(int argc, char* argv[])
         MAIN_Options[OPT_FIX_TC].value,
         &MAIN_SbemuExtFun);
     VDMA_Virtualize(MAIN_Options[OPT_DMA].value, TRUE);
-    if(MAIN_Options[OPT_TYPE].value == 6)
-        VDMA_Virtualize(MAIN_Options[OPT_HDMA].value, TRUE);
+    VDMA_Virtualize(MAIN_Options[OPT_HDMA].value, TRUE);
     for(int i = 0; i < countof(MAIN_SB_IODT); ++i)
         MAIN_SB_IODT[i].port += MAIN_Options[OPT_ADDR].value;
     QEMM_IODT* SB_Iodt = MAIN_Options[OPT_OPL].value ? MAIN_SB_IODT : MAIN_SB_IODT+4;
@@ -1211,7 +1208,7 @@ static void MAIN_Interrupt()
         return;
 
     BOOL digital = SBEMU_HasStarted();
-    int dma = (SBEMU_GetBits() <= 8 || MAIN_Options[OPT_TYPE].value < 6) ? SBEMU_GetDMA() : SBEMU_GetHDMA();
+    int dma = (SBEMU_GetBits() <= 8 /*|| MAIN_Options[OPT_TYPE].value < 6*/) ? SBEMU_GetDMA() : SBEMU_GetHDMA();
     int32_t DMA_Count = VDMA_GetCounter(dma); //count in bytes
     if(!digital) MAIN_LastSBRate = 0;
     if(digital)//&& DMA_Count != 0x10000) //-1(0xFFFF)+1=0

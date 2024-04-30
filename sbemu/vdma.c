@@ -103,7 +103,7 @@ uint8_t VDMA_Read(uint16_t port)
     _LOG("VDMA read: %x\n", port);
     int channel = -1;
     if(port <= VDMA_REG_CH3_COUNTER) channel = (port>>1);
-    else if(port >= VDMA_REG_CH4_ADDR && port <= VDMA_REG_CH7_COUNTER) channel = ((port-VDMA_REG_CH4_ADDR)>>2)+4;
+    else if(port >= VDMA_REG_CH4_ADDR && port <= VDMA_REG_CH7_COUNTER) channel = ((port-VDMA_REG_CH4_ADDR)/4)+4;
     else if(port>=0x80 && port <= 0x8F) channel = VDMA_PortChannelMap[port-0x80];
 
     if(VMDA_IS_CHANNEL_VIRTUALIZED(channel))
@@ -167,7 +167,10 @@ uint8_t VDMA_Read(uint16_t port)
 void VDMA_Virtualize(int channel, int enable)
 {
     if(channel >= 0 && channel <= 7)
+    {
+        _LOG("VDMA channel: %d %s\n", channel, enable ? "enabled" : "disabled");
         VDMA_VMask[channel] = enable ? 1: 0;
+    }
 }
 
 uint32_t VDMA_GetAddress(int channel)

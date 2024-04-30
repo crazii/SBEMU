@@ -230,7 +230,14 @@ Currently the PSP's still resident in low memory, but that will be optimized lat
 Q3: Some games aren't running with SBEMU, or SBEMU freezes on startup, or I ain't getting any sounds, where to report the issue?
 
 Please create issues here: https://github.com/crazii/SBEMU/issues
-It helps if you post additional details, i.e. the spec of your PC; what's the output of `SBEMU /SCL`; what's your command line options.
+It helps if you post additional details:
+    the spec of your PC
+    the DOS edition & version
+    the build/release of SBEMU, if you don't know, you can check the startup message (the first line) of running SBEMU
+    what's the output of `SBEMU /SCL`
+    what's your command line options
+    the Game title and edition & version
+
 Because SBEMU is a hobby project, there's no guarantee that the problem will be fixed immediately or very soon enough,
 and the contributors might not response in time, please be patient.
 
