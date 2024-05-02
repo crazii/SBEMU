@@ -25,12 +25,18 @@
 #include <dpmi.h>
 #include <sys/exceptn.h>
 extern unsigned long __djgpp_selector_limit;
+
+//the djgpp disable/enable uses CLI/STI, change it to dpmi std method.
+#define disable __dpmi_get_and_disable_virtual_interrupt_state
+#define enable __dpmi_get_and_enable_virtual_interrupt_state
+
 #endif
 
 //dummy symbol to keep original code unmodified
 #ifdef __DOS__
 #include <dos.h>
-void (__far *oldint08_handler)();
+//void (__far *oldint08_handler)();
+#define oldint08_handler 0
 volatile unsigned long int08counter;
 unsigned long mpxplay_signal_events;
 #endif
@@ -91,7 +97,7 @@ _go32_dpmi_seginfo old_addr = intaddr_go32[intno];
  {
     intaddr_go32[intno].pm_selector = vect.sel;
     intaddr_go32[intno].pm_offset = vect.off;
-    _go32_interrupt_stack_size = 4096; //512 minimal
+    //_go32_interrupt_stack_size = 4096; //512 minimal
     if(_go32_dpmi_allocate_iret_wrapper(&intaddr_go32[intno]) != 0)
         return;
     _go32_dpmi_set_protected_mode_interrupt_vector(intno, &intaddr_go32[intno]);
@@ -151,7 +157,7 @@ static __dpmi_meminfo physicalmaps[PHYSICAL_MAP_COUNT];
 
 unsigned long pds_dpmi_map_physical_memory(unsigned long phys_addr,unsigned long memsize)
 {
- memsize = (memsize+1023)/1024*1024;
+ memsize = (memsize+0xFFF)&~0xFFF;
  __dpmi_meminfo info = {0, memsize, phys_addr};
  int i = 0;
  for(; i < PHYSICAL_MAP_COUNT; ++i)
@@ -166,7 +172,7 @@ unsigned long pds_dpmi_map_physical_memory(unsigned long phys_addr,unsigned long
 
  if(i < PHYSICAL_MAP_COUNT && __dpmi_physical_address_mapping(&info) == 0)
  {
-    if(info.address < base)
+    if(info.address < base && 0) //not needed, limit will be expanded for the overflow
     {
         __dpmi_free_physical_address_mapping(&info);
         info.address = base + limit + 1;
@@ -177,7 +183,7 @@ unsigned long pds_dpmi_map_physical_memory(unsigned long phys_addr,unsigned long
         }
         __dpmi_meminfo remap = info;
         remap.address = 0;
-        remap.size = (memsize+4095)/4096;
+        remap.size = memsize/4096;
         if(__dpmi_map_device_in_memory_block(&remap, phys_addr) != 0)
         {
             __dpmi_free_memory(info.handle);
@@ -185,33 +191,44 @@ unsigned long pds_dpmi_map_physical_memory(unsigned long phys_addr,unsigned long
         }
         info.size = 0;
     }
+    else
+        info.size = info.address;
+
     info.address -= base;
     physicalmaps[i] = info;
     unsigned long newlimit = info.address + memsize - 1;
     newlimit = ((newlimit+1+0xFFF)&~0xFFF)-1;//__dpmi_set_segment_limit need page aligned
+    int intr = disable();
     __dpmi_set_segment_limit(_my_ds(), max(limit, newlimit));
+    __dpmi_set_segment_limit(_my_cs(), max(limit, newlimit));
     __dpmi_set_segment_limit(__djgpp_ds_alias, max(limit, newlimit));
     __djgpp_selector_limit = max(limit, newlimit);
+    if (intr) enable();
     return info.address;
  }
  return 0;
 }
 
-void pds_dpmi_unmap_physycal_memory(unsigned long linear_addr)
+void pds_dpmi_unmap_physycal_memory(unsigned long offset32)
 {
  int i = 0;
  for(; i < PHYSICAL_MAP_COUNT; ++i)
  {
-    if(physicalmaps[i].handle != 0 && physicalmaps[i].address == linear_addr)
+    if(physicalmaps[i].address == offset32)
         break;
  }
  if(i >= PHYSICAL_MAP_COUNT)
     return;
 if(physicalmaps[i].size != 0)
+{
+    physicalmaps[i].address = physicalmaps[i].size;
     __dpmi_free_physical_address_mapping(&physicalmaps[i]);
+}
 else
     __dpmi_free_memory(physicalmaps[i].handle);
  physicalmaps[i].handle = 0;
+ physicalmaps[i].address = 0;
+ physicalmaps[i].size = 0;
 }
 
 //copied from USBDDOS
@@ -232,6 +249,7 @@ static int pds_xms_init(void)
     pds_xms_regs.x.cs = pds_xms_regs.x.es;
     pds_xms_regs.x.ip = pds_xms_regs.x.bx;
     pds_xms_regs.x.ss = pds_xms_regs.x.sp = 0;
+    pds_xms_regs.x.ax = pds_xms_regs.x.dx = 0;
     return 1;
 }
 
@@ -259,6 +277,7 @@ unsigned short pds_xms_alloc(unsigned short sizeKB, unsigned long* addr)
     {
         r = pds_xms_regs;
         r.h.ah = 0x0A; //free XMS
+        r.x.dx = handle;
         __dpmi_simulate_real_mode_procedure_retf(&r);
         return 0;
     }
@@ -288,44 +307,55 @@ int pds_xms_free(unsigned short handle)
 int pds_dpmi_xms_allocmem(xmsmem_t * mem,unsigned int size)
 {
     unsigned long addr;
-    size = (size+0xFFF)&~0xFFF; //align to 4K
+    size = ((size+0xFFF)&~0xFFF) + 4096; //align to 4K
     if( (mem->xms=pds_xms_alloc(size/1024, &addr)) )
     {
+        addr = ((addr+0xFFF)&~0xFFF);
+
         unsigned long base = 0;
         unsigned long limit = __dpmi_get_segment_limit(_my_ds());
         __dpmi_get_segment_base_address(_my_ds(), &base);
-        
         __dpmi_meminfo info = {0, size, addr};
         mem->remap = 0;
         do {
-            if( __dpmi_physical_address_mapping(&info) == 0)
+            if( __dpmi_physical_address_mapping(&info) == 0 )
             {
-                if(info.address < base)
+                if(info.address < base && 0) //not needed, limit will be expanded for the overflow
                 {
-                    printf("DPMI remap base address\n");
+                    printf("DPMI remap base address %x\n", addr);
                     __dpmi_free_physical_address_mapping(&info);
-                    info.address = base + limit + 1;
-                    if(__dpmi_allocate_linear_memory(&info, 0) != 0)//TODO: handle error
+                    //info.address = base + limit + 1;
+                    info.address = 0;
+                    info.size = size;
+                    if(__dpmi_allocate_linear_memory(&info, 0) != 0)
                     {
                         printf("DPMI Failed allocate linear memory.\n");
                         break;
                     }
                     __dpmi_meminfo remap = info;
                     remap.address = 0;
-                    remap.size = size/4096;
+                    remap.size /= 4096;
                     if(__dpmi_map_device_in_memory_block(&remap, addr) != 0)
                         break;
                     mem->remap = 1;
+                    mem->handle = info.handle;
                 }
-                mem->handle = info.handle;
+                else
+                {
+                    mem->remap = 0;
+                    mem->handle = info.address;
+                }
                 mem->physicalptr = (char*)addr;
                 mem->linearptr = (char*)(info.address - base);
                 unsigned long newlimit = info.address + size - base - 1;
                 newlimit = ((newlimit+1+0xFFF)&~0xFFF) - 1;//__dpmi_set_segment_limit must be page aligned
                 //printf("addr: %08x, limit: %08x\n",mem->linearptr, newlimit);
+                int intr = disable();
                 __dpmi_set_segment_limit(_my_ds(), max(limit, newlimit));
+                __dpmi_set_segment_limit(_my_cs(), max(limit, newlimit));
                 __dpmi_set_segment_limit(__djgpp_ds_alias, max(limit, newlimit));
                 __djgpp_selector_limit = max(limit, newlimit);
+                if (intr) enable();
                 return 1;
             }
         }while(0);
@@ -342,7 +372,7 @@ void pds_dpmi_xms_freemem(xmsmem_t * mem)
         __dpmi_free_memory(mem->handle);
     else
     {
-        __dpmi_meminfo info = {mem->handle, 0, 0};
+        __dpmi_meminfo info = {0, 0, mem->handle};
         __dpmi_free_physical_address_mapping(&info);
     }
     pds_xms_free(mem->xms);
@@ -424,17 +454,20 @@ static int pds_strchknull(char *strp1,char *strp2)
  register const unsigned char *s2 = (const unsigned char *) strp2;
 
  if(!s1 || !s1[0])
+ {
   if(s2 && s2[0])
    return -1;
   else
    return 0;
+ }
 
  if(!s2 || !s2[0])
+ {
   if(s1 && s1[0])
    return 1;
   else
    return 0;
-
+ }
  return 2;
 }
 
@@ -447,14 +480,14 @@ int pds_strcmp(char *strp1,char *strp2)
  if(retcode!=2)
   return retcode;
 
-  do{
+ do{
    c1 = (unsigned char) *s1++;
    c2 = (unsigned char) *s2++;
    if(!c1)
     break;
-  }while (c1 == c2);
+ }while (c1 == c2);
 
-  return c1 - c2;
+ return c1 - c2;
 }
 
 int pds_stricmp(char *strp1,char *strp2)
@@ -577,10 +610,12 @@ int pds_strncmp(char *strp1,char *strp2,unsigned int counter)
   c1=*strp1;
   c2=*strp2;
   if(c1!=c2)
+  {
    if(c1<c2)
     return -1;
    else
     return 1;
+  }
   strp1++;strp2++;
  }while(c1 && c2 && --counter);
  return 0;
@@ -872,6 +907,21 @@ void *pds_malloc(unsigned int bufsize)
  return bufptr;
 }
 
+void *pds_zalloc(unsigned int bufsize)
+{
+ //unsigned int intsoundcntrl_save;
+ void *bufptr;
+ if(!bufsize)
+  return NULL;
+ //MPXPLAY_INTSOUNDDECODER_DISALLOW;
+ //_disable();
+ bufptr=malloc(bufsize + 8);
+ memset(bufptr, 0, bufsize+8);
+ //_enable();
+ //MPXPLAY_INTSOUNDDECODER_ALLOW;
+ return bufptr;
+}
+
 void *pds_calloc(unsigned int nitems,unsigned int itemsize)
 {
  //unsigned int intsoundcntrl_save;
@@ -1009,47 +1059,52 @@ unsigned int cv_channels_1_to_n(PCM_CV_TYPE_S *pcm_sample,unsigned int samplenum
 }
 
 //sample rates
-unsigned int mixer_speed_lq(PCM_CV_TYPE_S *pcm16,unsigned int samplenum, unsigned int channels, unsigned int samplerate, unsigned int newrate)
+unsigned int mixer_speed_lq(PCM_CV_TYPE_S* dest, unsigned int destsample, const PCM_CV_TYPE_S* source, unsigned int sourcesample, unsigned int channels, unsigned int samplerate, unsigned int newrate)
 {
  const unsigned int instep=((samplerate/newrate)<<12) | (((4096*(samplerate%newrate)-1)/(newrate-1))&0xFFF);
- const unsigned int inend=(samplenum/channels) << 12;
- int16_t *pcm,*intmp;
- unsigned long ipi;
+ const unsigned int inend=(sourcesample/channels - 1) << 12; //for n samples, interpolation n-1 steps
+ int16_t *pcm; int16_t const* intmp;
+ //unsigned long ipi;
  unsigned int inpos = 0;//(samplerate<newrate) ? instep/2 : 0;
- if(!samplenum)
+ if(!sourcesample)
   return 0;
- assert(((samplenum/channels)&0xFFF00000) == 0); //too many samples, need other approches.
- unsigned int buffcount = max(((unsigned long long)max(samplenum,512)*newrate+samplerate-1)/samplerate,max(samplenum,512))*2+32;
- int16_t* buff = (int16_t*)malloc(buffcount*sizeof(int16_t));
+ assert(((sourcesample/channels)&0xFFF00000) == 0); //too many samples, need other approches.
+ unsigned int buffcount = max(((unsigned long long)max(sourcesample,512)*newrate+samplerate-1)/samplerate,max(sourcesample,512))*2+32;
+ assert(buffcount <= destsample);
+ int16_t* buff = dest;
 
  mpxplay_debugf(MPXPLAY_DEBUG_OUTPUT, "step: %08x, end: %08x\n", instep, inend);
 
  pcm = buff;
- intmp = pcm16;
- int total = samplenum/channels;
+ intmp = source;
+ //int total = sourcesample/channels;
 
  do{
   int m1,m2;
   unsigned int ipi,ch;
-  int16_t *intmp1,*intmp2;
+  const int16_t *intmp1,*intmp2;
   ipi = inpos >> 12;
   m2=inpos&0xFFF;
   m1=4096-m2;
   ch=channels;
   ipi*=ch;
   intmp1=intmp+ipi;
-  intmp2=ipi < total-ch ? intmp1+ch : intmp1;
+  intmp2=intmp1+ch;
   do{
    *pcm++= ((*intmp1++)*m1+(*intmp2++)*m2)/4096;// >> 12; //don't use shift, signed right shift impl defined, maybe logical shift
   }while(--ch);
   inpos+=instep;
+
+  if(pcm - buff >= destsample) //check overflow
+  {
+    assert(FALSE);
+    return pcm - buff;
+  }
  }while(inpos<inend);
 
  mpxplay_debugf(MPXPLAY_DEBUG_OUTPUT, "sample count: %d\n", pcm-buff);
  //_LOG("MIXER_SPEED_LQ: %d, %d\n", pcm-buff, buffcount);
  assert(pcm-buff <= buffcount);
- memcpy(pcm16, buff, (pcm-buff)*sizeof(int16_t));
- free(buff);
  return pcm - buff;
 }
 
@@ -1148,6 +1203,54 @@ void pds_delay_10us(unsigned int ticks) //each tick is 10us
  unsigned int i,oldtsc, tsctemp, tscdif;
 
  for(i=0;i<ticks;i++){
+#ifdef DJGPP
+  int intr = 
+#endif
+  _disable();
+  outp(0x43,0x04);
+  oldtsc=inp(0x40);
+  oldtsc+=inp(0x40)<<8;
+#ifdef DJGPP
+  if(intr)
+#endif
+  {
+   _enable();
+  }
+
+  do{
+#ifdef DJGPP
+  int intr2 = 
+#endif
+   _disable();
+   outp(0x43,0x04);
+   tsctemp=inp(0x40);
+   tsctemp+=inp(0x40)<<8;
+#ifdef DJGPP
+  if(intr2)
+#endif
+  {
+    _enable();
+  }
+   if(tsctemp<=oldtsc)
+    tscdif=oldtsc-tsctemp; // handle overflow
+   else
+    tscdif=divisor+oldtsc-tsctemp;
+  }while(tscdif<12); //wait for 10us  (12/(65536*18) sec)
+ }
+#else
+ pds_mdelay((ticks+99)/100);
+ //unsigned int oldclock=clock();
+ //while(oldclock==clock()){} // 1ms not 0.01ms (10us)
+#endif
+}
+
+void pds_delay_1695ns (unsigned int ticks) //each tick is approximately 1695ns
+{
+#ifdef __DOS__
+ unsigned int divisor=(oldint08_handler)? INT08_DIVISOR_NEW:INT08_DIVISOR_DEFAULT; // ???
+ unsigned int i,oldtsc, tsctemp, tscdif;
+
+ for(i=0;i<ticks;i++){
   disable();
   outp(0x43,0x04);
   oldtsc=inp(0x40);
@@ -1164,7 +1267,7 @@ void pds_delay_10us(unsigned int ticks) //each tick is 10us
     tscdif=oldtsc-tsctemp; // handle overflow
    else
     tscdif=divisor+oldtsc-tsctemp;
-  }while(tscdif<12); //wait for 10us  (12/(65536*18) sec)
+  }while(tscdif<2); //wait for 1695.421ns  (2/(65536*18) sec) // XXX
  }
 #else
  pds_mdelay((ticks+99)/100);

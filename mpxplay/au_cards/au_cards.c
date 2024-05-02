@@ -22,6 +22,15 @@
 #include "au_cards.h"
 #include "dmairq.h"
 
+#define AU_CARDS_DEBUG 0
+
+#if AU_CARDS_DEBUG
+#include "dpmi/dbgutil.h"
+#define aucardsdbg(...) DBG_Logi(__VA_ARGS__)
+#else
+#define aucardsdbg(...)
+#endif
+
 typedef int (*aucards_writedata_t)(struct mpxplay_audioout_info_s *aui,unsigned long);
 
 static unsigned int cardinit(struct mpxplay_audioout_info_s *aui);
@@ -48,7 +57,15 @@ extern one_sndcard_info IHD_sndcard_info;
 extern one_sndcard_info VIA82XX_sndcard_info;
 extern one_sndcard_info SBLIVE_sndcard_info;
 extern one_sndcard_info CMI8X38_sndcard_info;
-extern one_sndcard_info EMU20KX_sndcard_info;
+//extern one_sndcard_info EMU20KX_sndcard_info;
+extern one_sndcard_info CTXFI_sndcard_info;
+extern one_sndcard_info EMU10K1X_sndcard_info;
+extern one_sndcard_info TRIDENT_sndcard_info;
+extern one_sndcard_info ALS4000_sndcard_info;
+extern one_sndcard_info OXYGEN_sndcard_info;
+extern one_sndcard_info ALLEGRO_sndcard_info;
+extern one_sndcard_info YMF_sndcard_info;
+extern one_sndcard_info YMFSB_sndcard_info;
 #ifndef SBEMU
 extern one_sndcard_info ESS_sndcard_info;
 extern one_sndcard_info WSS_sndcard_info;
@@ -71,14 +88,26 @@ extern one_sndcard_info WINDSOUND_sndcard_info;
 extern one_sndcard_info WINWAVOUT_sndcard_info;
 #endif
 
+extern one_sndcard_info NON_sndcard_info;
 #ifndef SBEMU
 extern one_sndcard_info WAV_sndcard_info;
-extern one_sndcard_info NON_sndcard_info;
 extern one_sndcard_info TST_sndcard_info;
 extern one_sndcard_info NUL_sndcard_info;
 #endif
 
 static one_sndcard_info *all_sndcard_info[]={
+#ifdef AU_CARDS_LINK_YMF
+ &YMFSB_sndcard_info,
+#endif
+#ifdef AU_CARDS_LINK_YMF
+ &YMF_sndcard_info,
+#endif
+#ifdef AU_CARDS_LINK_ALLEGRO
+ &ALLEGRO_sndcard_info,
+#endif
+#ifdef AU_CARDS_LINK_ALS4000
+ &ALS4000_sndcard_info,
+#endif
 #ifdef AU_CARDS_LINK_SB16
  &SB16_sndcard_info,
 #endif
@@ -99,6 +128,18 @@ static one_sndcard_info *all_sndcard_info[]={
 #endif
 #ifdef AU_CARDS_LINK_ES1371
  &ES1371_sndcard_info,
+#endif
+#ifdef AU_CARDS_LINK_CTXFI
+ &CTXFI_sndcard_info,
+#endif
+#ifdef AU_CARDS_LINK_TRIDENT
+ &TRIDENT_sndcard_info,
+#endif
+#ifdef AU_CARDS_LINK_EMU10K1X
+ &EMU10K1X_sndcard_info,
+#endif
+#ifdef AU_CARDS_LINK_OXYGEN
+ &OXYGEN_sndcard_info,
 #endif
 #ifdef AU_CARDS_LINK_ICH
  &ICH_sndcard_info,
@@ -149,23 +190,31 @@ unsigned int playcontrol,outmode = OUTMODE_TYPE_AUDIO;
 unsigned int intsoundconfig=INTSOUND_NOINT08|INTSOUND_NOBUSYWAIT,intsoundcontrol;
 unsigned long allcpuusage,allcputime;
 unsigned int is_lfn_support,uselfn,iswin9x;
+unsigned char au_cards_fallback_to_null = 0;
 #endif
 
 static aucards_writedata_t aucards_writedata_func;
 
-void AU_init(struct mpxplay_audioout_info_s *aui)
+void AU_init(struct mpxplay_audioout_info_s *aui,struct mpxplay_audioout_info_s *fm_aui,struct mpxplay_audioout_info_s *mpu401_aui)
 {
+ struct mpxplay_audioout_info_s initaui;
+ struct mpxplay_audioout_info_s detectedaui;
  unsigned int error_code = MPXERROR_SNDCARD;
  one_sndcard_info **asip;
  char cardselectname[32]="";
  char sout[100];
 
+ fm_aui->fm = 0;
+ mpu401_aui->mpu401 = 0;
+ detectedaui.pcm = 0;
  aui->card_dmasize=aui->card_dma_buffer_size=MDma_get_max_pcmoutbufsize(aui,65535,4608,2,0);
+ initaui = *aui;
 
 #ifndef MPXPLAY_GUI_CONSOLE
 auinit_retry:
 #endif
 
+#ifndef SBEMU
  if(aui->card_selectname){
   pds_strncpy(cardselectname,aui->card_selectname,sizeof(cardselectname)-1);
   cardselectname[sizeof(cardselectname)-1]=0;
@@ -173,7 +222,6 @@ auinit_retry:
   if(pds_stricmp(cardselectname,"AUTO")==0)
    cardselectname[0]=0;
  }
-
  if(cardselectname[0]){
   asip=&all_sndcard_info[0];
   aui->card_handler=*asip;
@@ -229,7 +277,10 @@ auinit_retry:
     goto err_out_auinit;
    }
   }
- }else{
+ }else
+#endif
+ {
+#ifndef SBEMU
   // init/search card(s) via environment variable
   if(!(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_TESTCARD)){
    asip=&all_sndcard_info[0];
@@ -265,8 +316,8 @@ auinit_retry:
    }
 #endif
   }
-
-  // autodetect sound card(s) (on brutal force way)
+#endif
+  // autodetect sound card(s) (by brute force)
   if(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_TESTCARD)  // -sct
    pds_textdisplay_printf("Autodetecting/testing available outputs/soundcards, please wait...");
 
@@ -275,9 +326,11 @@ auinit_retry:
    asip=&all_sndcard_info[0];
    aui->card_handler=*asip;
 #ifdef SBEMU
-   aui->card_test_index = 1;
+   initaui.card_test_index = aui->card_test_index = 1;
 #endif
    do{
+    aui->pcm = 1;
+    aui->fm = aui->mpu401 = 0;
     if(aui->card_handler->card_detect){
      if(!(aui->card_handler->infobits&SNDCARD_SELECT_ONLY)
 #ifndef MPXPLAY_WIN32
@@ -285,24 +338,67 @@ auinit_retry:
 #endif
      ){
       if(carddetect(aui,0)){
-       if(!(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_TESTCARD)
+        aucardsdbg("detected %d (want %d)\n", aui->card_test_index, aui->card_select_index);
 #ifdef SBEMU
- && (aui->card_select_index == 0 || aui->card_select_index == aui->card_test_index)
+        if (!(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_TESTCARD)) {
+          // Disable HW FM/MPU if another card was selected
+          if (!aui->card_select_index_fm && !(!aui->card_select_index || aui->card_select_index == aui->card_test_index)) {
+            aucardsdbg("disabling fm\n");
+            aui->fm_port = 0;
+            aui->fm = 0;
+          }
+          if (!aui->card_select_index_mpu401 && !(!aui->card_select_index || aui->card_select_index == aui->card_test_index)) {
+            aucardsdbg("disabling mpu401\n");
+            aui->mpu401_port = 0;
+            aui->mpu401 = 0;
+          }
+          if (aui->fm) {
+            if (!aui->card_select_index_fm || aui->card_select_index_fm == aui->card_test_index) {
+              *fm_aui = *aui;
+            }
+          }
+          if (aui->mpu401) {
+            if (!aui->card_select_index_mpu401 || aui->card_select_index_mpu401 == aui->card_test_index) {
+              *mpu401_aui = *aui;
+            }
+          }
+          if (!aui->card_select_index || aui->card_select_index == aui->card_test_index) {
+            detectedaui = *aui;
+            if (!aui->card_select_index_fm && !aui->card_select_index_mpu401) {
+              // no other cards to find
+              break;
+            }
+            if (aui->pcm && fm_aui->fm && mpu401_aui->mpu401)  {
+              // found all other cards
+              break;
+            }
+          }
+        }
+#else
+        if(!(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_TESTCARD))
+          break;
 #endif
-)
-        break;
+
+        aucardsdbg("%d: pcm: %d  fm: %d  mpu401: %d\n", aui->card_test_index, aui->pcm, aui->fm, aui->mpu401);
+        if (!(aui->pcm || aui->fm || aui->mpu401) || (!aui->fm && !aui->mpu401 && (aui->card_test_index > aui->card_select_index))) {
+          aucardsdbg("closing %d\n", aui->card_test_index);
+          if (aui->card_handler->card_close)
+            aui->card_handler->card_close(aui);
+          aui->card_private_data = NULL;
+        }
 #ifdef SBEMU
-        ++aui->card_test_index;
+        ++initaui.card_test_index;
 #endif
-       if(aui->card_handler->card_close)
-        aui->card_handler->card_close(aui);
-       aui->card_private_data=NULL;
       }
      }
     }
     asip++;
+    *aui = initaui;
     aui->card_handler=*asip;
    }while(aui->card_handler);
+   if (detectedaui.pcm) {
+    *aui = detectedaui;
+   }
   }
 
 #ifdef MPXPLAY_LINK_DLLLOAD
@@ -338,11 +434,28 @@ auinit_retry:
   if(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_TESTCARD){
    pds_textdisplay_printf("Autodetecting finished... Exiting...");
    error_code = MPXERROR_UNDEFINED;
+#ifdef SBEMU
+   return;
+#else
    goto err_out_auinit;
+#endif
   }
   if(!aui->card_handler && !(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_SILENT)){
-   pds_textdisplay_printf("No supported soundcard found!");
-   goto err_out_auinit;
+#ifdef SBEMU
+   if (au_cards_fallback_to_null) {
+    static one_sndcard_info *no_sndcard_info[]={&NON_sndcard_info};
+    asip=&no_sndcard_info[0];
+    aui->card_handler=*asip;
+    aui->card_test_index = 1;
+    carddetect(aui,0);
+    pds_textdisplay_printf("Using NULL driver");
+   } else {
+#endif
+    pds_textdisplay_printf("No supported soundcard found!");
+    goto err_out_auinit;
+#ifdef SBEMU
+   }
+#endif
   }
  }
 
@@ -371,7 +484,8 @@ auinit_retry:
  aui->freq_card=aui->chan_card=aui->bits_card=0;
  return;
 
-err_out_auinit:
+err_out_auinit:;
+#ifndef SBEMU
 #ifdef MPXPLAY_GUI_CONSOLE
  mpxplay_close_program(error_code);
 #else
@@ -380,6 +494,7 @@ err_out_auinit:
    aui->card_selectname = "NUL";
    goto auinit_retry;
  }
+#endif
 #endif
 }
 
@@ -405,15 +520,24 @@ jump_back:
   aui->bits_card=16;
   aui->bytespersample_card=(aui->bits_card+7)/8;
  }
+ aui->card_irq=0xff;
+#ifndef SBEMU
  aui->card_port=aui->card_type=0xffff;
- aui->card_irq=aui->card_isa_dma=aui->card_isa_hidma=0xff;
+ aui->card_isa_dma=aui->card_isa_hidma=0xff;
  aui->freq_card=44100;
+#else
+ aui->freq_card=22050;
+#endif
  aui->chan_card=2;
 
  if(aui->card_handler->card_detect){
   if(aui->card_handler->card_detect(aui))
    ok=1;
   else{
+   if (aui->fm || aui->mpu401) {
+     au_cards_fallback_to_null = 1;
+   }
+   aui->pcm = 0;
    if(!retry)
     return 0;
    funcbit_disable(outmode,OUTMODE_CONTROL_FILE_FLOATOUT);
@@ -459,12 +583,12 @@ void AU_ini_interrupts(struct mpxplay_audioout_info_s *aui)
   if(intsoundconfig&INTSOUND_NOBUSYWAIT){
     aucards_writedata_func = &aucards_writedata_nowait;
   }
-  #endif 
+  #endif
 }
 
 void AU_del_interrupts(struct mpxplay_audioout_info_s *aui)
 {
- AU_close(aui);
+ AU_close(aui, NULL, NULL);
 #ifndef __DOS__
  mpxplay_timer_deletefunc(&aucards_dma_monitor,NULL);
  #ifndef SBEMU
@@ -571,13 +695,17 @@ void AU_resume_decoding(struct mpxplay_audioout_info_s *aui)
 }
 #endif
 
-void AU_close(struct mpxplay_audioout_info_s *aui)
+void AU_close(struct mpxplay_audioout_info_s *aui,struct mpxplay_audioout_info_s *fm_aui,struct mpxplay_audioout_info_s *mpu401_aui)
 {
  if(!aui)
   return;
  AU_stop(aui);
  if(aui->card_handler && aui->card_handler->card_close)
   aui->card_handler->card_close(aui);
+ if(fm_aui && fm_aui->card_handler && fm_aui->card_handler->card_close)
+  fm_aui->card_handler->card_close(fm_aui);
+ if(mpu401_aui && mpu401_aui->card_handler && mpu401_aui->card_handler->card_close)
+  mpu401_aui->card_handler->card_close(mpu401_aui);
 }
 
 void AU_pause_process(struct mpxplay_audioout_info_s *aui)

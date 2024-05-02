@@ -160,12 +160,19 @@ typedef struct au_cardconfig_v0154_s{
  #endif
  #ifdef AU_CARDS_LINK_PCI
   #define AU_CARDS_LINK_CMI8X38 1
-  #define AU_CARDS_LINK_EMU20KX 1
+  //#define AU_CARDS_LINK_EMU20KX 1
+  #define AU_CARDS_LINK_CTXFI 1
+  #define AU_CARDS_LINK_EMU10K1X 1
+  #define AU_CARDS_LINK_TRIDENT 1
+  #define AU_CARDS_LINK_ALS4000 1
+  #define AU_CARDS_LINK_OXYGEN 1
+  #define AU_CARDS_LINK_ALLEGRO 1
   #define AU_CARDS_LINK_ES1371  1
   #define AU_CARDS_LINK_ICH     1
   #define AU_CARDS_LINK_IHD     1
   #define AU_CARDS_LINK_SBLIVE  1
   #define AU_CARDS_LINK_VIA82XX 1
+  #define AU_CARDS_LINK_YMF     1
  #endif
  #ifdef AU_CARDS_LINK_WIN
   #define AU_CARDS_LINK_WINDSOUND 1
@@ -187,6 +194,7 @@ typedef struct au_cardconfig_v0154_s{
   #define AU_CARDS_LINK_IHD     1
   #define AU_CARDS_LINK_SBLIVE  1
   #define AU_CARDS_LINK_VIA82XX 1
+  #define AU_CARDS_LINK_YMF     1
  #endif
 #endif
 
@@ -226,18 +234,27 @@ typedef struct mpxplay_audioout_info_s{
 
  char *card_selectname;          // select card by name - NOT used by SBEMU
  #ifdef SBEMU
- int card_test_index;       //tmp curret test index
- int card_select_index;     //user selection via cmd line
+ int card_test_index;            //current test index
+ int card_select_index;          //user selection for main card
+ int card_select_index_fm;       //user selection for FM(OPL) card
+ int card_select_index_mpu401;   //user selection for MPU-401 card
  int card_samples_per_int;  //samples per interrupt
  struct pci_config_s* card_pci_dev;
+ uint16_t fm_port;
+ uint16_t mpu401_port;
+ unsigned int pcm: 1, fm: 1, mpu401: 1, mpu401_softread;
+ unsigned int dma_addr_bits:6, buffer_size_shift:2, period_size_shift:2;
+ void *substream_private_data;
  #endif
  struct one_sndcard_info *card_handler; // function structure of the card
  void *card_private_data;        // extra private datas can be pointed here (with malloc)
+ unsigned char  card_irq;
+#ifndef SBEMU
  unsigned short card_type;
  unsigned short card_port;
- unsigned char  card_irq;
  unsigned char  card_isa_dma;
  unsigned char  card_isa_hidma;
+#endif
 
  struct mainvars *mvp;
  struct playlist_entry_info *pei; // for encoders
@@ -268,10 +285,15 @@ typedef struct one_sndcard_info{
  void (*card_writemixer)(struct mpxplay_audioout_info_s *,unsigned long mixreg,unsigned long value);
  unsigned long (*card_readmixer)(struct mpxplay_audioout_info_s *,unsigned long mixreg);
  aucards_allmixerchan_s *card_mixerchans;
+
+ void (*card_fm_write)(struct mpxplay_audioout_info_s *aui, unsigned int idx, uint8_t data);
+ uint8_t (*card_fm_read)(struct mpxplay_audioout_info_s *aui, unsigned int idx);
+ void (*card_mpu401_write)(struct mpxplay_audioout_info_s *aui, unsigned int idx, uint8_t data);
+ uint8_t (*card_mpu401_read)(struct mpxplay_audioout_info_s *aui, unsigned int idx);
 }one_sndcard_info;
 
 //main soundcard routines
-extern void AU_init(struct mpxplay_audioout_info_s *aui);
+extern void AU_init(struct mpxplay_audioout_info_s *aui,struct mpxplay_audioout_info_s *fm_aui,struct mpxplay_audioout_info_s *mpu401_aui);
 extern void AU_ini_interrupts(struct mpxplay_audioout_info_s *);
 extern void AU_del_interrupts(struct mpxplay_audioout_info_s *aui);
 extern void AU_prestart(struct mpxplay_audioout_info_s *);
@@ -280,7 +302,7 @@ extern void AU_wait_and_stop(struct mpxplay_audioout_info_s *);
 extern void AU_stop(struct mpxplay_audioout_info_s *);
 extern void AU_suspend_decoding(struct mpxplay_audioout_info_s *aui);
 extern void AU_resume_decoding(struct mpxplay_audioout_info_s *aui);
-extern void AU_close(struct mpxplay_audioout_info_s *);
+extern void AU_close(struct mpxplay_audioout_info_s *aui,struct mpxplay_audioout_info_s *fm_aui,struct mpxplay_audioout_info_s *mpu401_aui);
 extern void AU_setrate(struct mpxplay_audioout_info_s *aui,struct mpxplay_audio_decoder_info_s *adi);
 extern void AU_setmixer_init(struct mpxplay_audioout_info_s *aui);
 extern void AU_setmixer_one(struct mpxplay_audioout_info_s *,unsigned int mixch,unsigned int setmode,int value);
@@ -292,6 +314,16 @@ extern void AU_pause_process(struct mpxplay_audioout_info_s *);
 extern unsigned int AU_cardbuf_space(struct mpxplay_audioout_info_s *aui);
 #endif
 extern int  AU_writedata(struct mpxplay_audioout_info_s *);
+
+#ifdef SBEMU
+extern unsigned char au_cards_fallback_to_null;
+extern uint8_t ioport_fm_read (struct mpxplay_audioout_info_s *aui, unsigned int idx);
+extern void ioport_fm_write (struct mpxplay_audioout_info_s *aui, unsigned int idx, uint8_t data);
+extern uint8_t ioport_mpu401_read (struct mpxplay_audioout_info_s *aui, unsigned int idx);
+extern void ioport_mpu401_write (struct mpxplay_audioout_info_s *aui, unsigned int idx, uint8_t data);
+extern void ioport_mpu401_write_when_ready (struct mpxplay_audioout_info_s *aui, unsigned int idx, uint8_t data);
+extern int ioport_detect_opl (uint16_t fmport);
+#endif
 
 #ifdef __cplusplus
 }

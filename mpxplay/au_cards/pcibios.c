@@ -347,7 +347,7 @@ void pcibios_enable_interrupt(pci_config_s* ppkey)
  pcibios_WriteConfig_Word(ppkey, PCIR_PCICMD, cmd);
 }
 
-#define USE_P32_CALL 1 //32bit protected mode call. if this doesn't work for some PCs, then the final solution should be programming the interrupt router.
+#define USE_P32_CALL 0 //32bit protected mode call. if this doesn't work for some PCs, then the final solution should be programming the interrupt router.
 
 #pragma pack(1)
 
@@ -715,7 +715,7 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
                     if(intpin-1 == j)
                     {
                         linkedIRQ = pcibios_ReadConfig_Byte(&cfg, PCIR_INTR_LN);
-                        assert(linkedIRQ == 0xFF || ((1<<linkedIRQ)&&table[i].intpins[j].map) != 0);
+                        assert(linkedIRQ == 0xFF || ((1<<linkedIRQ)&table[i].intpins[j].map) != 0);
                         if(linkedIRQ != 0xFF)
                         {
                             _LOG("Found shared IRQ: %d, pin: INT%c# on bdf %d %d %d\n", linkedIRQ, 'A'+j, cfg.bBus, cfg.bDev, cfg.bFunc);
@@ -812,8 +812,13 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
         else
         {
             _LOG("PCI_SET_INTERRUPT failed %x\n", ((r.EAX>>8)&0xFF));
-            PIC_SetIRQMask(irqmask);
+            #if 1 //try pci config space register only
+            printf("warning: set IRQ failed, set pci config space INTLINE only\n");
+            pcibios_WriteConfig_Byte(ppkey, PCIR_INTR_LN, irq);
+            #else
             irq = 0xFF;
+            #endif
+            PIC_SetIRQMask(irqmask);
         }
 
         //LEAVE_CRITICAL;
@@ -837,7 +842,7 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
             ++irq;
         }
         assert(irq > 2 && irq <= 15);
-        _LOG("warning: IRQ conflict, set pci config space intline only\n");
+        printf("warning: IRQ conflict, set pci config space INTLINE only\n");
         pcibios_WriteConfig_Byte(ppkey, PCIR_INTR_LN, irq); //only set pci config space irq, tested work in cases of usbddos, but may not work on all PCs
     }
 

@@ -1,6 +1,8 @@
+
+//reference: https://wiki.osdev.org/PIC
 #include <dos.h>
 #include "pic.h"
-//reference: https://wiki.osdev.org/PIC
+
 #include "untrapio.h"
 #define inp UntrappedIO_IN
 #define outp UntrappedIO_OUT
@@ -14,10 +16,10 @@
 
 #define PIC_READISR 0x0B    //read interrupte service register (current interrupting IRQ)
 
-//#undef CLIS
-//#undef STIL
-//#define CLIS()
-//#define STIL()
+#undef CLIS
+#undef STIL
+#define CLIS()
+#define STIL()
 
 void PIC_SendEOIWithIRQ(uint8_t irq)
 {
@@ -53,7 +55,7 @@ uint8_t PIC_GetIRQ(void)
     //get irq mask
     outp(PIC_PORT1, PIC_READISR);
     uint16_t mask = inp(PIC_PORT1);
-    if(mask&0x4)
+    if((mask&0x4) && !(mask&0x03))
     {
         outp(PIC_PORT2, PIC_READISR);
         mask = (uint16_t)(inp(PIC_PORT2)<<8);
@@ -104,7 +106,7 @@ void PIC_MaskIRQ(uint8_t irq)
 void PIC_UnmaskIRQ(uint8_t irq)
 {
     uint16_t port = PIC_DATA1;
-    CLIS();    
+    CLIS();
     if(irq >= 8)
     {
         uint8_t master = inp(port);

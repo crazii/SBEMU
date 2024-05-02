@@ -138,12 +138,14 @@ uint16_t QEMM_GetVersion(void)
          * a small ( 3 bytes ) helper proc is constructed on the fly, at 0040:00D0,
          * which is the INT 2Fh, followed by an RETF.
          */
-        asm(
+        asm volatile(
             "push ds \n\t"
+            "push ebx \n\t"
             "push $0x40 \n\t"
             "pop ds \n\t"
             "mov $0xd0, bx \n\t"
             "movl $0xcb2fcd, (bx) \n\t"
+            "pop ebx \n\t"
             "pop ds \n\t"
            );
         r.w.ax = 0x1684;

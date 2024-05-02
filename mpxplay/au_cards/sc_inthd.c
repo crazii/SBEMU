@@ -65,8 +65,8 @@ struct intelhd_card_s
  uint32_t *table_buffer;
  char *pcmout_buffer;
  long pcmout_bufsize;
- uint32_t* corb_buffer;
- uint64_t* rirb_buffer;
+ volatile uint32_t* corb_buffer;
+ volatile uint64_t* rirb_buffer;
  unsigned int  rirb_index;
  unsigned int  is_count; //input stream count in gcap
  unsigned int  os_count; //output stream count
@@ -230,7 +230,6 @@ static void azx_corb_stop(struct intelhd_card_s *chip)
 
 static void azx_switch_to_pio(struct intelhd_card_s *chip)
 {
- printf("Intel HDA: Switching to PIO.\n");
  azx_corb_stop(chip);
  chip->config_select |= AUCARDSCONFIG_IHD_USE_PIO;
  azx_writel(chip, GCTL, (azx_readl(chip, GCTL) & (~ICH6_GCTL_UREN)));
@@ -305,8 +304,46 @@ static void azx_corb_init(struct intelhd_card_s *chip)  // setup CORB command DM
       pds_delay_10us(10);
     } while (--timeout);
 
+    //check PIO mode
+    if((chip->config_select&AUCARDSCONFIG_IHD_USE_PIO))
+    {
+      int try = 8;
+      do
+      {
+        if(snd_hda_codec_read(chip, AC_NODE_ROOT,0,AC_VERB_PARAMETERS,AC_PAR_VENDOR_ID) != 0)
+          break;
+        pds_delay_10us(100);
+      }while(--try > 0);
+      if(try <= 0)
+        chip->config_select &= ~AUCARDSCONFIG_IHD_USE_PIO;
+    }
+
     if(!(chip->config_select&AUCARDSCONFIG_IHD_USE_PIO))
+    {
+      azx_writew(chip, RIRBWP, RIRBWPRST);
+      azx_writew(chip, CORBWP, 0);
+      chip->rirb_index = 0;
+      
+      azx_writew(chip, CORBRP, CORBRPRST); //reset corb read ptr
+      //confirm reset
+      int timeout = 2000;
+      do {
+        if (azx_readw(chip, CORBRP)&CORBRPRST) break;
+        pds_delay_10us(10);
+      } while (--timeout);
+      if(!timeout) mpxplay_debugf(IHD_DEBUG_OUTPUT, "reset corb rp timeout\n");
+
+      azx_writew(chip, CORBRP, 0); //set it back, spec required
+      //confirm set back
+      timeout = 2000;
+      do {
+        if ((azx_readw(chip, CORBRP)&CORBRPRST) == 0) break;
+        pds_delay_10us(10);
+      } while (--timeout);
+      if(!timeout) mpxplay_debugf(IHD_DEBUG_OUTPUT, "reset corb rp timeout2\n");
+      
       azx_corb_start(chip, 1);
+    }
   }
 }
 
@@ -409,7 +446,7 @@ static unsigned int azx_get_response(struct intelhd_card_s *chip)
     timeout = 20000; // 200000 ms
     while((azx_readw(chip, IRS) & ICH6_IRS_BUSY) && (--timeout)) pds_mdelay(10);
     mpxplay_debugf(IHD_DEBUG_OUTPUT,"PIO wait cmd response timeout2 %d", timeout); //timetout2 should not happen (always>0)
-    //resp = 0; //not sure if it is invalid
+    resp = 0; //not sure if it is invalid
   }
 
 #ifdef INTHD_CODEC_EXTRA_DELAY_US
@@ -1466,6 +1503,9 @@ static int INTELHD_adetect(struct mpxplay_audioout_info_s *aui)
   }
  }
 
+ if(!(aui->card_controlbits&AUINFOS_CARDCNTRLBIT_SILENT) && (card->config_select&AUCARDSCONFIG_IHD_USE_PIO))
+  printf("Intel HDA: PIO mode used.\n");
+
  mpxplay_debugf(IHD_DEBUG_OUTPUT,"MIXER init time: %d ms", pds_gettimem()-prevtime);
 
  return 1;
@@ -1581,14 +1621,14 @@ static long INTELHD_getbufpos(struct mpxplay_audioout_info_s *aui)
 static void INTELHD_writeMIXER(struct mpxplay_audioout_info_s *aui,unsigned long reg, unsigned long val)
 {
  struct intelhd_card_s *card=aui->card_private_data;
- snd_hda_put_vol_mute(card,reg,0,HDA_OUTPUT,0,val);
- snd_hda_put_vol_mute(card,reg,1,HDA_OUTPUT,0,val);
+ snd_hda_put_vol_mute(card,reg,0,HDA_OUTPUT,0,val&0x7f); //force clear mute bit(7)
+ snd_hda_put_vol_mute(card,reg,1,HDA_OUTPUT,0,val&0x7f); //force clear mute bit(7)
 }
 
 static unsigned long INTELHD_readMIXER(struct mpxplay_audioout_info_s *aui,unsigned long reg)
 {
  struct intelhd_card_s *card=aui->card_private_data;
- return snd_hda_get_vol_mute(card,reg,0,HDA_OUTPUT,0);
+ return snd_hda_get_vol_mute(card,reg,0,HDA_OUTPUT,0)&0x7f; //force clear mute bit(7)
 }
 
 #ifdef SBEMU

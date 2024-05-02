@@ -281,6 +281,13 @@ BOOL DPMI_TSR()
 
     DPMI_REG r = {0};
 
+    //free env seg
+    uint16_t env = DPMI_LoadW(_go32_info_block.linear_address_of_original_psp+0x2C);
+    r.w.ax = 0x4900;
+    r.w.es = env;
+    DPMI_CallRealModeINT(0x21, &r);
+    DPMI_StoreW(_go32_info_block.linear_address_of_original_psp+0x2C, 0);
+
     _LOG("Transfer buffer: %08lx, PSP: %08lx, transfer buffer size: %08lx\n", _go32_info_block.linear_address_of_transfer_buffer,
         _go32_info_block.linear_address_of_original_psp, _go32_info_block.size_of_transfer_buffer);
         
@@ -288,7 +295,9 @@ BOOL DPMI_TSR()
         - _go32_info_block.linear_address_of_original_psp
         + _go32_info_block.size_of_transfer_buffer) >> 4);
 
-    r.w.dx= 256>>4; //only psp
+    //will be totally free psp on TSR in the future (and support unloading),
+    //for now just leave it.
+    r.w.dx= 0;
     _LOG("TSR size: %d\n", r.w.dx<<4);
     r.w.ax = 0x3100;
     return DPMI_CallRealModeINT(0x21, &r) == 0; //won't return on success

@@ -15,22 +15,33 @@ Enabled and working:
  * `sc_via82`: VIA VT82C686, VT8233/37
  * `sc_sbliv`: SB Live! / Audigy
  * `sc_sbl24`: SB Audigy LS (CA0106)
+ * `sc_es1371`: Ensoniq ES1371/1373
+ * `sc_cmi`: C-Media CMI8338/8738
 
 Support compiled-in, but untested:
 
- * `sc_es1371`: Ensoniq ES1371/1373
- * `sc_cmi`: C-Media CMI8338/8738
  * `sc_via82`: VIA VT8235
 
 Source code exists, but "doesn't work yet":
 
  * `sc_sbxfi`: Creative X-Fi EMU20KX
 
+ Additional Linux drivers ported by [jiyunomegami](https://github.com/jiyunomegami)
+ * SB X-Fi (EMU20K1 & EMU20K2)
+ * YAMAHA YMF7x4
+ * ALS4000
+ * OXYGEN(CMI8788)
+ * ESS Allegro-1 (ES1988S/ES1989S)
+ * Trident 4D Wave
+
 ## Emulated modes
 
  * 8-bit and 16-bit DMA (mono, stereo, high-speed)
  * Sound Blaster 1.0, 2.0, Pro, Pro2, 16
  * OPL3 FM via [DOSBox' OPL3 FM implementation](https://www.dosbox.com/)
+ * OPL3 passthrough to Hardware FM if it's present on the PCI sound card.
+ * MPU401 UART emulation, or passthrough to PCI sound card if supported.
+
 
 ## Requirements
 
@@ -49,6 +60,9 @@ to load `QPIEMU.DLL` before starting `SBEMU`,
 so that real-mode support is enabled. If you don't load
 JEMM+QPIEMU (or QEMM), only protected mode applications
 will be supported.
+
+## README for End Users
+If your want to use SBEMU without building it, please read [README.txt](./README.txt) for setup and a list of commandline options.
 
 ## Building from source
 
@@ -85,6 +99,10 @@ If you are planning on building DJGPP from source, some additional build
 tools are needed. Refer to the `build-djgpp` README file for details.
 
 ### Installing DJGPP on DOS
+
+With the source code increasing, it's not recommended to build from DOS.
+Also the DJGPP DOS build doesn't use -O2 and -flto, beucause the GCC version is old and buggy with -O2.
+
 If building the project on DOS is needed, download the original DJGPP 
 from here: https://www.delorie.com/djgpp/zip-picker.html It has make utility too.  
 * Select `MS-DOS,OpenDOS,PC-DOS` in the `Which operating system will you be using?` drop down,

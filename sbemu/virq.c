@@ -6,11 +6,23 @@
 #include <dos.h>
 #include <string.h>
 
+static uint8_t VIRQ_Mask[2];
 static int VIRQ_Irq = -1;
 static uint8_t VIRQ_ISR[2];
 static uint8_t VIRQ_OCW[2];
 
 #define VIRQ_IS_VIRTUALIZING() (VIRQ_Irq != -1)
+
+void VIRQ_Init()
+{
+    VIRQ_Mask[0] = inp(0x4D0);
+    VIRQ_Mask[0] &= ~0x07;
+    VIRQ_Mask[0] |= 0x04; //TODO: need a way to mask slave without writing OCW of slave (messing up client's IO)
+    VIRQ_Mask[1] = inp(0x4D1); 
+
+    VIRQ_Mask[0] = ~VIRQ_Mask[0];
+    VIRQ_Mask[1] = ~VIRQ_Mask[1];
+}
 
 void VIRQ_Write(uint16_t port, uint8_t value)
 {
@@ -34,6 +46,14 @@ void VIRQ_Write(uint16_t port, uint8_t value)
         }
         return;
     }
+    else
+    {
+        if((port&0x0F) == 0x00)
+        {
+            int index = ((port==0x20) ? 0 : 1);
+            VIRQ_OCW[index] = value;
+        }
+    }
     UntrappedIO_OUT(port, value);
 }
 
@@ -55,13 +75,23 @@ uint8_t VIRQ_Read(uint16_t port)
         _LOG("VIRQR: %x 0\n", port);
         return 0;
     }
-    return UntrappedIO_IN(port);
+    else
+    {
+        uint8_t value = UntrappedIO_IN(port);
+        if((port&0x0F) == 0x00)
+        {
+            int index = ((port==0x20) ? 0 : 1);
+            if(VIRQ_OCW[index] == 0x0B)//ISR
+                value &= VIRQ_Mask[index];
+        }
+        return value;
+    } 
 }
 
 void VIRQ_Invoke(uint8_t irq, DPMI_REG* reg, BOOL VM)
 {
     _LOG("CALLINT %d\n", irq);
-    //CLIS();
+    
     int mask = PIC_GetIRQMask();
     PIC_SetIRQMask(0xFFFF);
     VIRQ_ISR[0] = VIRQ_ISR[1] = 0;
@@ -76,18 +106,10 @@ void VIRQ_Invoke(uint8_t irq, DPMI_REG* reg, BOOL VM)
     VIRQ_Irq = irq;
     if(VM) //pm/rm int method not working good yet (Miles Sound) - works after modify HDPMI.
     {
-        #if 0
-        DPMI_REG r = {0};
-        int n = PIC_IRQ2VEC(irq);
-        r.w.ip = DPMI_LoadW(n*4);
-        r.w.cs = DPMI_LoadW(n*4+2);
-        DPMI_CallRealModeIRET(&r);
-        #else
         DPMI_REG r = *reg;
         r.w.ss = r.w.sp = 0;
         r.w.flags = 0;
         DPMI_CallRealModeINT(PIC_IRQ2VEC(irq), &r); //now this works with new HDPMI
-        #endif
     }
     else
     {
@@ -100,6 +122,6 @@ void VIRQ_Invoke(uint8_t irq, DPMI_REG* reg, BOOL VM)
 
     //_LOG("CPU FLAGS: %x\n", CPU_FLAGS());
     PIC_SetIRQMask(mask);
-    //STIL();
+
     _LOG("CALLINTEND\n");
 }

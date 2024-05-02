@@ -4,7 +4,6 @@ set -e
 PATH_TO_SBEMU_EXE=${1?param 1 missing - path to SBEMU.EXE}
 test -f "$PATH_TO_SBEMU_EXE" || (echo "File $PATH_TO_SBEMU_EXE does not exit"; exit 1)
 FULL_PATH_TO_SBEMU_EXE=$(readlink -f "$PATH_TO_SBEMU_EXE")
-
 PATH_TO_RELEASE_NOTES=${2?param 2 missing - path to RELEASE_NOTES.md}
 test -f "$PATH_TO_RELEASE_NOTES" || (echo "File $PATH_TO_RELEASE_NOTES does not exit"; exit 1)
 FULL_PATH_TO_RELEASE_NOTES=$(readlink -f "$PATH_TO_RELEASE_NOTES")
@@ -22,10 +21,10 @@ grep -q "64a934585087ccd91a18c55e20ee01f5f6762be712eeaa5f456be543778f9f7e  FD13-
 echo "64a934585087ccd91a18c55e20ee01f5f6762be712eeaa5f456be543778f9f7e  FD13-LiteUSB.zip" | shasum -a 256 --check
 unzip FD13-LiteUSB.zip
 rm FD13-LiteUSB.zip
-wget https://github.com/Baron-von-Riedesel/Jemm/releases/download/v5.84pre2/JemmB_v584.zip
-echo "719dfea1fdc609c5256fee4b8ad6db6880ff7a29f0ddc5dcaaa609a87771d218  JemmB_v584.zip" | shasum -a 256 --check
-wget https://github.com/crazii/HX/releases/download/v0.1-beta3/HDPMI32i.zip
-echo "4b7fc576d6c5dfd3fe7290fd1d0c0229118d01a55c8325d487452c2d6e0c3bbd  HDPMI32i.zip" | shasum -a 256 --check
+wget https://github.com/Baron-von-Riedesel/Jemm/releases/download/v5.84/JemmB_v584.zip
+echo "80bee162c9574066112a3204af6f72666428f7c139836f4418d92aae7bfb5056  JemmB_v584.zip" | shasum -a 256 --check
+wget https://github.com/crazii/HX/releases/download/v0.1-beta4fix2/HDPMI32i.zip
+echo "69a559f02a954afa2550bf8840adfaa27dad7eeeab93a12b2642c283bf3d5bcb  HDPMI32i.zip" | shasum -a 256 --check
 wget https://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/repositories/1.3/base/ctmouse.zip
 echo "a891124cd5b13e8141778fcae718f3b2667b0a49727ce92b782ab11a8c4bb63a  ctmouse.zip" | shasum -a 256 --check
 mkdir -p /tmp/SBEMU

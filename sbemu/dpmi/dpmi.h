@@ -81,6 +81,8 @@ typedef struct //old interrupt handler info returned by install isr.
     uint32_t wrapper_offset;
     uint16_t wrapper_cs;
     uint8_t n; //INTn
+    uint8_t chained;
+    uint32_t chainedDOSMem;
 
     //internal informations
     uint32_t internal1[8];
@@ -210,13 +212,16 @@ uint16_t DPMI_CallRealModeINT(uint8_t i, DPMI_REG* reg);
 uint16_t DPMI_CallRealModeIRET(DPMI_REG* reg);
 //install interrupt service routine. ISR use normal return, no need to do IRET.
 //return 0 if succeed
-uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), DPMI_ISR_HANDLE* outputp handle);
-uint16_t DPMI_InstallRealModeISR(uint8_t i, void(*ISR_RM)(void), DPMI_REG* RMReg, DPMI_ISR_HANDLE* outputp handle);
+uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), DPMI_ISR_HANDLE* outputp handle, BOOL chained);
+uint16_t DPMI_InstallRealModeISR(uint8_t i, void(*ISR_RM)(void), DPMI_REG* RMReg, DPMI_ISR_HANDLE* outputp handle, BOOL chained);
 
 uint16_t DPMI_UninstallISR(DPMI_ISR_HANDLE* inputp handle);
 uint32_t DPMI_CallOldISR(DPMI_ISR_HANDLE* inputp handle);
 uint32_t DPMI_CallOldISRWithContext(DPMI_ISR_HANDLE* inputp handle, const DPMI_REG* regs); //do not call it with VM context (vm context cannot be restored)
 uint32_t DPMI_CallRealModeOldISR(DPMI_ISR_HANDLE* inputp handle, DPMI_REG* regs);
+
+uint16_t DPMI_InstallRealModeISR_Direct(uint8_t i, uint16_t seg, uint16_t off, DPMI_ISR_HANDLE* outputp handle, BOOL rawIVT);
+uint16_t DPMI_UninstallRealModeISR_Direct(DPMI_ISR_HANDLE* inputp handle);
 
 uint32_t DPMI_GetISR(uint8_t i, DPMI_ISR_HANDLE* outputp handle);
 
@@ -304,7 +309,7 @@ void DPMI_HighFree(uint32_t segment);
 //convert real mode far pointer to linear addr
 #define DPMI_FP2L(f32) ((((f32)>>12)&0xFFFF0)+((f32)&0xFFFF))
 //convert far pointer (seg:off) to linear
-#define DPMI_SEGOFF2L(seg, off) ((((uint32_t)((seg)&0xFFFF))<<4) + ((off)&0xFFFF))
+#define DPMI_SEGOFF2L(seg, off) ((((uint32_t)(((uint32_t)seg)&0xFFFF))<<4) + ((off)&0xFFFF))
 //convert far pointer (seg:off) to 32bit far ptr
 #define DPMI_MKFP(seg, off) ((((uint32_t)((seg)&0xFFFF))<<16) | ((off)&0xFFFF))
 

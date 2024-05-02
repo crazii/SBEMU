@@ -1,0 +1,65 @@
+1.0 beta4 (04/29/2024)
+Build: add CI/CD pipeline, build FreedDOS image and zip file, by volkertb (Volkert de Buisonjé).
+Build: Add Makefile (RHIDE project files deprecated), by thp (Thomas Perl).
+Drivers: AC97: Add support for SIS7012, by thp (Thomas Perl).
+Drivers: Add support for ICH5/AD1980 sound output, by thp (Thomas Perl).
+CD-Audio mixer support, by thp (Thomas Perl).
+Runtime debugging over serial port, by thp (Thomas Perl).
+Text-mode UI: Nice display of sound card name, and highlight important messsge with color, by thp (Thomas Perl).
+move "fix time constant for exact 11/22/44 kHz" to the option, by wbcbz7
+improve SB direct mode audio quality, by wbcbz7
+Drivers: Add PIO support to Intel HDA, by jiyunomegami.
+Drivers: Ensoniq ES1371 supported.
+MPU-401 UART emulation with serial MIDI output, by jiyunomegami.
+Drivers: C-Media CMI 8338/8738 supported, by crazii & jiyunomegami.
+Expermimental: IRQ assignment if PCI sound card IRQ is invalid or above 15.
+Drivers: YAMAHA YMF supported, by jiyunomegami.
+PCM resampling improvements and fix low-frequency interpolation (Skyroads SFX).
+HDPMI: PCI IRQ client bypass, send to SBEMU/BIOS directly and hide from games - fix freeze for DOOM. Thanks to veelstekel for testing.
+Build: enable -O2 and -flto optimizations.
+Command line: /I9 supported for IRQ9 if IRQ5/7 not working due to IRQ conflicts, by jiyunomegami.
+Command line: options support decimals, i.e. /K22050 and other arbitrary values, by jiyunomegami.
+Add /SCFM and /SCMPU for cards that have builtin FM and MPU (not enabled by default, need specify in command line), by jiyunomegami.
+Drivers: /SCFM /SCMPU for CMI cards, by jiyunomegami.
+Drivers: MMIO fix for ICH4 boards, by jiyunomegami.
+Drivers: new set of Linux sound card drivers ported, by jiyunomegami. New dirvers:
+    ALS4000
+    EMU10K1X (Dell SB0200)
+    X-Fi (both EMU20K1 and EMU20K2)
+    OXYGEN(CMI8788) (Only tested with Asus Xonar DG)
+    ESS Allegro-1 (ES1988S/ES1989S)
+    Trident 4D Wave
+IRQ guard to prevent the virtual SB IRQ sending to BIOS.
+Bugfix: crash on calling HDPMI functions, and crash on error exiting.
+Bugfix: DMA address mapping using DPMI_MapMemory/DPMI_UnmapMemory that doesn't work properly and cause leaks.
+Bugfix: SB16: IRQ/DMA mixer registers not initialized properly, seen in TOMBRAIDER's SETUP.
+Add high DMA check, force /Hx=/Dx when /Hx uses low DMA for 16 bit PCM.
+Bugfix: prevent compiler optimization on MMIO reads/writes.
+Bugfix: fix for some Intel HDA chips that mutes the sound for unkown reason.
+Add README.txt & CHANGLOG.txt, shipped with binaries in zip file.
+Compatibility: make /H option working if /T6 not set.
+Some trivial bugfixes and improvements.
+
+1.0 Beta3
+Merge commit from HDPMI: add -x[n] option to limit memory further, -x1 limit mem to 128MB, -x2 limit mem to 64MB. this may help some games that do work with large memory. - by @Baron von Riedesel.
+Remove debug message for HDPMI.
+Fix Epic Pinball sound spedup.
+Add delay to DSP command 0Fh (IRQ request) to make Dynablaster work, and potentially other games.
+Add DSP commands: 0E4h/0E8h (test read/write), 0E2h (DMA id), 045h (continue auto DMA).
+Fix /Tn bug, /t2 as SBPro, instead of SB2.0. by @jtchip
+Bugfix on VIA VT8233/8235/8237
+
+
+1.0 Beta2c:
+Add "/R" option to reset sound card driver, in case the soundcard is touched by other utilities.
+Add SB direct mode handling (non-DMA, DSP command 10h) previously requested by @Bondi. tested game: Shanghai 2 - experimental, may have noises.
+Bugfix on BLASTER env set. (seen on FreeDOS or MSDOS prior to 7.0)
+Set power states for Intel HDA, fix compatibility issues for some PCs.
+Bugfix on volume settings, disable mixer resetting on DSP resetting, make volume consistent among games and can be set properly by SB utilities.
+Hack: double the "volume" of OPL so that it sounds near to the digital volume.
+Other bugfixes that may fix functionality or improve stability.
+
+1.0 Beta2b:
+Fix SB Live/Audigy interrupt.
+Add option "/SCL" to list sound cards, use "/SC[n]" to select sound card.
+Experimental: adjust sound buffer to reduce latency. (1/8 to original).

@@ -103,7 +103,7 @@ uint8_t VDMA_Read(uint16_t port)
     _LOG("VDMA read: %x\n", port);
     int channel = -1;
     if(port <= VDMA_REG_CH3_COUNTER) channel = (port>>1);
-    else if(port >= VDMA_REG_CH4_ADDR && port <= VDMA_REG_CH7_COUNTER) channel = ((port-VDMA_REG_CH4_ADDR)>>2)+4;
+    else if(port >= VDMA_REG_CH4_ADDR && port <= VDMA_REG_CH7_COUNTER) channel = ((port-VDMA_REG_CH4_ADDR)/4)+4;
     else if(port>=0x80 && port <= 0x8F) channel = VDMA_PortChannelMap[port-0x80];
 
     if(VMDA_IS_CHANNEL_VIRTUALIZED(channel))
@@ -167,7 +167,10 @@ uint8_t VDMA_Read(uint16_t port)
 void VDMA_Virtualize(int channel, int enable)
 {
     if(channel >= 0 && channel <= 7)
+    {
+        _LOG("VDMA channel: %d %s\n", channel, enable ? "enabled" : "disabled");
         VDMA_VMask[channel] = enable ? 1: 0;
+    }
 }
 
 uint32_t VDMA_GetAddress(int channel)
@@ -242,15 +245,16 @@ void VDMA_WriteData(int channel, uint8_t data)
     {
         uint32_t addr = VDMA_GetAddress(channel);
         int32_t index = VDMA_GetIndex(channel);
-        
+
+        uint32_t laddr = addr;        
         if(addr>1024*1024)
-            addr = DPMI_MapMemory(addr, 65536);
+            laddr = DPMI_MapMemory(addr, 65536);
 
         _LOG("dmaw: %x, %d\n", addr+index, data);
-        DPMI_CopyLinear(addr+index, DPMI_PTR2L(&data), 1);
+        DPMI_CopyLinear(laddr+index, DPMI_PTR2L(&data), 1);
 
         if(addr>1024*1024)
-            DPMI_UnmappMemory(addr);
+            DPMI_UnmappMemory(laddr);
         VDMA_SetIndexCounter(channel, index+1, VDMA_GetCounter(channel)-1);
     }
 }

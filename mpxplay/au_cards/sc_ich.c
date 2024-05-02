@@ -34,6 +34,15 @@
 #include "pcibios.h"
 #include "ac97_def.h"
 
+#if MPXPLAY_USE_DEBUGF
+static int ich_irq_cnt = 0;
+#if 1 // serial debugging
+#include "dpmi/dbgutil.h"
+#undef mpxplay_debugf
+#define mpxplay_debugf(fp,...) do { DBG_Logi(__VA_ARGS__); DBG_Logi("\n"); } while (0)
+#endif
+#endif
+
 // https://www.analog.com/media/en/technical-documentation/data-sheets/AD1980.pdf
 #define AC97_VENDOR_ID1_AD 0x4144 /* 'A' 'D' */
 #define AC97_VENDOR_ID2_AD1980 0x5370 /* 'S' + 0x70 for AD1980 */
@@ -65,6 +74,8 @@
 
 #define ICH_GLOB_STAT_REG 0x30       // Global Status register (RO)
 #define ICH_GLOB_STAT_PCR 0x00000100 // Primary codec is ready for action (software must check these bits before starting the codec!)
+#define ICH_GLOB_STAT_SCR 0x00000200 // secondary (AC_SDIN1) codec ready
+#define ICH_GLOB_STAT_TCR 0x00000400 // tertiary (AC_SDIN1) codec ready
 #define ICH_GLOB_STAT_RCS 0x00008000 // read completion status
 #define ICH_SAMPLE_CAP      0x00c00000 // ICH4: sample capability bits (RO)
 #define ICH_SAMPLE_16_20  0x00400000 // ICH4: 16- and 20-bit samples
@@ -95,6 +106,7 @@ typedef struct intel_card_s
  unsigned long   baseport_codec;    // mixer baseport
  unsigned int    irq;
  unsigned char   device_type;
+ unsigned char   use_mmio:1;
  struct pci_config_s  *pci_dev;
 
  cardmem_t *dm;
@@ -119,6 +131,61 @@ static void snd_intel_measure_ac97_clock(struct mpxplay_audioout_info_s *aui);
 //-------------------------------------------------------------------------
 // low level write & read
 
+#ifdef SBEMU
+#define linux_writel(addr,value) PDS_PUTB_LE32((volatile char *)(addr),value)
+#define linux_readl(addr) PDS_GETB_LE32((volatile char *)(addr))
+#define linux_writew(addr,value) PDS_PUTB_LE16((volatile char *)(addr), value)
+#define linux_readw(addr) PDS_GETB_LE16((volatile char *)(addr))
+#define linux_writeb(addr,value) *((volatile unsigned char *)(addr))=value
+#define linux_readb(addr) PDS_GETB_8U((volatile char *)(addr))
+
+static inline void snd_intel_write_8 (struct intel_card_s *card, unsigned int reg, uint8_t data) {
+  //mpxplay_debugf(ICH_DEBUG_OUTPUT,"write8 %X %X\n", reg, data);
+  if (card->use_mmio) {
+    linux_writeb(card->baseport_bm+reg,data);
+  } else {
+    outb(card->baseport_bm+reg,data);
+  }
+}
+static inline void snd_intel_write_16 (struct intel_card_s *card, unsigned int reg, uint16_t data) {
+  //mpxplay_debugf(ICH_DEBUG_OUTPUT,"write16 %X %X\n", reg, data);
+  if (card->use_mmio) {
+    linux_writew(card->baseport_bm+reg,data);
+  } else {
+    outw(card->baseport_bm+reg,data);
+  }
+}
+static inline void snd_intel_write_32 (struct intel_card_s *card, unsigned int reg, uint32_t data) {
+  //mpxplay_debugf(ICH_DEBUG_OUTPUT,"write32 %X %X\n", reg, data);
+  if (card->use_mmio) {
+    linux_writel(card->baseport_bm+reg,data);
+  } else {
+    outl(card->baseport_bm+reg,data);
+  }
+}
+
+static inline uint8_t snd_intel_read_8 (struct intel_card_s *card, unsigned int reg) {
+  if (card->use_mmio) {
+    return linux_readb(card->baseport_bm+reg);
+  } else {
+    return inb(card->baseport_bm+reg);
+  }
+}
+static inline uint16_t snd_intel_read_16 (struct intel_card_s *card, unsigned int reg) {
+  if (card->use_mmio) {
+    return linux_readw(card->baseport_bm+reg);
+  } else {
+    return inw(card->baseport_bm+reg);
+  }
+}
+static inline uint32_t snd_intel_read_32 (struct intel_card_s *card, unsigned int reg) {
+  if (card->use_mmio) {
+    return linux_readl(card->baseport_bm+reg);
+  } else {
+    return inl(card->baseport_bm+reg);
+  }
+}
+#else
 #define snd_intel_write_8(card,reg,data)  outb(card->baseport_bm+reg,data)
 #define snd_intel_write_16(card,reg,data) outw(card->baseport_bm+reg,data)
 #define snd_intel_write_32(card,reg,data) outl(card->baseport_bm+reg,data)
@@ -126,6 +193,7 @@ static void snd_intel_measure_ac97_clock(struct mpxplay_audioout_info_s *aui);
 #define snd_intel_read_8(card,reg)  inb(card->baseport_bm+reg)
 #define snd_intel_read_16(card,reg) inw(card->baseport_bm+reg)
 #define snd_intel_read_32(card,reg) inl(card->baseport_bm+reg)
+#endif
 
 static unsigned int snd_intel_codec_ready(struct intel_card_s *card,unsigned int codec)
 {
@@ -166,7 +234,11 @@ static void snd_intel_codec_semaphore(struct intel_card_s *card,unsigned int cod
 static void snd_intel_codec_write(struct intel_card_s *card,unsigned int reg,unsigned int data)
 {
  snd_intel_codec_semaphore(card,ICH_GLOB_STAT_PCR);
- outw(card->baseport_codec+reg,data);
+ if (card->use_mmio) {
+  linux_writew(card->baseport_codec+reg,data);
+ } else {
+  outw(card->baseport_codec+reg,data);
+ }
 }
 
 static unsigned int snd_intel_codec_read(struct intel_card_s *card,unsigned int reg)
@@ -176,7 +248,10 @@ static unsigned int snd_intel_codec_read(struct intel_card_s *card,unsigned int 
 
  retry=ICH_DEFAULT_RETRY;
  do{
-  data=inw(card->baseport_codec+reg);
+  if (card->use_mmio)
+   data=linux_readw(card->baseport_codec+reg);
+  else
+   data=inw(card->baseport_codec+reg);
   if(!(snd_intel_read_32(card,ICH_GLOB_STAT_REG)&ICH_GLOB_STAT_RCS))
    break;
   pds_delay_10us(10);
@@ -437,9 +512,31 @@ static int INTELICH_adetect(struct mpxplay_audioout_info_s *aui)
 #ifdef SBEMU
  if(card->pci_dev->device_type == DEVICE_INTEL_ICH4)
  { //enable leagcy IO space, must be set before setting PCI CMD's IO space bit.
-  mpxplay_debugf(ICH_DEBUG_OUTPUT,"Eanble legacy io space for ICH4.\n");
+  mpxplay_debugf(ICH_DEBUG_OUTPUT,"Eanble legacy io space for ICH4.");
+  uint16_t cmd = pcibios_ReadConfig_Word(card->pci_dev, PCIR_PCICMD);
+  mpxplay_debugf(ICH_DEBUG_OUTPUT,"PCI COMMAND: %X", cmd);
   pcibios_WriteConfig_Byte(card->pci_dev, 0x41, 1); //IOSE:enable IO space
- }
+  pcibios_enable_memmap_set_master_all(card->pci_dev); // Enable IO
+  uint32_t bar0 = pcibios_ReadConfig_Dword(card->pci_dev, 0x10);
+  uint32_t bar1 = pcibios_ReadConfig_Dword(card->pci_dev, 0x14);
+  uint32_t bar2 = pcibios_ReadConfig_Dword(card->pci_dev, 0x18);
+  uint32_t bar3 = pcibios_ReadConfig_Dword(card->pci_dev, 0x1c);
+  mpxplay_debugf(ICH_DEBUG_OUTPUT,"PCI BARS: %X %X %X %X", bar0, bar1, bar2, bar3);
+  if (bar2 && !(bar2 & 1 == 1)) {
+    // ICH4 and Nforce
+    card->baseport_codec = pds_dpmi_map_physical_memory(bar2, 0x200);
+  } else {
+    goto try_io;
+  }
+  if (bar3 && !(bar3 & 1 == 1)) {
+    // ICH4
+    card->baseport_bm = pds_dpmi_map_physical_memory(bar3, 0x100);
+  } else {
+    goto try_io;
+  }
+  card->use_mmio = 1;
+ } else {
+ try_io:
  #endif
 
  mpxplay_debugf(ICH_DEBUG_OUTPUT,"chip init : enable PCI io and busmaster");
@@ -471,6 +568,9 @@ static int INTELICH_adetect(struct mpxplay_audioout_info_s *aui)
  #endif
  if(!card->baseport_codec)
   goto err_adetect;
+#ifdef SBEMU
+ } // ICH4
+#endif
  aui->card_irq = card->irq = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
 #ifdef SBEMU
  aui->card_pci_dev = card->pci_dev;
@@ -480,6 +580,9 @@ static int INTELICH_adetect(struct mpxplay_audioout_info_s *aui)
 
  mpxplay_debugf(ICH_DEBUG_OUTPUT,"vend_id:%4.4X dev_id:%4.4X devtype:%s bmport:%4.4X mixport:%4.4X irq:%d",
   card->pci_dev->vendor_id,card->pci_dev->device_id,ich_devnames[card->device_type],card->baseport_bm,card->baseport_codec,card->irq);
+ uint16_t ssvid = pcibios_ReadConfig_Dword(card->pci_dev, PCIR_SSVID);
+ uint16_t ssdid = pcibios_ReadConfig_Dword(card->pci_dev, PCIR_SSID);
+ mpxplay_debugf(ICH_DEBUG_OUTPUT,"subsystem %4.4X:%4.4X", ssvid, ssdid);
 
  if(!snd_intel_buffer_init(card,aui))
   goto err_adetect;
@@ -663,6 +766,9 @@ static long INTELICH_getbufpos(struct mpxplay_audioout_info_s *aui)
   pcmpos=card->period_size_bytes-pcmpos;
   bufpos=index*card->period_size_bytes+pcmpos;
 
+#if MPXPLAY_USE_DEBUGF
+  if ((ich_irq_cnt % 450) == 0) mpxplay_debugf(ICH_DEBUG_OUTPUT,"bufpos %u", bufpos);
+#endif
   if(bufpos<aui->card_dmasize){
    aui->card_dma_lastgoodpos=bufpos;
    break;
@@ -681,12 +787,14 @@ static long INTELICH_getbufpos(struct mpxplay_audioout_info_s *aui)
 static void INTELICH_writeMIXER(struct mpxplay_audioout_info_s *aui,unsigned long reg, unsigned long val)
 {
  struct intel_card_s *card=aui->card_private_data;
+ mpxplay_debugf(ICH_DEBUG_OUTPUT,"writeMIXER %X %X", reg, val);
  snd_intel_codec_write(card,reg,val);
 }
 
 static unsigned long INTELICH_readMIXER(struct mpxplay_audioout_info_s *aui,unsigned long reg)
 {
  struct intel_card_s *card=aui->card_private_data;
+ mpxplay_debugf(ICH_DEBUG_OUTPUT,"readMIXER %X", reg);
  return snd_intel_codec_read(card,reg);
 }
 
@@ -716,6 +824,11 @@ static int INTELICH_IRQRoutine(mpxplay_audioout_info_s* aui)
 
   // acknowledge the interrupt we have seen
   snd_intel_write_8(card, ICH_PO_SR_REG, status & (ICH_PO_SR_LVBCI | ICH_PO_SR_BCIS | ICH_PO_SR_FIFO));
+
+#if MPXPLAY_USE_DEBUGF
+  if ((ich_irq_cnt % 500) == 0) mpxplay_debugf(ICH_DEBUG_OUTPUT,"ichirq %u", ich_irq_cnt);
+  if (status != 0) ich_irq_cnt++;
+#endif
 
   return status != 0;
 }
