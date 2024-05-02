@@ -48,7 +48,7 @@ CONFIG.SYS:
 AUTOEXEX.BAT:
 `REM laod the QEMM QPI's port trap emulation module of JEMMEX`
 `JLOAD.EXE QPIEMU.DLL`
-`REM this will install HDPMI, the DPMI host`
+`REM this will install HDPMI, the DPMI host. -x with memory limit, check for 'Memory problem' for more details`
 `HDPMI32i -r -x`
 `REM install SBEMU with default options`
 `REM read README.txt to learn more about options`
@@ -59,7 +59,7 @@ AUTOEXEX.BAT:
 The command line options format is `/OPTION[VALUE]`, there's NO space, or ':' or '='.
 If 'VALUE' is not present, then VALUE equals 1, to make it easy on simple switches.
 
-NOTE: after SBEMU installs, you can change them by a another run of SBEMU with new changed options.
+NOTE: after SBEMU installs, you can change them by a another run of SBEMU with newly changed options.
 
 /?: Show a brief description on the command line options.
 
@@ -173,7 +173,7 @@ Some protected mode games refuse to work if there're too much DPMI memory, so th
 used to limit the DPMI memory. it is always recommeded to get max compatiblity for gaming.
 'HDPMI32i -r -x'
 NOTE: -r will make HDPMI resident (TSR).
--x will limit the DPMI memory to 256M, -x1 will make it 128M, and so on.
+-x will limit the DPMI memory to 256M, -x1 will make it 128M, -x2 to 64M, and so on.
 
 Some real mode games won't work either if XMS is too much, so it is recommended to set XMS for JEMMEX to 8192K in CONFIG.SYS.
 Some real games won't work properly (i.e. no SFX) if the XMS is more than 8192.
@@ -233,10 +233,12 @@ Please create issues here: https://github.com/crazii/SBEMU/issues
 It helps if you post additional details:
     the spec of your PC
     the DOS edition & version
+    the Game title and edition & version, and where/when the problem appears
     the build/release of SBEMU, if you don't know, you can check the startup message (the first line) of running SBEMU
     what's the output of `SBEMU /SCL`
     what's your command line options
-    the Game title and edition & version
+    have you tried other options, especially other IRQs
+    what's the result if only with HDPMI32i, and without SBEMU
 
 Because SBEMU is a hobby project, there's no guarantee that the problem will be fixed immediately or very soon enough,
 and the contributors might not response in time, please be patient.
