@@ -62,13 +62,13 @@ JEMM+QPIEMU (or QEMM), only protected mode applications
 will be supported.
 
 ## README for End Users
-If your want to use SBEMU without building it, please read [README.txt](./README.txt) for setup and a list of commandline options.
+If your want to use SBEMU without building it, please read [README.txt](./README.txt) for setup and a list of command line options.
 
 ## Building from source
 
 macOS, Linux and Windows is supported. For Windows, consider using
 WSL2 + Linux binaries. If you need to frequently debug/test on your
- local DOS, there's a makeifle.dos for you.
+ local DOS, there's a makefile.dos for you.
 
 ### Installing a cross-compiler (DJGPP)
 
@@ -101,14 +101,14 @@ tools are needed. Refer to the `build-djgpp` README file for details.
 ### Installing DJGPP on DOS
 
 With the source code increasing, it's not recommended to build from DOS.
-Also the DJGPP DOS build doesn't use -O2 and -flto, beucause the GCC version is old and buggy with -O2.
+Also the DJGPP DOS build doesn't use -O2 and -flto, because the GCC version is old and buggy with -O2.
 
 If building the project on DOS is needed, download the original DJGPP 
 from here: https://www.delorie.com/djgpp/zip-picker.html It has make utility too.  
 * Select `MS-DOS,OpenDOS,PC-DOS` in the `Which operating system will you be using?` drop down,
 * Check `C++` checkbox on `Which programming languages will you be using?`
 * Click `Tell me which files I need`
-* Unpack all the zip files into a same folder, and put it on your DOS partion (i.e. C:\DJGPP)
+* Unpack all the zip files into a same folder, and put it on your DOS partition (i.e. C:\DJGPP)
 
 [DOSLFN](http://www.adoxa.altervista.org/doslfn/) is also need to perform build.
 The PATH env needs to be set properly before building.
