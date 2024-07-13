@@ -20,11 +20,12 @@
 
 static pci_device_s allegro_devices[] = {
   {"Allegro-1",         0x125D, 0x1988, 0}, // ES1988S/ES1989S
-  {"Maestro 1",         0x125D, 0x1948, 0}, // ES1948
+  {"Allegro",           0x125D, 0x1989, 0}, // ES1988S/ES1989S
   {"Maestro 2",         0x125D, 0x1968, 0}, // ES1968
   {"Maestro 2E",        0x125D, 0x1978, 0}, // ES1978
-  {"Solo 1 Audiodrive", 0x125D, 0x1969, 0}, // ES1938/ES1946/ES1969 Solo-1
   {"Maestro-3i",        0x125D, 0x1998, 0}, // ES1983/ES1983S
+  {"Canyon3D 2 LE",     0x125D, 0x1990, 0}, // ES1990
+  {"Canyon3D 2",        0x125D, 0x1992, 0}, // ES1992
   {NULL,0,0,0}
 };
 
