@@ -4,7 +4,7 @@ name: build-and-release
 on:
   push:
     tags:
-      - v[0-9]*
+      - '**'
 
 permissions:
   contents: write
@@ -50,7 +50,7 @@ jobs:
       - name: Generate release tag
         id: tag
         run: |
-          echo "release_tag=UserBuild_$(date +"%Y.%m.%d_%H-%M")" >> $GITHUB_OUTPUT
+          echo "release_tag=Release\ ${{ github.ref_name }}" >> $GITHUB_OUTPUT
       - name: Release FreeDOS SBEMU USB image
         uses: softprops/action-gh-release@v1
         env:
