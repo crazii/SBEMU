@@ -50,7 +50,7 @@ jobs:
       - name: Generate release tag
         id: tag
         run: |
-          echo "release_tag=Release\ ${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          echo "release_tag=Release_${{ github.ref_name }}" >> $GITHUB_OUTPUT
       - name: Release FreeDOS SBEMU USB image
         uses: softprops/action-gh-release@v1
         env:
