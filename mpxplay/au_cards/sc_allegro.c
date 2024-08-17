@@ -19,7 +19,13 @@
 #include "../../drivers/maestro3/maestro3.h"
 
 static pci_device_s allegro_devices[] = {
-  {"Allegro-1", 0x125D, 0x1988, 0}, // Both ES1988S and ES1989S share this ID
+  {"Allegro-1",         0x125D, 0x1988, 0}, // ES1988S/ES1989S
+  {"Allegro",           0x125D, 0x1989, 0}, // ES1988S/ES1989S
+  {"Maestro 2",         0x125D, 0x1968, 0}, // ES1968
+  {"Maestro 2E",        0x125D, 0x1978, 0}, // ES1978
+  {"Maestro-3i",        0x125D, 0x1998, 0}, // ES1983/ES1983S
+  {"Canyon3D 2 LE",     0x125D, 0x1990, 0}, // ES1990
+  {"Canyon3D 2",        0x125D, 0x1992, 0}, // ES1992
   {NULL,0,0,0}
 };
 

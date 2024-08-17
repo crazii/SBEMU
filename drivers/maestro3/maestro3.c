@@ -1241,21 +1241,22 @@ struct ac97_initial_values {
   uint16_t value;
 };
 
+// Source: AC97 specs, https://www.alsa-project.org/files/pub/datasheets/intel/ac97r21.pdf, 6.3 Mixer Registers
 static struct ac97_initial_values ac97_initial_values[] = {
     { AC97_RESET,           0x0000 },
     { AC97_MASTER,          0x0808 },
     { AC97_HEADPHONE,       0x0808 },
     { AC97_PCM,             0x0808 },
-    { AC97_MASTER_MONO,     0x0000 },
+    { AC97_MASTER_MONO,     0x8000 },
     { AC97_PC_BEEP,         0x0000 },
-    { AC97_PHONE,           0x0008 },
-    { AC97_MIC,             0x0505 },
-    { AC97_LINE,            0x0505 },
-    { AC97_CD,              0x0505 },
-    { AC97_VIDEO,           0x0000 },
-    { AC97_AUX,             0x0000 },
+    { AC97_PHONE,           0x8008 },
+    { AC97_MIC,             0x8008 },
+    { AC97_LINE,            0x8808 },
+    { AC97_CD,              0x8808 },
+    { AC97_VIDEO,           0x8808 },
+    { AC97_AUX,             0x8808 },
     { AC97_REC_SEL,         0x0000 },
-    { AC97_REC_GAIN,        0x0B0B },
+    { AC97_REC_GAIN,        0x8000 },
     { AC97_GENERAL_PURPOSE, 0x0000 },
     //{ AC97_EXTENDED_STATUS, AC97_EA_SPDIF },
     { AC97_MASTER,          0x0707 },
