@@ -61,6 +61,9 @@ jobs:
           echo "ren dos32a.exe dos4gw.exe" >> CICD_DOS.BAT
           echo "ECHO Current BLASTER variable: %BLASTER%" >> CICD_DOS.BAT
           echo "stp32 dtmf_src.wav a32sbdg.dll" >> CICD_DOS.BAT
+          echo "ECHO %ERRORLEVEL% > EXITCODE.TXT" >> CICD_DOS.BAT
+          echo "ECHO Result exit code of test command:" >> CICD_DOS.BAT
+          echo "type EXITCODE.TXT" >> CICD_DOS.BAT
           cp -f test/run_cicd_dos.sh /usr/local/bin/
           chmod +x /usr/local/bin/run_cicd_dos.sh
           /usr/local/bin/run_cicd_dos.sh
