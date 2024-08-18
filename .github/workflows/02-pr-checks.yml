@@ -61,9 +61,9 @@ jobs:
           ls -lh /dev/kvm
           ls -lh .
           touch CICD_DOS.BAT
-          echo "JEMM386.EXE LOAD" >> CICD_DOS.BAT
+          echo "JEMM386.EXE LOAD NOVCPI" >> CICD_DOS.BAT
           echo "JLOAD QPIEMU.DLL" >> CICD_DOS.BAT
-          echo "HDPMI32i.EXE" >> CICD_DOS.BAT
+          echo "HDPMI32i.EXE -x" >> CICD_DOS.BAT
           echo "output\\sbemu" >> CICD_DOS.BAT
           echo "cd test" >> CICD_DOS.BAT
           echo "ren dos32a.exe dos4gw.exe" >> CICD_DOS.BAT
