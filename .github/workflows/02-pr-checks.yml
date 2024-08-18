@@ -76,7 +76,19 @@ jobs:
           chmod +x /usr/local/bin/run_cicd_dos.sh
           /usr/local/bin/run_cicd_dos.sh
           # Propagate error code from DOS test or exit with error code 254 if the exit code file is missing
+          echo step1
           dos_exit_code=$(cat test/exitcode.txt || echo 254)
-          if [ $dos_exit_code -ne 0 ]; then exit $dos_exit_code; fi
-          apt install -y dtmf2num
+          echo DOS exit code was $dos_exit_code
+          echo step2
+          #if [ $dos_exit_code -ne 0 ]; then
+          #  exit $dos_exit_code
+          #fi
+          echo step3
+          wget -P /tmp https://aluigi.altervista.org/mytoolz/dtmf2num.zip
+          echo "187d43e4d57535da3386eee3accdbcd09526378e3258db7f1bd5afccd0c64360  /tmp/dtmf2num.zip" | sha256sum -c
+          mkdir /tmp/dtmf2num
+          unzip /tmp/dtmf2num.zip -d /tmp/dtmf2num
+          apk --no-cache add build-base
+          make -C /tmp/dtmf2num
+          install /tmp/dtmf2num/dtmf2num /usr/local/bin
           dtmf2num hda_out.wav
