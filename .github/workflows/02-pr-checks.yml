@@ -66,7 +66,7 @@ jobs:
           echo "HDPMI32i.EXE" >> CICD_DOS.BAT
           echo "output\\sbemu" >> CICD_DOS.BAT
           echo "cd test" >> CICD_DOS.BAT
-          echo "ren dos32a.exe dos4gw.exe" >> CICD_DOS.BAT
+          #echo "ren dos32a.exe dos4gw.exe" >> CICD_DOS.BAT
           echo "ECHO Current BLASTER variable: %BLASTER%" >> CICD_DOS.BAT
           echo "stp32 dtmf_src.wav a32sbdg.dll" >> CICD_DOS.BAT
           echo "ECHO %ERRORLEVEL% > exitcode.txt" >> CICD_DOS.BAT
