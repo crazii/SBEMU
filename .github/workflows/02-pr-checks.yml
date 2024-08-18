@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: shellcheck shell scripts
         run: |
           shellcheck scripts/build-in-container.sh
@@ -20,7 +20,7 @@ jobs:
       image: ghcr.io/volkertb/debian-djgpp:v0.2
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Enforce Conventional Commits
         uses: webiny/action-conventional-commits@v1.3.0
       - name: Build project
