@@ -81,7 +81,7 @@ jobs:
           export dos_exit_code=$(cat test/exitcode.txt || echo 254)
           echo DOS exit code was $dos_exit_code
           echo step2
-          if \[ $dos_exit_code -ne 0 \]; then exit $dos_exit_code; fi
+          if [ "$dos_exit_code" -ne "0" ]; then exit $dos_exit_code; fi
           history
           echo step3
           wget -P /tmp https://aluigi.altervista.org/mytoolz/dtmf2num.zip
