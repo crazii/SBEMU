@@ -91,4 +91,7 @@ jobs:
           apk --no-cache add build-base
           make -C /tmp/dtmf2num
           install /tmp/dtmf2num/dtmf2num /usr/local/bin
+          # First decode DTMF tones from the source file that was played back, for verification:
+          dtmf2num test/dtmf_src.wav
+          # Now decode DTMF tones from the output dump file from the emulated sound device in QEMU VM:
           dtmf2num hda_out.wav
