@@ -68,7 +68,8 @@ jobs:
           echo "cd test" >> CICD_DOS.BAT
           #echo "ren dos32a.exe dos4gw.exe" >> CICD_DOS.BAT
           echo "ECHO Current BLASTER variable: %BLASTER%" >> CICD_DOS.BAT
-          echo "stp32 dtmf_src.wav a32sbdg.dll" >> CICD_DOS.BAT
+          #echo "stp32 dtmf_src.wav a32sbdg.dll" >> CICD_DOS.BAT
+          echo "vocplay dtmf_src.voc sbdig.adv" >> CICD_DOS.BAT
           echo "ECHO %ERRORLEVEL% > exitcode.txt" >> CICD_DOS.BAT
           echo "ECHO Result exit code of test command:" >> CICD_DOS.BAT
           echo "type exitcode.txt" >> CICD_DOS.BAT
