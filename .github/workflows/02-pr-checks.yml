@@ -81,9 +81,7 @@ jobs:
           dos_exit_code=$(cat test/exitcode.txt || echo 254)
           echo DOS exit code was $dos_exit_code
           echo step2
-          #if [ $dos_exit_code -ne 0 ]; then
-          #  exit $dos_exit_code
-          #fi
+          if [ $dos_exit_code -ne 0 ]; then exit $dos_exit_code; fi
           echo step3
           wget -P /tmp https://aluigi.altervista.org/mytoolz/dtmf2num.zip
           echo "187d43e4d57535da3386eee3accdbcd09526378e3258db7f1bd5afccd0c64360  /tmp/dtmf2num.zip" | sha256sum -c
