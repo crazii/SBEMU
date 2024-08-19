@@ -3,6 +3,10 @@ name: build-and-release
 
 on:
   push:
+    # TODO: remove branches block below after testing
+    branches:
+      - use-preinstalled-djgpp-image-in-workflows
+      - run-tests-in-qemu-in-github-action
     tags:
       - '**'
 
@@ -18,13 +22,6 @@ jobs:
           path: src
           # We need this in order to generate a changelog from the commits between the latest and previous tags
           fetch-depth: 0
-
-      - name: Install DJGPP
-        run: |
-          wget -P /tmp https://github.com/andrewwutw/build-djgpp/releases/download/v3.4/djgpp-linux64-gcc1220.tar.bz2
-          echo "8464f17017d6ab1b2bb2df4ed82357b5bf692e6e2b7fee37e315638f3d505f00  /tmp/djgpp-linux64-gcc1220.tar.bz2" | shasum -a 256 --check
-          tar -xf /tmp/djgpp-linux64-gcc1220.tar.bz2 -C /opt
-          rm /tmp/djgpp-linux64-gcc1220.tar.bz2
       - name: "✏️ Generate release changelog"
         id: changelog
         uses: requarks/changelog-action@v1
@@ -34,18 +31,14 @@ jobs:
           includeInvalidCommits: true
           excludeTypes: ""
       - name: Build project
-        run: |
-          cd $GITHUB_WORKSPACE/src
-          test -f main.c
-          . /opt/djgpp/setenv
-          make
-          test -f output/sbemu.exe
+        uses: docker://ghcr.io/volkertb/debian-djgpp:v0.2
+        with:
+          entrypoint: src/scripts/build-in-container.sh
       - name: Combine changelog and user instructions into release notes
         run: |
           cat $GITHUB_WORKSPACE/CHANGELOG.md $GITHUB_WORKSPACE/src/user_instructions.md > $GITHUB_WORKSPACE/RELEASE_NOTES.md
       - name: Build FreeDOS SBEMU USB image and ZIP file
         run: |
-          shellcheck $GITHUB_WORKSPACE/src/scripts/build-release-artifacts.sh
           $GITHUB_WORKSPACE/src/scripts/build-release-artifacts.sh $GITHUB_WORKSPACE/src/output/sbemu.exe $GITHUB_WORKSPACE/RELEASE_NOTES.md $GITHUB_WORKSPACE/
       - name: Generate release tag
         id: tag
