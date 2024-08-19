@@ -95,3 +95,10 @@ jobs:
           dtmf2num test/dtmf_src.wav
           # Now decode DTMF tones from the output dump file from the emulated sound device in QEMU VM:
           dtmf2num ac97_out.wav
+      - name: Upload WAV dumps from QEMU as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wav-dump-artifacts
+          path: ./*_out.wav
+          if-no-files-found: error # 'warn' or 'ignore' are also available, defaults to `warn`
+          retention-days: 3
