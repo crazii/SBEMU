@@ -21,11 +21,9 @@ typedef struct
 #define SBEMU_RESET_END 1
 #define SBEMU_RESET_POLL 2
 
-#define SBEMU_DELAY_FOR_IRQ for(volatile int i = 0; i < 0xFFFFFFF; ++i) NOP()
-
 SBEMU_EXTFUNS* SBEMU_ExtFuns;
 static int SBEMU_ResetState = SBEMU_RESET_END;
-static int SBEMU_Started = 0;
+static volatile int SBEMU_Started = 0;
 static int SBEMU_IRQ = 5;
 static int SBEMU_DMA = 1;
 static int SBEMU_HDMA = 5;
@@ -38,7 +36,6 @@ static int SBEMU_HighSpeed = 0;
 static int SBEMU_DSPCMD = SBEMU_DSPCMD_INVALID;
 static int SBEMU_DSPCMD_Subindex = 0;
 static int SBEMU_DSPDATA_Subindex = 0;
-static int SBEMU_TriggerIRQ = 0;
 static int SBEMU_Pos = 0;
 static int SBEMU_DetectionCounter = 0;
 static int SBEMU_DirectCount = 0;
@@ -46,7 +43,7 @@ static int SBEMU_FixTC = 0;
 static uint8_t SBEMU_IRQMap[4] = {2,5,7,10};
 static uint8_t SBEMU_MixerRegIndex = 0;
 static uint8_t SBEMU_idbyte;
-static uint8_t SBEMU_WS;
+static uint8_t SBEMU_WS = 0x80;
 static uint8_t SBEMU_RS = 0x2A;
 static uint8_t SBEMU_TestReg;
 static uint8_t SBEMU_DMAID_A;
@@ -110,6 +107,10 @@ void SBEMU_Mixer_Write(uint16_t port, uint8_t value)
     SBEMU_MixerRegs[SBEMU_MixerRegIndex] = value;
     if(SBEMU_MixerRegIndex == SBEMU_MIXERREG_RESET)
     {
+        SBEMU_MixerRegs[SBEMU_MIXERREG_INT_SETUP] = 1<<SBEMU_Indexof(SBEMU_IRQMap,countof(SBEMU_IRQMap),SBEMU_IRQ);
+        SBEMU_MixerRegs[SBEMU_MIXERREG_DMA_SETUP] = ((1<<SBEMU_DMA)|(SBEMU_HDMA?(1<<SBEMU_HDMA):0))&0xEB;
+        SBEMU_MixerRegs[SBEMU_MIXERREG_MODEFILTER] = 0xFD; //mask out stereo
+
         // Mixer Registers are documented here:
         // https://pdos.csail.mit.edu/6.828/2018/readings/hardware/SoundBlaster.pdf
 
@@ -209,13 +210,14 @@ void SBEMU_DSP_Reset(uint16_t port, uint8_t value)
         SBEMU_Bits = 8;
         SBEMU_Pos = 0;
         SBEMU_HighSpeed = 0;
-        SBEMU_TriggerIRQ = 0;
         SBEMU_DetectionCounter = 0;
         SBEMU_DirectCount = 0;
         SBEMU_DirectBuffer[0] = 0;
         SBEMU_DMAID_A = 0xAA;
         SBEMU_DMAID_X = 0x96;
         SBEMU_UseTimeConst = 0;
+        SBEMU_RS = 0x2A;
+        SBEMU_WS = 0x80;
 
         //SBEMU_Mixer_WriteAddr(0, SBEMU_MIXERREG_RESET);
         //SBEMU_Mixer_Write(0, 1);
@@ -240,31 +242,8 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
             case SBEMU_CMD_TRIGGER_IRQ16:
             {
                 SBEMU_MixerRegs[SBEMU_MIXERREG_INT_STS] |= SBEMU_DSPCMD == SBEMU_CMD_TRIGGER_IRQ ? 0x1 : 0x2;
-                SBEMU_TriggerIRQ = 1;
                 SBEMU_DSPCMD = SBEMU_DSPCMD_INVALID;
-                //SBEMU_ExtFuns->RaiseIRQ(SBEMU_GetIRQ());
-
-                //the client(game) code may use those (similar) code to detect sound blaster:
-                //
-                //static volatile int interrupt_working = 0;
-                //void irq_detect() {interrupt_working = 1; }
-                //...
-                //STI
-                //install_irq_handler(irq_detect);
-                //out(0x220, 0xF2) <---- POINT A, trigger IRQ
-                //if(!interrupt_working) <-----POINT B, check IRQ happens
-                //{ fail: sb not found}
-                //else
-                //{ continue detection }
-                //
-                //for a real sound blaster, irq is trigger imemediately on POINT A, like we directly call SBEMU_ExtFuns->RaiseIRQ(SBEMU_GetIRQ()); here
-                //but SBEMU_ExtFuns->RaiseIRQ(SBEMU_GetIRQ()) will not work because we need a right context 
-                //(i.e. QEMM_GetIOPrtTrap_Context but it is not the original context, and still another context is needed for HDPMI)
-                //so we trigger the SB IRQ in PCI sound card interrupt, but it doesn't happen immediately, only periodically
-                //so when PCI sound card interrupt happens, the client may already exec pass the POINT B
-                //that's why the delay is used here, at POINT A, to wait PCI sound card interrupt so the ISR will issue a virtual SB IRQ before POINT B
-
-                SBEMU_DELAY_FOR_IRQ; //hack: add CPU delay so that sound interrupt raises virtual IRQ when games handler is installed (timing issue)
+                SBEMU_ExtFuns->RaiseIRQ(SBEMU_GetIRQ());
             }
             break;
             case SBEMU_CMD_DAC_SPEAKER_ON:
@@ -491,26 +470,24 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
     }
     if(SBEMU_Started && !OldStarted)//handle driver detection
     {
-        /*if(SBEMU_StartCB)
+        //small buffer, probably a detection routine
+        //needs to raise the interrupt imemediatly or we're gonna miss the detection window of the game - if
+        //it is riased later in PCI sound interrupts.
+        //OR: we need a high precision timer (in us, ms is not enough, i.e. APIC timer) for this.
+        if(SBEMU_GetSampleBytes() <= 32 && (SBEMU_ExtFuns->DMA_Size(SBEMU_GetDMA()) <= 32))
         {
-            CLIS();
-            SBEMU_StartCB(); //if don't do this, need always output 0 PCM to keep interrupt alive for now
-            STIL();
-        }*/
-
-        if(SBEMU_GetSampleBytes() <= 32 && SBEMU_ExtFuns->DMA_Size(SBEMU_GetDMA()) <= 32) //small buffer, probably a detection routine
-        {
-            //SBEMU_ExtFuns->RaiseIRQ(SBEMU_GetIRQ());
-            //SBEMU_Started = FALSE;
-            SBEMU_DELAY_FOR_IRQ; //hack: add CPU delay so that sound interrupt raises virtual IRQ when games handler is installed (timing issue)
+            SBEMU_Started = FALSE; //raise irq may cause games reprogramming SB, stop before raising irq
+            SBEMU_ExtFuns->RaiseIRQ(SBEMU_GetIRQ());
         }
     }
+    if(!SBEMU_Started && OldStarted)
+        _LOG("SB stopped.\n");
 }
 
 uint8_t SBEMU_DSP_Read(uint16_t port)
 {
     _LOG("SBEMU: DSP read.\n");
-    if(SBEMU_ResetState == SBEMU_RESET_POLL || SBEMU_ResetState == SBEMU_RESET_START)
+    if((SBEMU_ResetState == SBEMU_RESET_POLL || SBEMU_ResetState == SBEMU_RESET_START))
     {
         SBEMU_ResetState = SBEMU_RESET_END;
         //_LOG("SBEMU: DSP reset read.\n");
@@ -617,11 +594,14 @@ uint8_t SBEMU_GetHDMA()
 
 int SBEMU_HasStarted()
 {
+    //_LOG("SBSTARTED: %d\n", SBEMU_Started);
     return SBEMU_Started;
 }
 
 void SBEMU_Stop()
 {
+    if(SBEMU_Started)
+        _LOG("SB stopped.\n");
     SBEMU_Started = FALSE;
     SBEMU_HighSpeed = FALSE;
     SBEMU_Pos = 0;
@@ -667,15 +647,6 @@ int SBEMU_SetPos(int pos)
     if(pos >= SBEMU_GetSampleBytes())
         SBEMU_MixerRegs[SBEMU_MIXERREG_INT_STS] |= SBEMU_GetBits() <= 8 ? 0x01 : 0x02;
     return SBEMU_Pos = pos;
-}
-
-int SBEMU_IRQTriggered()
-{
-    return SBEMU_TriggerIRQ;
-}
-void SBEMU_SetIRQTriggered(int triggered)
-{
-    SBEMU_TriggerIRQ = triggered;
 }
 
 uint8_t SBEMU_GetMixerReg(uint8_t index)

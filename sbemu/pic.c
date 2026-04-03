@@ -2,10 +2,7 @@
 //reference: https://wiki.osdev.org/PIC
 #include <dos.h>
 #include "pic.h"
-
-#include "untrapio.h"
-#define inp UntrappedIO_IN
-#define outp UntrappedIO_OUT
+#include "iotrap.h"
 
 //master PIC
 #define PIC_PORT1 0x20
@@ -23,10 +20,6 @@
 
 void PIC_SendEOIWithIRQ(uint8_t irq)
 {
-    if(PIC_GetIRQ() != irq) //not gonna happen but just incase that SMM handles a shared interrupt and we don't need send it again
-        return;             //or it's possbile that SMM only process the interrupt without sending EOI, leaving it to IVT
-                            //just make it safe
-
     if(irq == 7 || irq == 15) //check spurious irq
         return PIC_SendEOI();
     CLIS();
@@ -71,29 +64,10 @@ uint8_t PIC_GetIRQ(void)
     return (uint8_t)BSF(mask);
 }
 
-void PIC_RemapMaster(uint8_t vector)
-{
-    CLIS();
-    uint8_t oldmask = inp(PIC_DATA1);
-    outp(PIC_PORT1, 0x11);
-    outp(PIC_DATA1, vector);
-    outp(PIC_DATA1, 4);
-    outp(PIC_DATA1, 1);
-    outp(PIC_DATA1, oldmask);
-    STIL();
-}
-
-void PIC_RemapSlave(uint8_t vector)
-{
-    CLIS();
-    uint8_t oldmask = inp(PIC_DATA2);
-    outp(PIC_PORT2, 0x11);
-    outp(PIC_DATA2, vector);
-    outp(PIC_DATA2, 2);
-    outp(PIC_DATA2, 1);
-    outp(PIC_DATA2, oldmask);
-    STIL();
-}
+//use untrapped io for IRQ masking
+//while for IRQ/EOI, use trapped io because VHDPMI virtualized it
+#define inp UntrappedIO_IN
+#define outp UntrappedIO_OUT
 
 void PIC_MaskIRQ(uint8_t irq)
 {

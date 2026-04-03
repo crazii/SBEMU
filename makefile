@@ -48,11 +48,10 @@ CARDS_SRC := mpxplay/au_cards/ac97_def.c \
 
 SBEMU_SRC := sbemu/dbopl.cpp \
 	     sbemu/opl3emu.cpp \
+		 sbemu/iotrap.c \
 	     sbemu/pic.c \
 	     sbemu/sbemu.c \
-	     sbemu/untrapio.c \
 	     sbemu/vdma.c \
-	     sbemu/virq.c \
 	     sbemu/serial.c \
 	     sbemu/dpmi/xms.c \
 	     sbemu/dpmi/dpmi.c \
@@ -62,9 +61,8 @@ SBEMU_SRC := sbemu/dbopl.cpp \
 	     sbemu/dpmi/djgpp/gormcb.c \
 		 sbemu/dpmi/djgpp/gopint.c \
 	     main.c \
-	     qemm.c \
 	     utility.c \
-	     hdpmipt.c \
+	     vdpmi.c \
 		 irqguard.c \
 
 SRC := $(CARDS_SRC) $(SBEMU_SRC)

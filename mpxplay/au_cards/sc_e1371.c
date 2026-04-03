@@ -396,8 +396,11 @@ static void snd_es1371_chip_init(struct ensoniq_card_s *card)
 
 static void snd_es1371_chip_close(struct ensoniq_card_s *card)
 {
- outl((card->port + ES_REG_CONTROL), 0);
- outl((card->port + ES_REG_SERIAL),  0);
+ if(card->port)
+ {
+  outl((card->port + ES_REG_CONTROL), 0);
+  outl((card->port + ES_REG_SERIAL),  0);
+ }
 }
 
 static void snd_es1371_ac97_init(struct ensoniq_card_s *card)

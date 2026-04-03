@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/exceptn.h>
+#include <sys/farptr.h>
 
 /* We enter with only CS known, and SS on a locked 4K stack which
    is *NOT* our SS.  We must set up everthing, including a stack swap,
@@ -24,6 +25,10 @@
 /**
  * Return wrapper cs/offset for _go32_dpmi_chain_protected_mode_interrupt_vector,
  * new line 194. by Crazii 02/04/2024
+ */
+
+/**
+ * add function to set return value to EAX (special usage) by Crazii 04/11/2024
  */
 
 #define	STACK_WAS_MALLOCED	(1 << 0)
@@ -248,4 +253,9 @@ int _go32_dpmi_free_iret_wrapper(_go32_dpmi_seginfo *info)
       free(stack);
   free(wrapper);
   return 0;
+}
+
+void _go32_dpmi_set_iret_eax(unsigned val, unsigned esp, unsigned ss)
+{
+  _farpokel(ss, esp+28, val); //EAX of pusha on stack
 }

@@ -320,6 +320,8 @@ static void azx_corb_init(struct intelhd_card_s *chip)  // setup CORB command DM
 
     if(!(chip->config_select&AUCARDSCONFIG_IHD_USE_PIO))
     {
+      azx_writew(chip, RIRBWP, RIRBWPRST);
+      azx_writew(chip, CORBWP, 0);
       chip->rirb_index = 0;
       
       azx_writew(chip, CORBRP, CORBRPRST); //reset corb read ptr

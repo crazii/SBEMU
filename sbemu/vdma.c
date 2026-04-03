@@ -1,5 +1,5 @@
 #include "vdma.h"
-#include "untrapio.h"
+#include "iotrap.h"
 #include "dpmi/dbgutil.h"
 
 //registers
