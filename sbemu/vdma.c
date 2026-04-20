@@ -130,11 +130,11 @@ uint8_t VDMA_Read(uint16_t port)
                 uint8_t ret = ((value>>8)&0xFF);
                 if(VDMA_DelayUpdate[channel])
                 {
-                    int size = channel <= 3 ? 1 : 2;
+                    int size_shift = channel <= 3 ? 0 : 1;
                     int base2 = channel <= 3 ? (channel<<1) : 16+((channel-4)<<1);
                     VDMA_Regs[base2+1] = VDMA_CurCounter[channel]-1; //update counter reg
-                    VDMA_Regs[base2] = VDMA_Addr[channel] + VDMA_Index[channel]; //update addr reg
-                    VDMA_PageRegs[channel] = (VDMA_Addr[channel] + VDMA_Index[channel]) >> 16;
+                    VDMA_Regs[base2] = VDMA_Addr[channel] + (VDMA_Index[channel]<<size_shift); //update addr reg
+                    VDMA_PageRegs[channel] = (VDMA_Addr[channel] + (VDMA_Index[channel]<<size_shift)) >> 16;
                 }
                 VDMA_InIO[channel] = FALSE;
                 VDMA_DelayUpdate[channel] = FALSE;
@@ -191,34 +191,36 @@ int32_t VDMA_GetIndex(int channel)
 
 int32_t VDMA_SetIndexCounter(int channel, int32_t index, int32_t counter)
 {
-    const int size = channel <= 3 ? 1 : 2;
+    const int size_shift = channel <= 3 ? 0 : 1;
     int base = channel <= 3 ? (channel<<1) : 16+((channel-4)<<1);
 
-    if(counter <= 0)
+    int max_index = (VDMA_Counter[channel]) << size_shift;
+    if(counter <= 0 || index >= max_index)
     {
-        counter = 0x10000*size;
+        counter = 0x10000<<size_shift;
+        index = max_index;
         VDMA_ToggleComplete(channel);
         if(VDMA_GetAuto(channel))
         {
             index = 0;
-            counter = VDMA_Counter[channel]*size;
+            counter = VDMA_Counter[channel]<<size_shift;
         }
     }
     //_LOG("counter: %d, index: %d, size: %d\n", counter, index, size);
-    VDMA_CurCounter[channel] = counter / size;
-    VDMA_Index[channel] = index / size;
+    VDMA_CurCounter[channel] = counter >> size_shift;
+    VDMA_Index[channel] = index >> size_shift;
     
     if(!VDMA_InIO[channel])
     {
         //_LOG("VDMA channel: %d, addr: %x\n", channel, VDMA_Addr[channel]);
         VDMA_Regs[base+1] = VDMA_CurCounter[channel]-1; //update counter reg
-        VDMA_Regs[base] = VDMA_Addr[channel] + VDMA_Index[channel]; //update addr reg
-        VDMA_PageRegs[channel] = (VDMA_Addr[channel] + VDMA_Index[channel]) >> 16;
+        VDMA_Regs[base] = VDMA_Addr[channel] + (VDMA_Index[channel]<<size_shift); //update addr reg
+        VDMA_PageRegs[channel] = (VDMA_Addr[channel] + (VDMA_Index[channel]<<size_shift)) >> 16;
     }
     else
         VDMA_DelayUpdate[channel] = TRUE;
     //_LOG("cur counter: %d\n", counter);
-    return VDMA_Index[channel] * size;
+    return VDMA_Index[channel] << size_shift;
 }
 
 int VDMA_GetAuto(int channel)
@@ -243,14 +245,15 @@ void VDMA_WriteData(int channel, uint8_t data)
         uint32_t addr = VDMA_GetAddress(channel);
         int32_t index = VDMA_GetIndex(channel);
         
+        uint32_t laddr = addr;
         if(addr>1024*1024)
-            addr = DPMI_MapMemory(addr, 65536);
+            laddr = DPMI_MapMemory(addr, 65536);
 
         _LOG("dmaw: %x, %d\n", addr+index, data);
-        DPMI_CopyLinear(addr+index, DPMI_PTR2L(&data), 1);
+        DPMI_CopyLinear(laddr+index, DPMI_PTR2L(&data), 1);
 
         if(addr>1024*1024)
-            DPMI_UnmappMemory(addr);
+            DPMI_UnmappMemory(laddr);
         VDMA_SetIndexCounter(channel, index+1, VDMA_GetCounter(channel)-1);
     }
 }
