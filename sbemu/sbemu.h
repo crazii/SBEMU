@@ -166,6 +166,8 @@ const uint8_t* SBEMU_GetDirectPCM8();
 int SBEMU_GetDetectionCounter();
 void SBEMU_SetDetectionCounter(int c);
 
+int SBEMU_IsPaused();
+
 #ifdef __cplusplus
 }
 #endif

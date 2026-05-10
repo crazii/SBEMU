@@ -440,3 +440,22 @@ BOOL VDPMI_RaiseIRQ(uint8_t irq)
     );
     return result;
 }
+
+uint32_t VDPMI_GetPhysicalAddr(uint32_t laddr)
+{
+    BOOL result = 0;
+    uint32_t paddr = 0;
+    __asm__ __volatile__(
+    "movl $0x08, %%eax \n\t" //function no.
+    "lcall *%2 \n\t"
+    "jnc 1f \n\t"
+    "movl $0x0, %0 \n\t"
+    "jmp 2f \n\t"
+    "1: movl $0x1, %0 \n\t"
+    "2: \n\t"
+    :"=a"(result),"=d"(paddr)
+    :"m"(VDPMI_Entry),"c"(laddr)
+    :
+    );
+    return result ? paddr : 0;
+}

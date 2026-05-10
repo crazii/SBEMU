@@ -24,4 +24,7 @@ BOOL VDPMI_UninstallISR(DPMI_ISR_HANDLE* handle);
 //raise virq
 BOOL VDPMI_RaiseIRQ(uint8_t irq);
 
+//get physical addr from linear addr
+uint32_t VDPMI_GetPhysicalAddr(uint32_t laddr);
+
 #endif //_VDPMI_H_

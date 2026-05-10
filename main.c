@@ -32,7 +32,7 @@ PROGNAME = "SBEMU";
 #define MAIN_DOUBLE_OPL_VOLUME 1 //hack: double the amplitude of OPL PCM. should be 1 or 0
 #define MAIN_USE_CLIENT_MODE_DRIVER 1   //needs to set 1 to avoid interrupt handler suppression by programs' CLI
                                         //otherwise sound might not response in time.
-#define MAIN_PCM_RESAMPLE_INTERPOLATION 0
+#define MAIN_PCM_RESAMPLE_INTERPOLATION 1
 
 #define MAIN_TSR_INT 0x2D   //AMIS multiplex. TODO: 0x2F?
 #define MAIN_TSR_INTSTART_ID 0x01 //start id
@@ -55,6 +55,7 @@ static DPMI_REG MAIN_RMIntREG;
 static uint32_t MAIN_DMA_Addr = 0;
 static uint32_t MAIN_DMA_Size = 0;
 static uint32_t MAIN_DMA_MappedAddr = 0;
+static BOOL     MAIN_DMA_Mapped;
 static uint8_t MAIN_VDPMI_Present = 0;
 
 SBEMU_EXTFUNS MAIN_SbemuExtFun;
@@ -734,10 +735,10 @@ int main(int argc, char* argv[])
         if (!(fm_aui.fm && fm_aui.fm_port == 0x388)) {
             SBEMU_IODT *iodt = fm_aui.fm ? MAIN_HW_OPL3IODT : MAIN_OPL3IODT;
             if(!(OPLInstalled=VDPMI_Install_IOPortTrap(iodt, 4, &OPL3IOPT)))
-        {
+            {
                 MAIN_CPrintf(RED, "Error: Failed installing IO port trap for VDPMI.\n");
-            return 1;
-        }
+                return 1;
+            }
         } else {
             printf("Not installing IO port trap. Using hardware OPL3 at port 388.\n");
         }
@@ -844,11 +845,11 @@ int main(int argc, char* argv[])
     BOOL PM_ISR = VDPMI_InstallISR(aui.card_irq, (void(*)(void))MAIN_InterruptPM, &MAIN_IntHandlePM);
 #else
     BOOL PM_ISR = DPMI_InstallISR(PIC_IRQ2VEC(aui.card_irq), (void(*)(void))MAIN_InterruptPM, &MAIN_IntHandlePM, TRUE) == 0;
-    #endif
+#endif
 #if MAIN_INSTALL_RM_ISR
     RM_ISR = DPMI_InstallRealModeISR(PIC_IRQ2VEC(aui.card_irq), MAIN_InterruptRM, &MAIN_RMIntREG, &MAIN_IntHandleRM, TRUE) == 0;
-    #endif
-
+#endif
+    
     BOOL TSR = TRUE;
     if(!PM_ISR || !RM_ISR || !TSR_ISR
     || !InstalledVDMA || !InstalledSB)
@@ -870,10 +871,10 @@ int main(int argc, char* argv[])
         }
         if(!RM_ISR)
             MAIN_CPrintf(RED, "Error: Failed installing sound card ISR.\n");
-        #if MAIN_INSTALL_RM_ISR
+#if MAIN_INSTALL_RM_ISR
         else
             DPMI_UninstallISR(&MAIN_IntHandleRM);
-        #endif
+#endif
         if(!TSR_ISR)
             MAIN_CPrintf(RED, "Error: Failed installing TSR interrupt.\n");
         else
@@ -894,13 +895,12 @@ int main(int argc, char* argv[])
     return 1;
 }
 
-//With a V86 monitor, VDPMI will capture HW interrupts and call PM handlers first.
+//VDPMI will route PM interrupts to IVT.
 //IRQ routing path:
-//PM & RM: IDT -> PM handlers after SBEMU -> SBEMU MAIN_InterruptPM(*) -> PM handlers befoe SBEMU -> IVT
+//PM: IDT -> PM handlers after SBEMU -> SBEMU MAIN_InterruptPM(*) -> PM handlers befoe SBEMU -> IVT -> SBEMU MAIN_InterruptRM(*) -> DPMI entrance -> IVT handlers before DPMI installed
+//RM: IVT -> RM handlers before SBEMU -> SBEMU MAIN_InterruptRM(*) -> RM handlers after SBEMU -> DPMI entrance -> PM handlers after SBEMU -> SBEMU MAIN_InterruptPM(*) -> PM handlers befoe SBEMU -> IVT handlers before DPMI installed
 //(*) means SBEMU might early terminate the calling chain if sound irq is handled (when MAIN_ISR_CHAINED==0).
 //early terminating is OK because PCI irq are level triggered, IRQ signal will keep high (raised) unless the hardware IRQ is ACKed.
-
-//NOTE: DJGPP's go32 wrapper will check and skip re-entrance, no need to do extra check.
 
 #if MAIN_USE_CLIENT_MODE_DRIVER
 static void MAIN_InterruptPM(unsigned esp, unsigned ss)
@@ -929,7 +929,7 @@ static void MAIN_InterruptPM()
     }
 #if MAIN_USE_CLIENT_MODE_DRIVER
     _go32_dpmi_set_iret_eax(retval, esp, ss);
-    #endif
+#endif
 }
 
 static void MAIN_InterruptRM()
@@ -991,6 +991,7 @@ static void MAIN_Interrupt()
         return;
     
     BOOL digital = SBEMU_HasStarted();
+    BOOL paused = SBEMU_IsPaused(); //need raise interrupt after pause, still need do the timing
     if(!digital) MAIN_LastSBRate = 0;
     if(digital)
     {
@@ -1012,7 +1013,7 @@ static void MAIN_Interrupt()
         int channels = SBEMU_GetChannels();
         _LOG("sample rate: %d %d\n", SB_Rate, aui.freq_card);
         _LOG("channels: %d, size:%d\n", channels, samplesize);
-        //_LOG("DMA index: %x\n", DMA_Index);
+        //_LOG("DMA index: %d\n", DMA_Index);
         //_LOG("digital start\n");
         int pos = 0;
         do
@@ -1021,16 +1022,27 @@ static void MAIN_Interrupt()
              && !(DMA_Addr >= MAIN_DMA_Addr && DMA_Addr+DMA_Index+DMA_Count <= MAIN_DMA_Addr+MAIN_DMA_Size))
             {
                 _LOG("DMA_ADDR unmap: %x\n", MAIN_DMA_MappedAddr);
-                if(MAIN_DMA_MappedAddr > 1024*1024)
+                if(MAIN_DMA_Mapped)
                     DPMI_UnmappMemory(MAIN_DMA_MappedAddr);
                 MAIN_DMA_MappedAddr = 0;
+                MAIN_DMA_Mapped = FALSE;
             }
             if(MAIN_DMA_MappedAddr == 0)
             {
                 MAIN_DMA_Addr = DMA_Addr&~0xFFF;
                 _LOG("DMA_ADDR map: %x\n", MAIN_DMA_Addr);
                 MAIN_DMA_Size = align(max(DMA_Addr-MAIN_DMA_Addr+DMA_Index+DMA_Count, 64*1024), 4096);
-                MAIN_DMA_MappedAddr = (DMA_Addr+DMA_Index+DMA_Count <= 1024*1024) ? (DMA_Addr&~0xFFF) : DPMI_MapMemory(MAIN_DMA_Addr, MAIN_DMA_Size);
+                if(DMA_Addr < 0xF0000)
+                    MAIN_DMA_MappedAddr = MAIN_DMA_Addr;
+                else if(DMA_Addr >= 0xF0000 && DMA_Addr+DMA_Index+DMA_Count <= 1024*1024 + 64*1024)
+                //note: VDPMI will guarantee the physical addr is directly accessible (1:1 mapped)
+                //FIXME: not gonna work if in EMS and EMS swaps page (dma address not changed but physical address changes)
+                    MAIN_DMA_MappedAddr = VDPMI_GetPhysicalAddr(MAIN_DMA_Addr);
+                else
+                {
+                    MAIN_DMA_MappedAddr = DPMI_MapMemory(MAIN_DMA_Addr, MAIN_DMA_Size);
+                    MAIN_DMA_Mapped = TRUE;
+                }
             }
             //_LOG("DMA_ADDR:%x, %x, %x\n", DMA_Addr, MAIN_DMA_Addr, MAIN_DMA_MappedAddr);
 
@@ -1045,7 +1057,8 @@ static void MAIN_Interrupt()
                 count = count*SB_Rate/aui.freq_card;
             else
                 resample = FALSE;
-            count = min(count, max(1,(DMA_Count)/samplesize/channels)); //max for stereo initial 1 byte
+            if(!paused)
+                count = min(count, max(1,(DMA_Count)/samplesize/channels)); //max for stereo initial 1 byte
             count = min(count, max(1,(SB_Bytes-SB_Pos)/samplesize/channels)); //max for stereo initial 1 byte. 1/2channel = 0, make it 1
             if(SBEMU_GetBits()<8) //ADPCM 8bit
                 count = max(1, count / (9 / SBEMU_GetBits()));
@@ -1054,7 +1067,7 @@ static void MAIN_Interrupt()
 
             {
                 int16_t* pcm = resample ? MAIN_PCMResample + channels*MAIN_PCM_RESAMPLE_INTERPOLATION : MAIN_PCM + pos*2;
-                if(MAIN_DMA_MappedAddr == 0) //map failed?
+                if(MAIN_DMA_MappedAddr == 0 || paused) //map failed?
                     memset(pcm, 0, bytes);
                 else
                     DPMI_CopyLinear(DPMI_PTR2L(pcm), MAIN_DMA_MappedAddr+(DMA_Addr-MAIN_DMA_Addr)+DMA_Index, bytes);
@@ -1078,9 +1091,13 @@ static void MAIN_Interrupt()
             if(channels == 1) //should be the last step
                 cv_channels_1_to_n(MAIN_PCM+pos*2, count, 2, 2);
             pos += count;
-            //_LOG("samples:%d %d %d\n", count, pos, samples);
-            DMA_Index = VDMA_SetIndexCounter(dma, DMA_Index+bytes, DMA_Count-bytes);
-            DMA_Count = VDMA_GetCounter(dma);
+            _LOG("samples:%d %d %d\n", count, pos, samples);
+            if(!paused)
+            {
+                //_LOG("DMA counter: %d\n",DMA_Count-bytes);
+                DMA_Index = VDMA_SetIndexCounter(dma, DMA_Index+bytes, DMA_Count-bytes);
+                DMA_Count = VDMA_GetCounter(dma);
+            }
             SB_Pos = SBEMU_SetPos(SB_Pos+bytes);
             //_LOG("SB bytes: %d %d\n", SB_Pos, SB_Bytes);
             if(SB_Pos >= SB_Bytes)
@@ -1109,8 +1126,10 @@ static void MAIN_Interrupt()
                 DMA_Count = VDMA_GetCounter(dma);
                 DMA_Addr = VDMA_GetAddress(dma);
                 //_LOG("DMACount: %d, DMAIndex:%d, DMA_Addr:%x\n",DMA_Count, DMA_Index, DMA_Addr);
+                if(!VDMA_GetAuto(dma))
+                    break;
             }
-        } while(VDMA_GetAuto(dma) && (pos < samples) && SBEMU_HasStarted());
+        } while((pos < samples) && SBEMU_HasStarted());
         //_LOG("digital end %d %d\n", samples, pos);
         samples = min(samples, pos);
     }
@@ -1121,6 +1140,7 @@ static void MAIN_Interrupt()
         memcpy(MAIN_PCMResample, SBEMU_GetDirectPCM8(), samples);
         SBEMU_ResetDirect();
 #if 0   //fix noise for some games - SBEMU-X NOTE: unlikely to be needed
+        //note: this is a "pop" on games' init, and it can be ignored.
         int zeros = TRUE;
         for(int i = 0; i < samples && zeros; ++i)
         {
@@ -1183,7 +1203,6 @@ static void MAIN_Interrupt()
     aui.samplenum = samples;
     aui.pcm_sample = MAIN_PCM;
     AU_writedata(&aui);
-
     //_LOG("MAIN INT END\n");
 }
 

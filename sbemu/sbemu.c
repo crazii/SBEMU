@@ -40,6 +40,7 @@ static int SBEMU_Pos = 0;
 static int SBEMU_DetectionCounter = 0;
 static int SBEMU_DirectCount = 0;
 static int SBEMU_FixTC = 0;
+static int SBEMU_Paused = 0;
 static uint8_t SBEMU_IRQMap[4] = {2,5,7,10};
 static uint8_t SBEMU_MixerRegIndex = 0;
 static uint8_t SBEMU_idbyte;
@@ -345,11 +346,13 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
             case SBEMU_CMD_SET_SIZE: //used for auto command
             case SBEMU_CMD_8BIT_OUT_1:
             {
-              if(SBEMU_DSPCMD_Subindex++ == 0)
+                _LOG("i=%d, val=%x\n", SBEMU_DSPCMD_Subindex, value);
+                if(SBEMU_DSPCMD_Subindex++ == 0)
                     SBEMU_Samples = value;
                 else
                 {
                     SBEMU_Samples |= value<<8;
+                    ++SBEMU_Samples;
                     SBEMU_Started = SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_1; //start transfer
                     SBEMU_HighSpeed = FALSE;
                     SBEMU_Auto = FALSE;
@@ -454,6 +457,19 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                 SBEMU_ExtFuns->DMA_Write(SBEMU_DMA, SBEMU_DMAID_A);
             }
             break;
+            case SBEMU_CMD_PAUSE_DAC: //pause for a duration: number samples in word, then generate an interrupt
+            {
+                if(SBEMU_DSPCMD_Subindex++ == 0)
+                    SBEMU_Samples = value;
+                else
+                {
+                    SBEMU_Samples |= value<<8;
+                    SBEMU_Started = TRUE; //this be a little tricky: start so that an interrupt will be triggered later
+                    SBEMU_Paused = TRUE;
+                    SBEMU_Pos = 0; //might need restore pos after pause
+                }
+            }
+            break;
             case SBEMU_DSPCMD_SKIP1:
             {
                 SBEMU_DSPCMD_Subindex = 2;
@@ -468,6 +484,7 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
         if(SBEMU_DSPCMD_Subindex >= 2)
             SBEMU_DSPCMD = SBEMU_DSPCMD_INVALID;
     }
+    if(SBEMU_Started) SBEMU_Paused = FALSE;
     if(SBEMU_Started && !OldStarted)//handle driver detection
     {
         //small buffer, probably a detection routine
@@ -603,6 +620,7 @@ void SBEMU_Stop()
     if(SBEMU_Started)
         _LOG("SB stopped.\n");
     SBEMU_Started = FALSE;
+    SBEMU_Paused = FALSE;
     SBEMU_HighSpeed = FALSE;
     SBEMU_Pos = 0;
 }
@@ -726,4 +744,9 @@ int SBEMU_GetDetectionCounter()
 void SBEMU_SetDetectionCounter(int c)
 {
     SBEMU_DetectionCounter = c;
+}
+
+int SBEMU_IsPaused()
+{
+    return SBEMU_Paused;
 }
