@@ -41,6 +41,7 @@ Source code exists, but "doesn't work yet":
  * OPL3 FM via [DOSBox' OPL3 FM implementation](https://www.dosbox.com/)
  * OPL3 passthrough to Hardware FM if it's present on the PCI sound card.
  * MPU401 UART emulation, or passthrough to PCI sound card if supported.
+ * MPU401 Soundfont2 emulation, original code by [Cacodemon345](https://github.com/Cacodemon345/VSBHDASF)
 
 
 ## Requirements

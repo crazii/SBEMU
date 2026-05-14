@@ -4,6 +4,9 @@
 #include <stdlib.h>
 
 // http://www.techhelpmanual.com/346-dos_environment.html
+// NOTE: this replaces the libc's default implementation of 'setenv'
+// the default setenv only sets env for current program (and its children)
+// this implementation set a global env (env block of COMMAND.COM) 
 int setenv(const char *name, const char *value, int rewrite)
 {
     int namelen;
@@ -88,4 +91,35 @@ int setenv(const char *name, const char *value, int rewrite)
     free(buf);
     
     return 0;
+}
+
+#ifdef DJGPP
+extern char **__crt0_argv;
+#define __argv __crt0_argv
+#endif
+
+int get_program_path(char* buf, int size)
+{
+    int len = strlen(__argv[0]);
+    len = min(len, size-1);
+
+    memcpy(buf, __argv[0], len);
+    buf[len+1] = '\0';
+    //djgpp path uses /
+    for(int i = 0; i < len; ++i)
+    {
+        if(buf[i] == '/') buf[i] = '\\';
+    }
+
+    int i = len;
+    while(buf[i] != '\\' && i > 0) --i;
+
+    if(buf[i] != '\\') //no full path?
+    {
+        buf[0] = '\0';
+        return 0;
+    }
+
+    buf[i] = '\0';
+    return i;
 }

@@ -18,6 +18,9 @@
 #include "hdpmipt.h"
 #include "serial.h"
 #include "irqguard.h"
+#if SBEMU_VMPU
+#include <vmpu.h>
+#endif
 
 #include <au_cards/au_cards.h>
 #include <au_cards/pcibios.h>
@@ -372,6 +375,7 @@ QEMM_IOPT MAIN_SB_IOPT_PM;
 #define MAIN_SETCMD_SET 0x01 //set in command line
 #define MAIN_SETCMD_HIDDEN 0x02 //hidden flag on report
 #define MAIN_SETCMD_BASE10 0x04 //use decimal value (default hex)
+#define MAIN_SETCMD_STR 0x08 //string
 
 struct MAIN_OPT
 {
@@ -397,20 +401,23 @@ struct MAIN_OPT
     "/O", "Select output. 0: headphone, 1: speaker (Intel HDA) or S/PDIF (Xonar DG)", 1, 0,
     "/VOL", "Set master volume (0-9)", 7, 0,
 
-    "/K", "Internal sample rate (default 22050)", 22050, MAIN_SETCMD_BASE10,
+    "/K", "Internal sample rate", 22050, MAIN_SETCMD_BASE10,
     "/FIXTC", "Fix time constant to match 11/22/44 kHz sample rate", FALSE, 0,
     "/SCL", "List installed sound cards", 0, MAIN_SETCMD_HIDDEN,
     "/SCFM", "Select FM(OPL) sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN|MAIN_SETCMD_BASE10,
     "/SCMPU", "Select MPU-401 sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN|MAIN_SETCMD_BASE10,
     "/SC", "Select sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN|MAIN_SETCMD_BASE10,
     "/R", "Reset sound card driver", 0, MAIN_SETCMD_HIDDEN,
-    "/P", "UART mode MPU-401 IO address (default 330) [*]", 0x330, 0,
+    "/P", "UART mode MPU-401 IO address [*]", 0x330, 0,
     "/MCOM", "UART mode MPU-401 COM port (1=COM1, 2=COM2, 3=COM3, 4=COM4, 9:HW MPU only, otherwise base address)", 9, 0,
     "/COML", "List installed COM ports", 0, MAIN_SETCMD_HIDDEN,
 #if MPU_DEBUG
     "/MDBG", "Enable MPU-401 debugging (0 to disable, 1 or 2 to enable)", 0, 0,
 #endif
-
+#if SBEMU_VMPU
+    "/VMPU","Virtual MPU max voices ([32-256]. 1=64, 0=disabled)", 0, MAIN_SETCMD_BASE10, //voice num also act as a switch. 0:turn off VMPU
+    "/VMSF", "VMPU Soundfont2 file", (uintptr_t)VMPU_DEF_SF2, MAIN_SETCMD_STR,
+#endif
     NULL, NULL, 0,
 };
 enum EOption
@@ -441,7 +448,10 @@ enum EOption
 #if MPU_DEBUG
     OPT_MDBG,
 #endif
-
+#if SBEMU_VMPU
+    OPT_VMPU_VOICES,
+    OPT_VMPU_SF,
+#endif
     OPT_COUNT,
 };
 
@@ -619,7 +629,9 @@ int main(int argc, char* argv[])
         {
             printf(" %-7s: %s", MAIN_Options[i].option, MAIN_Options[i].desc);
             if (i != 0) {
-                if(MAIN_Options[i].setcmd&MAIN_SETCMD_BASE10)
+                if(MAIN_Options[i].setcmd&MAIN_SETCMD_STR)
+                    printf(", default: %s.\n", (const char*)MAIN_Options[i].value);
+                else if(MAIN_Options[i].setcmd&MAIN_SETCMD_BASE10)
                     printf(", default: %d.\n", MAIN_Options[i].value);
                 else
                     printf(", default: %x.\n", MAIN_Options[i].value);
@@ -666,9 +678,15 @@ int main(int argc, char* argv[])
             int len = strlen(MAIN_Options[j].option);
             if(memicmp(argv[i], MAIN_Options[j].option, len) == 0)
             {
+                if(argv[i][len] == '=' || argv[i][len] == ':') ++len; //optional separator
                 int arglen = strlen(argv[i]);
-                int base = (MAIN_Options[j].setcmd&MAIN_SETCMD_BASE10) ? 10 : 16;
-                MAIN_Options[j].value = arglen == len ? 1 : strtol(&argv[i][len], NULL, base);
+                if(MAIN_Options[j].setcmd&MAIN_SETCMD_STR)
+                    MAIN_Options[j].value = arglen == len ? MAIN_Options[j].value : (uintptr_t)&argv[i][len]; //default set to NULL. conversion always safe for 32bit code
+                else
+                {
+                    int base = (MAIN_Options[j].setcmd&MAIN_SETCMD_BASE10) ? 10 : 16;
+                    MAIN_Options[j].value = arglen == len ? 1 : strtol(&argv[i][len], NULL, base);
+                }
                 MAIN_Options[j].setcmd |= MAIN_SETCMD_SET;
                 break;
             }
@@ -867,8 +885,36 @@ int main(int argc, char* argv[])
         MAIN_Print_Enabled_Newline(true);
     }
 
-    if(MAIN_Options[OPT_MPUADDR].value && MAIN_Options[OPT_MPUCOMPORT].value)
+    if(MAIN_Options[OPT_MPUADDR].value && 
+        (MAIN_Options[OPT_MPUCOMPORT].value
+#if SBEMU_VMPU
+         || MAIN_Options[OPT_VMPU_VOICES].value
+#endif
+        )
+    )
     {
+#if SBEMU_VMPU
+        //HW MPU is the default, if VMPU being set, override HW MPU. othewise error.
+        if(MAIN_Options[OPT_MPUCOMPORT].value != 9 && MAIN_Options[OPT_VMPU_VOICES].value)
+        {
+            MAIN_CPrintf(RED, "Conflict settings: /VMPU and /MCOM both enabled.\n");
+            return -1;
+        }
+        if(MAIN_Options[OPT_VMPU_VOICES].value)
+        {
+            if(MAIN_Options[OPT_VMPU_VOICES].value == 1) //default: /VMPU without params
+                MAIN_Options[OPT_VMPU_VOICES].value = 64;
+
+            const char* sf = (const char*)(uintptr_t)MAIN_Options[OPT_VMPU_SF].value;
+            if(!sf) sf = VMPU_DEF_SF2; //NULL="/VMSF"
+            if( VMPU_Init(MAIN_Options[OPT_MPUADDR].value, MAIN_Options[OPT_VMPU_VOICES].value, aui.freq_card, sf) )
+            { }
+            //always set
+            MAIN_MPUIODT[0].handler = &VMPU_MPU; //330
+            MAIN_MPUIODT[1].handler = &VMPU_MPU; //331
+        }
+#endif
+
         for(int i = 0; i < countof(MAIN_MPUIODT); ++i) MAIN_MPUIODT[i].port = MAIN_Options[OPT_MPUADDR].value+i;
         if(enableRM && !(MPURMInstalled=QEMM_Install_IOPortTrap(MAIN_MPUIODT, 2, &MPUIOPT)))
         {
@@ -1354,7 +1400,15 @@ static void MAIN_Interrupt()
     else if(!MAIN_Options[OPT_OPL].value)
         memset(MAIN_PCM, 0, samples*sizeof(int16_t)*2); //output muted samples.
 
-    if(MAIN_Options[OPT_OPL].value && !fm_aui.fm)
+#if SBEMU_VMPU
+    BOOL vmpu_active = VMPU_IsActive();
+#endif
+
+    if(MAIN_Options[OPT_OPL].value && !fm_aui.fm
+#if SBEMU_VMPU
+        && !vmpu_active //NOTE: skip OPL if MPU is active
+#endif
+    )
     {
         int16_t* pcm = digital ? MAIN_OPLPCM : MAIN_PCM;
         OPL3EMU_GenSamples(pcm, samples); //will generate samples*2 if stereo
@@ -1387,6 +1441,12 @@ static void MAIN_Interrupt()
     else if(digital)
         for(int i = 0; i < samples*2; ++i)
             MAIN_PCM[i] = MAIN_PCM[i] * voicevol/256 * vol/256;
+
+#if SBEMU_VMPU
+    if(vmpu_active)
+        VMPU_GenSamples(MAIN_PCM, samples, aui.freq_card, digital);
+#endif
+
     samples *= 2; //to stereo
 
     aui.samplenum = samples;
@@ -1421,7 +1481,10 @@ void MAIN_TSR_InstallationCheck()
             {
                 if((MAIN_Options[j].setcmd==MAIN_SETCMD_SET) && MAIN_Options[j].value != opt[j].value)
                 {
-                    printf((MAIN_Options[j].setcmd&MAIN_SETCMD_BASE10) ? "%s changed from %d to %d\n" : "%s changed from %x to %x\n",
+                    if((MAIN_Options[i].setcmd&MAIN_SETCMD_STR))
+                        printf("%8s: changed from %s to %s\n", MAIN_Options[i].option, (const char*)opt[j].value, (const char*)MAIN_Options[j].value);
+                    else
+                        printf((MAIN_Options[j].setcmd&MAIN_SETCMD_BASE10) ? "%s changed from %d to %d\n" : "%s changed from %x to %x\n",
                            MAIN_Options[j].option, opt[j].value, MAIN_Options[j].value);
                     opt[j].value = MAIN_Options[j].value;
                 }
@@ -1446,7 +1509,12 @@ void MAIN_TSR_InstallationCheck()
             for(int i = OPT_Help+1; i < OPT_COUNT; ++i)
             {
                 if(!(MAIN_Options[i].setcmd&MAIN_SETCMD_HIDDEN))
-                    printf( (MAIN_Options[i].setcmd&MAIN_SETCMD_BASE10) ? "%-8s: %d\n":"%-8s: %x\n", MAIN_Options[i].option, opt[i].value);
+                {
+                    if((MAIN_Options[i].setcmd&MAIN_SETCMD_STR))
+                        printf("%-8s: %s\n", MAIN_Options[i].option, (const char*)opt[i].value);
+                    else
+                        printf( (MAIN_Options[i].setcmd&MAIN_SETCMD_BASE10) ? "%-8s: %d\n":"%-8s: %x\n", MAIN_Options[i].option, opt[i].value);
+                }
             }
             free(opt);
             exit(0);

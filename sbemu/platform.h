@@ -147,6 +147,15 @@ static inline uint16_t PLTFM_CPU_FLAGS() { uint16_t (* volatile VFN)(void) = &PL
 
 #define memcpy_c2d memcpy
 
+#ifdef PENTIUM4 //not enbbled yet. TODO: runtime selection by CPUID
+static unsigned int defmxcsr = 0x1f80;
+#define fpu_save(buffer) asm volatile("fxsave %0\n\tfninit\n\tldmxcsr %1" : "=m"((buffer)) : "m"(defmxcsr))
+#define fpu_restore(buffer) asm volatile("fxrstor %0" :: "m"(buffer))
+#else
+#define fpu_save(buffer) asm volatile("fnsave %0" : "=m"((buffer)))
+#define fpu_restore(buffer) asm volatile("frstor %0" :: "m"(buffer))
+#endif
+
 #elif defined(__WC__)
 //need -za99 option?
 #include <stdint.h>

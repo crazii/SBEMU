@@ -157,6 +157,12 @@ NOTE: after SBEMU installs, you can change them by a another run of SBEMU with n
     SBEMU will try to reset the sound card to its initial states as when SBEMU installs.
     This options is only useful `AFTER` SBEMU installs.   
 
+/VMPU:  Set Virtual MPU's voice limit, default 0 (disable VMPU), range[32,256]
+        "/VMPU" equals "/VMPU=64"
+        this option Conflicts with /MCOM=[1/2/3/4]; errors will be generated if there is a conflict.
+
+/VMSF:  Set VMPU Soundfont2 file, if the file path is a relative path, it is relative to the location of SBEMU.EXE, NOT current working directory.
+        ONLY effective if /VMPU is enabled.
 
 5. Trouble Shooting
 

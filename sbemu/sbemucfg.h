@@ -8,4 +8,7 @@
 
 #define SBEMU_BITS 16
 
+//enable Virtual MPU by using TinySoundFont
+#define SBEMU_VMPU 1
+
 #endif//_SBEMUCFG_H_

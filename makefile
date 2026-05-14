@@ -106,6 +106,7 @@ SBEMU_SRC := sbemu/dbopl.cpp \
 	     utility.c \
 	     hdpmipt.c \
 		 irqguard.c \
+		 vmpu.c \
 
 LINUX_DRIVERS_SRC := $(CTXFI_SRC) $(EMU10K1_SRC) $(TRIDENT_SRC) $(ALS4000_SRC) $(OXYGEN_SRC) $(ALLEGRO_SRC)
 SRC := $(LINUX_DRIVERS_SRC) $(CARDS_SRC) $(SBEMU_SRC)
