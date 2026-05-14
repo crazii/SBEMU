@@ -7,13 +7,9 @@
 #include <stdlib.h>
 
 #include <dpmi/dbgutil.h>
-#include "sbemucfg.h"
-#include "../utility.h"
 #include "vmpu.h"
 
-#ifndef MAX_PATH
-#define MAX_PATH 1024
-#endif
+#if SBEMU_VMPU
 
 #if 1
 #define TSF_MALLOC malloc
@@ -22,8 +18,6 @@
 #endif
 #define TSF_IMPLEMENTATION
 #include "tsf.h"
-
-#if SBEMU_VMPU
 
 static unsigned char fpu_buffer[512] __attribute__((aligned(16)));
 
@@ -264,40 +258,20 @@ static uint8_t VMPU_Read(uint16_t port)
 }
 
 //intialization route, called if config enabled.
-BOOL VMPU_Init(int baseaddr, int voices, int freq, const char* sf2)
+BOOL VMPU_Init(int baseaddr, int* voices, int freq, const char* sf2)
 {
     VMPU_base = 0x330;
 
-    char sf_file[MAX_PATH];
-    int sf_file_len;
-    const char *soundfont_file = sf2;
-
-    if(!is_path_abs(soundfont_file))
-    {
-        sf_file_len = get_program_path(sf_file, sizeof(sf_file));
-
-        int len = strlen(soundfont_file);
-        if(sf_file_len + len + 1 < sizeof(sf_file))
-        {
-            sf_file[sf_file_len++] = '\\';
-            sf_file[sf_file_len] = '\0';
-            memcpy(sf_file + sf_file_len, soundfont_file, len + 1);
-            soundfont_file = sf_file;
-        }
-    }
-
-    tsfrenderer = tsf_load_filename(soundfont_file);
+    tsfrenderer = tsf_load_filename(sf2);
 
     if (tsfrenderer)
     {
         int channel = 0;
-        printf("TinySoundFont loaded (using soundfont %s)\n", soundfont_file);
-        if (voices < 32)
-            voices = 32;
-        if (voices > 256)
-            voices = 256;
-        printf("VMPU Maximum voice limit: %d\n", voices);
-        tsf_set_max_voices(tsfrenderer, voices);
+        if (*voices < 32)
+            *voices = 32;
+        if (*voices > 256)
+            *voices = 256;
+        tsf_set_max_voices(tsfrenderer, *voices);
         tsf_set_output(tsfrenderer, TSF_STEREO_INTERLEAVED, freq, 0);
         for (channel = 0; channel < 16; channel++)
             tsf_channel_midi_control(tsfrenderer, channel, 121, 0);
@@ -307,10 +281,7 @@ BOOL VMPU_Init(int baseaddr, int voices, int freq, const char* sf2)
         return TRUE;
     }
     else
-    {
-        printf("VMPU error: sound font file not found: %s, functions disabled.\n", soundfont_file);
         return FALSE;
-    }
 }
 
 BOOL VMPU_IsActive()

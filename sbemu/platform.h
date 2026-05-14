@@ -355,6 +355,7 @@ union REGS {
 #define WHITE 0
 #define LIGHTGRAY 0
 #define DARKGRAY 0
+#define LIGHTBLUE 0
 
 #endif //compiler specific preprossor directive
 

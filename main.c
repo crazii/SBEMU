@@ -14,13 +14,12 @@
 #include <virq.h>
 #include <sbemu.h>
 #include <untrapio.h>
+#include <vmpu.h>
 #include "qemm.h"
 #include "hdpmipt.h"
 #include "serial.h"
 #include "irqguard.h"
-#if SBEMU_VMPU
-#include <vmpu.h>
-#endif
+#include "utility.h"
 
 #include <au_cards/au_cards.h>
 #include <au_cards/pcibios.h>
@@ -907,8 +906,14 @@ int main(int argc, char* argv[])
 
             const char* sf = (const char*)(uintptr_t)MAIN_Options[OPT_VMPU_SF].value;
             if(!sf) sf = VMPU_DEF_SF2; //NULL="/VMSF"
-            if( VMPU_Init(MAIN_Options[OPT_MPUADDR].value, MAIN_Options[OPT_VMPU_VOICES].value, aui.freq_card, sf) )
-            { }
+            char fullpath[_MAX_PATH];
+            if( VMPU_Init(MAIN_Options[OPT_MPUADDR].value, &MAIN_Options[OPT_VMPU_VOICES].value, aui.freq_card, get_abs_path(fullpath, sizeof(fullpath), sf) ) )
+            {
+                MAIN_CPrintf(LIGHTGRAY, "MPU voices: %d, SoundFont: ", MAIN_Options[OPT_VMPU_VOICES].value);
+                MAIN_CPrintf(LIGHTBLUE, "%s\n", fullpath);
+            }
+            else
+                MAIN_CPrintf(YELLOW, "VMPU warning: sound font file not found: %s, functions disabled.\n", fullpath);
             //always set
             MAIN_MPUIODT[0].handler = &VMPU_MPU; //330
             MAIN_MPUIODT[1].handler = &VMPU_MPU; //331
@@ -1253,6 +1258,7 @@ static void MAIN_Interrupt()
     if(samples == 0)
         return;
 
+    BOOL vmpu_active = VMPU_IsActive();
     BOOL digital = SBEMU_HasStarted();
     int dma = (SBEMU_GetBits() <= 8 /*|| MAIN_Options[OPT_TYPE].value < 6*/) ? SBEMU_GetDMA() : SBEMU_GetHDMA();
     int32_t DMA_Count = VDMA_GetCounter(dma); //count in bytes
@@ -1397,17 +1403,11 @@ static void MAIN_Interrupt()
         cv_channels_1_to_n(MAIN_PCM, samples, 2, 2);
         digital = TRUE;
     }
-    else if(!MAIN_Options[OPT_OPL].value)
+    else if(!MAIN_Options[OPT_OPL].value && !vmpu_active)
         memset(MAIN_PCM, 0, samples*sizeof(int16_t)*2); //output muted samples.
 
-#if SBEMU_VMPU
-    BOOL vmpu_active = VMPU_IsActive();
-#endif
-
     if(MAIN_Options[OPT_OPL].value && !fm_aui.fm
-#if SBEMU_VMPU
         && !vmpu_active //NOTE: skip OPL if MPU is active
-#endif
     )
     {
         int16_t* pcm = digital ? MAIN_OPLPCM : MAIN_PCM;

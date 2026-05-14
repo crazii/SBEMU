@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "utility.h"
 
 // http://www.techhelpmanual.com/346-dos_environment.html
 // NOTE: this replaces the libc's default implementation of 'setenv'
@@ -122,4 +123,31 @@ int get_program_path(char* buf, int size)
 
     buf[i] = '\0';
     return i;
+}
+
+char* get_abs_path(char* dest, int size, const char* path)
+{
+    if(!is_path_abs(path))
+    {
+        char p_path[_MAX_PATH];
+        int p_path_len;
+        p_path_len = get_program_path(p_path, sizeof(p_path));
+
+        int len = strlen(path);
+        if(p_path_len + 1 < sizeof(p_path)
+            && p_path_len + len + 1 < size)
+        {
+            p_path[p_path_len++] = '\\';
+            p_path[p_path_len] = '\0';
+
+            memcpy(dest, p_path, p_path_len);
+            memcpy(dest+p_path_len, path, len + 1);
+            return dest;
+        }
+    }
+
+    int len = min(strlen(path),size-1);
+    memcpy(dest, path, len+1);
+    dest[len] = '\0';
+    return dest;
 }
