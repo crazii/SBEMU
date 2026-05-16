@@ -397,6 +397,8 @@ typedef int BOOL;
 static __INLINE uint16_t EndianSwap16(uint16_t x) {return (uint16_t)((x<<8) | (x>>8)); }
 static __INLINE uint32_t EndianSwap32(uint32_t x) {return (x<<24) | ((x<<8)&0xFF0000UL) | ((x>>8)&0xFF00UL) | (x>>24); }
 
+#define swapi(x, y) do {int t = x; x = y; y = t;} while(0)
+
 #define CPU_CFLAG 0x0001    //carry flag (CF)
 #define CPU_IFLAG 0x0200    //interrupt flag (IF)
 #define CPU_ZFLAG 0x0040    //zero flag

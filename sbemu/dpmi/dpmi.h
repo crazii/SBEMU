@@ -66,7 +66,7 @@ typedef struct//TSR/callback usage
     uint32_t stackpointer;  //esp
 }DPMI_SPACE;
 
-typedef struct//TSR/callback usage. state for linear DPMI_Load*/DPMI_Store*/DPMI_Mask*/DPMI_CopyLinear functions
+typedef struct//TSR/callback usage. state for linear DPMI_Load*/DPMI_Store*/DPMI_Mask*/DPMI_LMemcpy functions
 {
     uint16_t selector; //selector created from outside
     uint16_t physical; //1: physical addr instead of virutal. used when not called through DPMI/DPMI, and context unavailable, and no paging
@@ -292,9 +292,13 @@ void DPMI_MaskD(uint32_t addr, uint32_t mand, uint32_t mor);
 
 #endif
 
-void DPMI_CopyLinear(uint32_t dest, uint32_t src, uint32_t size);
-void DPMI_SetLinear(uint32_t dest, uint8_t val, uint32_t size);
-int32_t DPMI_CompareLinear(uint32_t addr1, uint32_t addr2, uint32_t size);
+void DPMI_LMemcpy(uint32_t dest, uint32_t src, uint32_t size);
+void DPMI_LMemset(uint32_t dest, uint8_t val, uint32_t size);
+int32_t DPMI_LMemcmp(uint32_t addr1, uint32_t addr2, uint32_t size);
+int32_t DPMI_LStrcmp(uint32_t addr1, uint32_t addr2);
+int32_t DPMI_LStricmp(uint32_t addr1, uint32_t addr2);
+uint32_t DPMI_LStrlen(uint32_t addr32);
+void DPMI_LStrcpy(uint32_t addr1, uint32_t addr2);
 
 //topdown allocation of DPMI_DOSMalloc, from high address (640K/1024K downwards).
 //input: size in paragraphs (16 bytes)

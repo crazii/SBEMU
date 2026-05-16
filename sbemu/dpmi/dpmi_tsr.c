@@ -171,7 +171,7 @@ BOOL DPMI_InitTSR(uint32_t base, uint32_t newbase, uint32_t* outputp poffset, ui
     //asm("movl $., %0" :: "r"(eip) :"memory");
     //printf("%04x:%08lx, %08lx, %08lx, %08lx\n", fjmp[1], fjmp[0], newbase, size-1,eip);
     //printf("src: %08lx, dest : %08lx, size: %08lx\n", base + ProgramOffset, newbase + ProgramOffset, ProgramSize);
-    DPMI_CopyLinear(newbase + ProgramOffset, base + ProgramOffset, ProgramSize);    //after local vars inited
+    DPMI_LMemcpy(newbase + ProgramOffset, base + ProgramOffset, ProgramSize);    //after local vars inited
     //TODO: we could probably use physical remap instead of jump.
     asm("ljmp *%0" :: "m"(fjmp));
 switch_space:
@@ -213,9 +213,9 @@ BOOL DPMI_ShutdownTSR(void)
 
     __djgpp_exception_toggle();
     int x = __dpmi_get_and_disable_virtual_interrupt_state();
-    //DPMI_CopyLinear(__djgpp_base_address_old + ProgramOffset, __djgpp_base_address + ProgramOffset, ProgramSize);
+    //DPMI_LMemcpy(__djgpp_base_address_old + ProgramOffset, __djgpp_base_address + ProgramOffset, ProgramSize);
     uint32_t stack = SectionOffset[2] + SectionSize[2];
-    DPMI_CopyLinear(__djgpp_base_address_old + stack, __djgpp_base_address + stack, ProgramSize-stack);
+    DPMI_LMemcpy(__djgpp_base_address_old + stack, __djgpp_base_address + stack, ProgramSize-stack);
     __dpmi_get_and_set_virtual_interrupt_state(x);
     __djgpp_exception_toggle();
 

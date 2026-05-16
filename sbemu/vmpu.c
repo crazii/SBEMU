@@ -11,11 +11,6 @@
 
 #if SBEMU_VMPU
 
-#if 1
-#define TSF_MALLOC malloc
-#define TSF_FREE free
-#define TSF_REALLOC realloc
-#endif
 #define TSF_IMPLEMENTATION
 #include "tsf.h"
 
@@ -48,6 +43,7 @@ static unsigned char midi_mpu_status = 0x80;
 static const unsigned char gm_reset[6] = {0xF0, 0x7E, 0x7F, 0x09, 0x01, 0xF7};
 static const unsigned char gs_reset[11] = {0xF0, 0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41, 0xF7};
 
+static char loaded_sf2[512];
 static tsf *tsfrenderer;
 static int VMPU_base;
 
@@ -257,31 +253,88 @@ static uint8_t VMPU_Read(uint16_t port)
     }
 }
 
-//intialization route, called if config enabled.
+
+static int tsf_stream_linear_memory_read(struct tsf_stream_memory* m, void* ptr, unsigned int size) { if (size > m->total - m->pos) size = m->total - m->pos; DPMI_LMemcpy(DPMI_PTR2L(ptr), (uintptr_t)m->buffer+m->pos, size); m->pos += size; return size; }
+static int tsf_stream_linear_memory_skip(struct tsf_stream_memory* m, unsigned int count) { if (m->pos + count > m->total) return 0; m->pos += count; return 1; }
+static tsf* tsf_load_linear_memory(uint32_t linear_mem, int size)
+{
+	struct tsf_stream stream = { TSF_NULL, (int(*)(void*,void*,unsigned int))&tsf_stream_linear_memory_read, (int(*)(void*,unsigned int))&tsf_stream_linear_memory_skip };
+	struct tsf_stream_memory f = { 0, 0, 0 };
+	f.buffer = (const char*)linear_mem;
+	f.total = size;
+	stream.data = &f;
+	return tsf_load(&stream);
+}
+
 BOOL VMPU_Init(int baseaddr, int* voices, int freq, const char* sf2)
 {
     VMPU_base = 0x330;
-
+    if (*voices < 32)
+        *voices = 32;
+    if (*voices > 256)
+        *voices = 256;
+    
     tsfrenderer = tsf_load_filename(sf2);
 
     if (tsfrenderer)
     {
         int channel = 0;
-        if (*voices < 32)
-            *voices = 32;
-        if (*voices > 256)
-            *voices = 256;
         tsf_set_max_voices(tsfrenderer, *voices);
         tsf_set_output(tsfrenderer, TSF_STEREO_INTERLEAVED, freq, 0);
-        for (channel = 0; channel < 16; channel++)
+        for (channel = 15; channel >= 0; --channel)
             tsf_channel_midi_control(tsfrenderer, channel, 121, 0);
         tsf_channel_set_bank_preset(tsfrenderer, 9, 128, 0);
 
         VMPU_base = baseaddr;
+
+        memcpy(loaded_sf2, sf2, min(strlen(sf2)+1, sizeof(loaded_sf2)));
+        loaded_sf2[sizeof(loaded_sf2)-1] = '\0';
         return TRUE;
     }
     else
+    {
+        memset(loaded_sf2, 0, sizeof(loaded_sf2));
         return FALSE;
+    }
+}
+
+BOOL VMPU_Reset(int baseaddr, int* voices, int freq, const char* sf2, uint32_t sf2_linear_mem, int bytes)
+{
+    VMPU_base = 0x330;
+    if (*voices < 32)
+        *voices = 32;
+    if (*voices > 256)
+        *voices = 256;
+
+    if(tsfrenderer && stricmp(loaded_sf2, sf2) != 0)
+    {
+        tsf_close(tsfrenderer);
+        tsfrenderer = NULL;
+    }
+
+    if(!tsfrenderer)
+        tsfrenderer = tsf_load_linear_memory(sf2_linear_mem, bytes);
+
+    if (tsfrenderer)
+    {
+        int channel = 0;
+        tsf_set_max_voices(tsfrenderer, *voices);
+        tsf_set_output(tsfrenderer, TSF_STEREO_INTERLEAVED, freq, 0);
+        for (channel = 15; channel >= 0; --channel)
+            tsf_channel_midi_control(tsfrenderer, channel, 121, 0);
+        tsf_channel_set_bank_preset(tsfrenderer, 9, 128, 0);
+
+        VMPU_base = baseaddr;
+
+        memcpy(loaded_sf2, sf2, min(strlen(sf2), sizeof(loaded_sf2)-1));
+        loaded_sf2[sizeof(loaded_sf2)-1] = '\0';
+        return TRUE;
+    }
+    else
+    {
+        memset(loaded_sf2, 0, sizeof(loaded_sf2));
+        return FALSE;
+    }
 }
 
 BOOL VMPU_IsActive()

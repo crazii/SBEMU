@@ -2,6 +2,7 @@
 #include "xms.h"
 #include <conio.h>
 #include <stdlib.h>
+#include <ctype.h>
 
 DPMI_ADDRESSING DPMI_Addressing;
 
@@ -128,7 +129,7 @@ void DPMI_MaskD(uint32_t addr, uint32_t mand, uint32_t mor)
 #endif
 
 #if defined(__DJ2__) || defined(__WC__)
-void DPMI_CopyLinear(uint32_t dest, uint32_t src, uint32_t size) //TODO: use memcpy directly
+void DPMI_LMemcpy(uint32_t dest, uint32_t src, uint32_t size) //TODO: use memcpy directly
 {
     uint32_t size4 = size >> 2;
     uint32_t size1 = size & 0x3;
@@ -152,7 +153,7 @@ void DPMI_CopyLinear(uint32_t dest, uint32_t src, uint32_t size) //TODO: use mem
     RESTORE_DS()
 }
 
-void DPMI_SetLinear(uint32_t dest, uint8_t val, uint32_t size)
+void DPMI_LMemset(uint32_t dest, uint8_t val, uint32_t size)
 {
     uint32_t size4 = size >> 2;
     uint32_t size1 = size & 0x3;
@@ -175,7 +176,7 @@ void DPMI_SetLinear(uint32_t dest, uint8_t val, uint32_t size)
     RESTORE_DS()
 }
 
-int32_t DPMI_CompareLinear(uint32_t addr1, uint32_t addr2, uint32_t size)
+int32_t DPMI_LMemcmp(uint32_t addr1, uint32_t addr2, uint32_t size)
 {
     uint32_t size4 = size >> 2;
     uint32_t size1 = size & 0x3;
@@ -215,6 +216,70 @@ int32_t DPMI_CompareLinear(uint32_t addr1, uint32_t addr2, uint32_t size)
     }
     RESTORE_DS()
     return result;
+}
+
+int32_t DPMI_LStrcmp(uint32_t addr1, uint32_t addr2)
+{
+    int32_t c1;
+    int32_t c2;
+    int32_t result;
+    addr1 = UNMAP_ADDR(addr1);
+    addr2 = UNMAP_ADDR(addr2);
+
+    LOAD_DS()
+    do
+    {
+        c1 = *((uint8_t*)addr1++);
+        c2 = *((uint8_t*)addr2++);
+        result = (int32_t)(c1 - c2);
+    } while( c1 && c2 && result);
+    RESTORE_DS()
+    return result;
+}
+
+int32_t DPMI_LStricmp(uint32_t addr1, uint32_t addr2)
+{
+    int32_t c1;
+    int32_t c2;
+    int32_t result;
+    do
+    {
+        c1 = toupper(DPMI_LoadB(addr1++));
+        c2 = toupper(DPMI_LoadB(addr2++));
+        result = (int32_t)(c1 - c2);
+    } while( c1 && c2 && result);
+    return result;
+}
+
+uint32_t DPMI_LStrlen(uint32_t addr32)
+{
+    int32_t c;
+    uint32_t len = 0;
+    addr32 = UNMAP_ADDR(addr32);
+
+    LOAD_DS()
+    do
+    {
+        c = *((uint8_t*)addr32+len);
+        ++len;
+    } while( c);
+    RESTORE_DS()
+    return len;
+}
+
+void DPMI_LStrcpy(uint32_t addr1, uint32_t addr2)
+{
+    uint32_t c;
+    addr1 = UNMAP_ADDR(addr1);
+    addr2 = UNMAP_ADDR(addr2);
+
+    LOAD_DS()
+    do
+    {
+        c = *((uint8_t*)addr2++);
+        *((uint8_t*)addr1++) = c;
+    } while(c);
+    RESTORE_DS()
 }
 
 #elif defined(__BC__)//BC doesn't support linear addr, but TASM does, use asm
@@ -330,7 +395,7 @@ void DPMI_MaskD(uint32_t addr, uint32_t mand, uint32_t mor)
     RESTORE_DS();
 }
 
-void DPMI_CopyLinear(uint32_t dest, uint32_t src, uint32_t size)
+void DPMI_LMemcpy(uint32_t dest, uint32_t src, uint32_t size)
 {
     LOAD_DS();
     __asm {
@@ -376,7 +441,7 @@ end:
     RESTORE_DS();
 }
 
-void DPMI_SetLinear(uint32_t dest, uint8_t val, uint32_t size)
+void DPMI_LMemset(uint32_t dest, uint8_t val, uint32_t size)
 {
     LOAD_DS();
     __asm {
@@ -422,7 +487,7 @@ end:
     RESTORE_DS();
 }
 
-int32_t DPMI_CompareLinear(uint32_t addr1, uint32_t addr2, uint32_t size)
+int32_t DPMI_LMemcmp(uint32_t addr1, uint32_t addr2, uint32_t size)
 {
     int32_t result;
     LOAD_DS();

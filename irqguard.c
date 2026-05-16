@@ -39,7 +39,7 @@ BOOL IRQGUARD_Install(uint8_t irq)
             assert(FALSE);
             return FALSE;
         }
-        DPMI_CopyLinear(DPMI_SEGOFF2L(IRQGUARD_DOSMEM, datasize), DPMI_PTR2L(&IRQGUARD_Handler), codesize);
+        DPMI_LMemcpy(DPMI_SEGOFF2L(IRQGUARD_DOSMEM, datasize), DPMI_PTR2L(&IRQGUARD_Handler), codesize);
     }    
 
     if(IRQGUARD_Installed && irq != IRQGUARD_IRQ)
@@ -53,8 +53,8 @@ BOOL IRQGUARD_Install(uint8_t irq)
     //if rawIVT is used, it will prevent DPMI and PM games to process it
     DPMI_InstallRealModeISR_Direct(vec, (uint16_t)(IRQGUARD_DOSMEM&0xFFFF), datasize, &IRQGUARD_Handle, FALSE);
     //far ptr
-    DPMI_CopyLinear(DPMI_SEGOFF2L(IRQGUARD_DOSMEM, 0), DPMI_PTR2L(&IRQGUARD_Handle.old_rm_offset), 2);
-    DPMI_CopyLinear(DPMI_SEGOFF2L(IRQGUARD_DOSMEM, 2), DPMI_PTR2L(&IRQGUARD_Handle.old_rm_cs), 2);
+    DPMI_LMemcpy(DPMI_SEGOFF2L(IRQGUARD_DOSMEM, 0), DPMI_PTR2L(&IRQGUARD_Handle.old_rm_offset), 2);
+    DPMI_LMemcpy(DPMI_SEGOFF2L(IRQGUARD_DOSMEM, 2), DPMI_PTR2L(&IRQGUARD_Handle.old_rm_cs), 2);
     //init guard byte
     IRQGUARD_Installed = TRUE;
     IRQGUARD_IRQ = irq;

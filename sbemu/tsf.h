@@ -1405,6 +1405,7 @@ TSFDEF tsf* tsf_load(struct tsf_stream* stream)
 
 	// Read hydra and locate sample data.
 	TSF_MEMSET(&hydra, 0, sizeof(hydra));
+	tsf_u32 total = 0;
 	while (tsf_riffchunk_read(&chunkHead, &chunkList, stream))
 	{
 		struct tsf_riffchunk chunk;
@@ -1417,6 +1418,7 @@ TSFDEF tsf* tsf_load(struct tsf_stream* stream)
 						int num = chunk.size / chunkName##SizeInFile, i; \
 						hydra.chunkName##Num = num; \
 						hydra.chunkName##s = (struct tsf_hydra_##chunkName*)TSF_MALLOC(num * sizeof(struct tsf_hydra_##chunkName)); \
+						total += num * sizeof(struct tsf_hydra_##chunkName); \
 						if (!hydra.chunkName##s) goto out_of_memory; \
 						for (i = 0; i < num; ++i) tsf_hydra_read_##chunkName(&hydra.chunkName##s[i], stream); \
 					}
@@ -1477,6 +1479,7 @@ TSFDEF tsf* tsf_load(struct tsf_stream* stream)
 		res = TSF_NULL;
 		//if (e) *e = TSF_OUT_OF_MEMORY;
 	}
+	//cprintf("total transient memory: %d\n\r", total); //hundreds KB.
 	TSF_FREE(hydra.phdrs); TSF_FREE(hydra.pbags); TSF_FREE(hydra.pmods);
 	TSF_FREE(hydra.pgens); TSF_FREE(hydra.insts); TSF_FREE(hydra.ibags);
 	TSF_FREE(hydra.imods); TSF_FREE(hydra.igens); TSF_FREE(hydra.shdrs);

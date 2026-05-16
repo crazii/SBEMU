@@ -85,7 +85,7 @@ static uint32_t VGA_Scroll(uint32_t offset)
     else
     #endif
     {
-        DPMI_CopyLinear(VGA_VIDEO_ADDRESS + VGA_GetOffset(0, 0)*2, VGA_VIDEO_ADDRESS + VGA_GetOffset(0, 1)*2, VGA_MAX_COLS * (VGA_MAX_ROWS - 1)*2);
+        DPMI_LMemcpy(VGA_VIDEO_ADDRESS + VGA_GetOffset(0, 0)*2, VGA_VIDEO_ADDRESS + VGA_GetOffset(0, 1)*2, VGA_MAX_COLS * (VGA_MAX_ROWS - 1)*2);
     }
 
     for(uint32_t i = 0; i < VGA_MAX_COLS; ++i)

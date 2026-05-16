@@ -251,7 +251,7 @@ void VDMA_WriteData(int channel, uint8_t data)
             laddr = DPMI_MapMemory(addr, 65536);
 
         _LOG("dmaw: %x, %d\n", addr+index, data);
-        DPMI_CopyLinear(laddr+index, DPMI_PTR2L(&data), 1);
+        DPMI_LMemcpy(laddr+index, DPMI_PTR2L(&data), 1);
 
         if(addr>1024*1024)
             DPMI_UnmappMemory(laddr);

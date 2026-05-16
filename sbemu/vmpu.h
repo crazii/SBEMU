@@ -12,7 +12,13 @@ extern "C"
 
 #define VMPU_DEF_SF2 "sbemusf.sf2"
 
+//intialization route, called if option enabled.
 BOOL VMPU_Init(int baseaddr, int* voices, int freq, const char* sf2);
+
+//for TSR with pre-loaded memory
+//don't change VMPU_Init to pre-loaded memory because streaming take less memory,
+//but a full pre-load may fail if the SF is too large.
+BOOL VMPU_Reset(int baseaddr, int* voices, int freq, const char* sf2, uint32_t sf2_linear_mem, int bytes);
 
 BOOL VMPU_IsActive();
 

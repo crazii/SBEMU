@@ -202,10 +202,10 @@ BOOL QEMM_Install_IOPortTrap(QEMM_IODT* inputp iodt, uint16_t count, QEMM_IOPT* 
                 QEMM_DOSMEM = 0;
                 return FALSE;
             }
-            DPMI_CopyLinear(DPMI_SEGOFF2L(QEMM_DOSMEM, 0), DPMI_PTR2L(&rmcb), 4);
+            DPMI_LMemcpy(DPMI_SEGOFF2L(QEMM_DOSMEM, 0), DPMI_PTR2L(&rmcb), 4);
             void* buf = malloc(codesize);
             memcpy_c2d(buf, &QEMM_RM_Wrapper, codesize); //copy to ds seg in case cs&ds are not same
-            DPMI_CopyLinear(DPMI_SEGOFF2L(QEMM_DOSMEM, 4+2), DPMI_PTR2L(buf), codesize);
+            DPMI_LMemcpy(DPMI_SEGOFF2L(QEMM_DOSMEM, 4+2), DPMI_PTR2L(buf), codesize);
             free(buf);
         }
 
