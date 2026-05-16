@@ -12,6 +12,7 @@
 #if SBEMU_VMPU
 
 #define TSF_IMPLEMENTATION
+#define TSF_FLOAT_LUT
 #include "tsf.h"
 
 static unsigned char fpu_buffer[512] __attribute__((aligned(16)));

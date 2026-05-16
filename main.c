@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <dos.h>
 #include <stdarg.h>
+#include <sys/stat.h>
 #include <dpmi/dbgutil.h>
 #include <sbemucfg.h>
 #include <pic.h>
@@ -50,7 +51,7 @@ static BOOL MAIN_TSRed;
 
 #if MAIN_VMPU_HDPMI_MEMFIX
 
-#define MAIN_VMPU_MEMSIZE (12*1024*1024) //OK for a 4M SF. 16M needed for a Yamaha XG SF. FIXME
+#define MAIN_VMPU_MEMSIZE (7*1024*1024) //OK for a 4M SF and a 6M (Yamaha XG) SF with TSF_FLOAT_LUT
 
 static void* VMPU_Mem; //pre-alloc mem. this works because free() does not return dpmi memory immediately to dpmi host.
 
@@ -840,10 +841,15 @@ int main(int argc, char* argv[])
             MAIN_Options[OPT_VMPU_VOICES].option, MAIN_Options[OPT_SCMPU].option, MAIN_Options[OPT_MPUCOMPORT].option);
         return -1;
     }
-    if(MAIN_Options[OPT_VMPU_VOICES].value == 1) //default: /VMPU without params
+    if(VMPU_ENABLED) //default: /VMPU without params
         MAIN_Options[OPT_VMPU_VOICES].value = 64;
     if(!MAIN_Options[OPT_VMPU_SF].value) //NULL="/VMSF"
         MAIN_Options[OPT_VMPU_SF].value = (uintptr_t)VMPU_DEF_SF2;
+    //pre-check file existence when !VMPU_ENABLED
+    // {
+    //     const char* sf = (const char*)MAIN_Options[OPT_VMPU_SF].value;
+
+    // }
 #endif
 
     //TSR installation check: update parameter & exit if already installed

@@ -330,13 +330,18 @@ typedef unsigned short tsf_u16;
 typedef signed short tsf_s16;
 typedef unsigned int tsf_u32;
 typedef char tsf_char20[20];
+#ifdef TSF_FLOAT_LUT
+typedef short tsf_sample;
+#else
+typedef float tsf_sample;
+#endif
 
 #define TSF_FourCCEquals(value1, value2) (value1[0] == value2[0] && value1[1] == value2[1] && value1[2] == value2[2] && value1[3] == value2[3])
 
 struct tsf
 {
 	struct tsf_preset* presets;
-	float* fontSamples;
+	tsf_sample* fontSamples;
 	struct tsf_voice* voices;
 	struct tsf_channels* channels;
 
@@ -353,6 +358,11 @@ struct tsf
 	float convex_calculated_table[16384 + 1];
 	float concave_calculated_table[16384 + 1];
 };
+
+#ifdef TSF_FLOAT_LUT
+static TSF_BOOL tsf_lut_init;
+static float tsf_lut[65536]; //short to float Look Up Table
+#endif
 
 #ifndef TSF_NO_STDIO
 static int tsf_stream_stdio_read(FILE* f, void* ptr, unsigned int size) { return (int)fread(ptr, 1, size, f); }
@@ -916,7 +926,7 @@ static int tsf_decode_ogg(const tsf_u8 *pSmpl, const tsf_u8 *pSmplEnd, float** p
 	return 1;
 }
 
-static int tsf_decode_sf3_samples(const void* rawBuffer, float** pFloatBuffer, unsigned int* pSmplCount, struct tsf_hydra *hydra)
+static int tsf_decode_sf3_samples(const void* rawBuffer, tsf_sample** pSampleBuffer, unsigned int* pSmplCount, struct tsf_hydra *hydra)
 {
 	const tsf_u8* smplBuffer = (const tsf_u8*)rawBuffer;
 	tsf_u32 smplLength = *pSmplCount, resNum = 0, resMax = 0, resInitial = (smplLength > 0x100000 ? (smplLength & ~0xFFFFF) : 65536);
@@ -974,13 +984,13 @@ static int tsf_decode_sf3_samples(const void* rawBuffer, float** pFloatBuffer, u
 	}
 
 	// Trim the sample buffer down then return success (unless out of memory)
-	if (!(*pFloatBuffer = (float*)TSF_REALLOC(res, resNum * sizeof(float)))) *pFloatBuffer = res;
+	if (!(*pSampleBuffer = (float*)TSF_REALLOC(res, resNum * sizeof(tsf_sample)))) *pSampleBuffer = res;
 	*pSmplCount = resNum;
 	return (res ? 1 : 0);
 }
 #endif
 
-static int tsf_load_samples(void** pRawBuffer, float** pFloatBuffer, unsigned int* pSmplCount, struct tsf_riffchunk *chunkSmpl, struct tsf_stream* stream)
+static int tsf_load_samples(void** pRawBuffer, tsf_sample** pSampleBuffer, unsigned int* pSmplCount, struct tsf_riffchunk *chunkSmpl, struct tsf_stream* stream)
 {
 	#ifdef STB_VORBIS_INCLUDE_STB_VORBIS_H
 	// With OGG Vorbis support we cannot pre-allocate the memory for tsf_decode_sf3_samples
@@ -992,18 +1002,21 @@ static int tsf_load_samples(void** pRawBuffer, float** pFloatBuffer, unsigned in
 
 	// Decode custom .sfo 'smpo' format where all samples are in a single ogg stream
 	resNum = resMax = 0;
-	if (!tsf_decode_ogg((tsf_u8*)*pRawBuffer, (tsf_u8*)*pRawBuffer + chunkSmpl->size, pFloatBuffer, &resNum, &resMax, 65536)) return 0;
-	if (!(*pFloatBuffer = (float*)TSF_REALLOC((oldres = *pFloatBuffer), resNum * sizeof(float)))) *pFloatBuffer = oldres;
+	if (!tsf_decode_ogg((tsf_u8*)*pRawBuffer, (tsf_u8*)*pRawBuffer + chunkSmpl->size, pSampleBuffer, &resNum, &resMax, 65536)) return 0;
+	if (!(*pSampleBuffer = (float*)TSF_REALLOC((oldres = *pSampleBuffer), resNum * sizeof(float)))) *pSampleBuffer = oldres;
 	*pSmplCount = resNum;
-	return (*pFloatBuffer ? 1 : 0);
+	return (*pSampleBuffer ? 1 : 0);
 	#else
 	// Inline convert the samples from short to float
-	float *res, *out; const short *in;
+	tsf_sample *res, *out; const short *in;
 	*pSmplCount = chunkSmpl->size / (unsigned int)sizeof(short);
-	*pFloatBuffer = (float*)TSF_MALLOC(*pSmplCount * sizeof(float));
-	if (!*pFloatBuffer || !stream->read(stream->data, *pFloatBuffer, chunkSmpl->size)) return 0;
-	for (res = *pFloatBuffer, out = res + *pSmplCount, in = (short*)res + *pSmplCount; out != res;)
+	*pSampleBuffer = (tsf_sample*)TSF_MALLOC(*pSmplCount * sizeof(tsf_sample));
+	if (!*pSampleBuffer || !stream->read(stream->data, *pSampleBuffer, *pSmplCount * sizeof(tsf_sample))) return 0;
+	stream->skip(stream->data, chunkSmpl->size - *pSmplCount * sizeof(tsf_sample));
+	#ifndef TSF_FLOAT_LUT
+	for (res = *pSampleBuffer, out = res + *pSmplCount, in = (short*)res + *pSmplCount; out != res;)
 		*(--out) = (float)(*(--in) / 32767.0);
+	#endif
 	return 1;
 	#endif
 }
@@ -1248,7 +1261,7 @@ static void tsf_voice_calcpitchratio(struct tsf_voice* v, float pitchShift, floa
 static void tsf_voice_render(tsf* f, struct tsf_voice* v, float* outputBuffer, int numSamples)
 {
 	struct tsf_region* region = v->region;
-	float* input = f->fontSamples;
+	tsf_sample* input = f->fontSamples;
 	float* outL = outputBuffer;
 	float* outR = (f->outputmode == TSF_STEREO_UNWEAVED ? outL + numSamples : TSF_NULL);
 
@@ -1320,7 +1333,11 @@ static void tsf_voice_render(tsf* f, struct tsf_voice* v, float* outputBuffer, i
 					unsigned int pos = (unsigned int)tmpSourceSamplePosition, nextPos = (pos >= tmpLoopEnd && isLooping ? tmpLoopStart : pos + 1);
 
 					// Simple linear interpolation.
+					#ifdef TSF_FLOAT_LUT
+					float alpha = (float)(tmpSourceSamplePosition - pos), val = (tsf_lut[(tsf_u16)input[pos]] * (1.0f - alpha) + tsf_lut[(tsf_u16)input[nextPos]] * alpha);
+					#else
 					float alpha = (float)(tmpSourceSamplePosition - pos), val = (input[pos] * (1.0f - alpha) + input[nextPos] * alpha);
+					#endif
 
 					// Low-pass filter.
 					if (tmpLowpass.active) val = tsf_voice_lowpass_process(&tmpLowpass, val);
@@ -1341,7 +1358,11 @@ static void tsf_voice_render(tsf* f, struct tsf_voice* v, float* outputBuffer, i
 					unsigned int pos = (unsigned int)tmpSourceSamplePosition, nextPos = (pos >= tmpLoopEnd && isLooping ? tmpLoopStart : pos + 1);
 
 					// Simple linear interpolation.
+					#ifdef TSF_FLOAT_LUT
+					float alpha = (float)(tmpSourceSamplePosition - pos), val = (tsf_lut[(tsf_u16)input[pos]] * (1.0f - alpha) + tsf_lut[(tsf_u16)input[nextPos]] * alpha);
+					#else
 					float alpha = (float)(tmpSourceSamplePosition - pos), val = (input[pos] * (1.0f - alpha) + input[nextPos] * alpha);
+					#endif
 
 					// Low-pass filter.
 					if (tmpLowpass.active) val = tsf_voice_lowpass_process(&tmpLowpass, val);
@@ -1361,7 +1382,11 @@ static void tsf_voice_render(tsf* f, struct tsf_voice* v, float* outputBuffer, i
 					unsigned int pos = (unsigned int)tmpSourceSamplePosition, nextPos = (pos >= tmpLoopEnd && isLooping ? tmpLoopStart : pos + 1);
 
 					// Simple linear interpolation.
+					#ifdef TSF_FLOAT_LUT
+					float alpha = (float)(tmpSourceSamplePosition - pos), val = (tsf_lut[(tsf_u16)input[pos]] * (1.0f - alpha) + tsf_lut[(tsf_u16)input[nextPos]] * alpha);
+					#else
 					float alpha = (float)(tmpSourceSamplePosition - pos), val = (input[pos] * (1.0f - alpha) + input[nextPos] * alpha);
+					#endif
 
 					// Low-pass filter.
 					if (tmpLowpass.active) val = tsf_voice_lowpass_process(&tmpLowpass, val);
@@ -1388,12 +1413,21 @@ static void tsf_voice_render(tsf* f, struct tsf_voice* v, float* outputBuffer, i
 
 TSFDEF tsf* tsf_load(struct tsf_stream* stream)
 {
+#ifdef TSF_FLOAT_LUT
+	if(!tsf_lut_init)
+	{
+		for(int i = 0; i < 65536; ++i)
+			tsf_lut[i] = ((tsf_s16)i) / 32767.0f;
+		tsf_lut_init = TSF_TRUE;
+	}
+#endif
+
 	tsf* res = TSF_NULL;
 	struct tsf_riffchunk chunkHead;
 	struct tsf_riffchunk chunkList;
 	struct tsf_hydra hydra;
 	void* rawBuffer = TSF_NULL;
-	float* floatBuffer = TSF_NULL;
+	tsf_sample* sampleBuffer = TSF_NULL;
 	tsf_u32 smplCount = 0;
 	tsf_u32 i = 0;
 
@@ -1443,9 +1477,9 @@ TSFDEF tsf* tsf_load(struct tsf_stream* stream)
 						#ifdef STB_VORBIS_INCLUDE_STB_VORBIS_H
 						|| TSF_FourCCEquals(chunk.id, "smpo")
 						#endif
-					) && !rawBuffer && !floatBuffer && chunk.size >= sizeof(short))
+					) && !rawBuffer && !sampleBuffer && chunk.size >= sizeof(short))
 				{
-					if (!tsf_load_samples(&rawBuffer, &floatBuffer, &smplCount, &chunk, stream)) goto out_of_memory;
+					if (!tsf_load_samples(&rawBuffer, &sampleBuffer, &smplCount, &chunk, stream)) goto out_of_memory;
 				}
 				else stream->skip(stream->data, chunk.size);
 			}
@@ -1456,21 +1490,21 @@ TSFDEF tsf* tsf_load(struct tsf_stream* stream)
 	{
 		//if (e) *e = TSF_INVALID_INCOMPLETE;
 	}
-	else if (!rawBuffer && !floatBuffer)
+	else if (!rawBuffer && !sampleBuffer)
 	{
 		//if (e) *e = TSF_INVALID_NOSAMPLEDATA;
 	}
 	else
 	{
 		#ifdef STB_VORBIS_INCLUDE_STB_VORBIS_H
-		if (!floatBuffer && !tsf_decode_sf3_samples(rawBuffer, &floatBuffer, &smplCount, &hydra)) goto out_of_memory;
+		if (!sampleBuffer && !tsf_decode_sf3_samples(rawBuffer, &sampleBuffer, &smplCount, &hydra)) goto out_of_memory;
 		#endif
 		res = (tsf*)TSF_MALLOC(sizeof(tsf));
 		if (res) TSF_MEMSET(res, 0, sizeof(tsf));
 		if (!res || !tsf_load_presets(res, &hydra, smplCount)) goto out_of_memory;
 		res->outSampleRate = 44100.0f;
-		res->fontSamples = floatBuffer;
-		floatBuffer = TSF_NULL; // don't free below
+		res->fontSamples = sampleBuffer;
+		sampleBuffer = TSF_NULL; // don't free below
 	}
 	if (0)
 	{
@@ -1483,7 +1517,7 @@ TSFDEF tsf* tsf_load(struct tsf_stream* stream)
 	TSF_FREE(hydra.phdrs); TSF_FREE(hydra.pbags); TSF_FREE(hydra.pmods);
 	TSF_FREE(hydra.pgens); TSF_FREE(hydra.insts); TSF_FREE(hydra.ibags);
 	TSF_FREE(hydra.imods); TSF_FREE(hydra.igens); TSF_FREE(hydra.shdrs);
-	TSF_FREE(rawBuffer);   TSF_FREE(floatBuffer);
+	TSF_FREE(rawBuffer);   TSF_FREE(sampleBuffer);
 
 	res->convex_calculated_table[0] = 0;
 	res->convex_calculated_table[(sizeof(res->convex_calculated_table) / sizeof(float)) - 1] = 1.0f;

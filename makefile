@@ -7,7 +7,7 @@ VERSION ?= $(shell git describe --tags)
 
 INCLUDES := -I./mpxplay -I./sbemu -I./drivers/include
 DEFINES := -D__DOS__ -DSBEMU -DDEBUG=$(DEBUG) -DMAIN_SBEMU_VER=\"$(VERSION)\"
-CFLAGS := -fcommon -march=i386 -O2 -flto $(INCLUDES) $(DEFINES)
+CFLAGS := -fcommon -march=i386 -ffast-math -O2 -flto $(INCLUDES) $(DEFINES)
 LDFLAGS := -lstdc++ -lm -Wno-attributes
 
 ifeq ($(DEBUG),0)
