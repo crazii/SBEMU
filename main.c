@@ -6,7 +6,6 @@
 #include <stdbool.h>
 #include <dos.h>
 #include <stdarg.h>
-#include <sys/stat.h>
 #include <dpmi/dbgutil.h>
 #include <sbemucfg.h>
 #include <pic.h>
@@ -845,11 +844,6 @@ int main(int argc, char* argv[])
         MAIN_Options[OPT_VMPU_VOICES].value = 64;
     if(!MAIN_Options[OPT_VMPU_SF].value) //NULL="/VMSF"
         MAIN_Options[OPT_VMPU_SF].value = (uintptr_t)VMPU_DEF_SF2;
-    //pre-check file existence when !VMPU_ENABLED
-    // {
-    //     const char* sf = (const char*)MAIN_Options[OPT_VMPU_SF].value;
-
-    // }
 #endif
 
     //TSR installation check: update parameter & exit if already installed

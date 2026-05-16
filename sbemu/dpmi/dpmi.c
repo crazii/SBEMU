@@ -220,8 +220,8 @@ int32_t DPMI_LMemcmp(uint32_t addr1, uint32_t addr2, uint32_t size)
 
 int32_t DPMI_LStrcmp(uint32_t addr1, uint32_t addr2)
 {
-    int32_t c1;
-    int32_t c2;
+    uint32_t c1;
+    uint32_t c2;
     int32_t result;
     addr1 = UNMAP_ADDR(addr1);
     addr2 = UNMAP_ADDR(addr2);
@@ -232,22 +232,22 @@ int32_t DPMI_LStrcmp(uint32_t addr1, uint32_t addr2)
         c1 = *((uint8_t*)addr1++);
         c2 = *((uint8_t*)addr2++);
         result = (int32_t)(c1 - c2);
-    } while( c1 && c2 && result);
+    } while( c1 && c2 && !result);
     RESTORE_DS()
     return result;
 }
 
 int32_t DPMI_LStricmp(uint32_t addr1, uint32_t addr2)
 {
-    int32_t c1;
-    int32_t c2;
+    uint32_t c1;
+    uint32_t c2;
     int32_t result;
     do
     {
         c1 = toupper(DPMI_LoadB(addr1++));
         c2 = toupper(DPMI_LoadB(addr2++));
         result = (int32_t)(c1 - c2);
-    } while( c1 && c2 && result);
+    } while( c1 && c2 && !result);
     return result;
 }
 
