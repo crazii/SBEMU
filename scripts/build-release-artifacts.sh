@@ -15,10 +15,10 @@ FULL_PATH_TO_OUTPUT_ARTIFACTS=$(readlink -f "$PATH_TO_OUTPUT_ARTIFACTS")
 mkdir -p /tmp/sbemu_usb_img
 rm -rf /tmp/sbemu_usb_img/*
 pushd /tmp/sbemu_usb_img
-wget https://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/distributions/1.3/official/FD13-LiteUSB.zip
+wget https://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/distributions/1.4/FD14-LiteUSB.zip
 wget https://www.freedos.org/download/verify.txt
-grep -q "64a934585087ccd91a18c55e20ee01f5f6762be712eeaa5f456be543778f9f7e  FD13-LiteUSB.zip" verify.txt
-echo "64a934585087ccd91a18c55e20ee01f5f6762be712eeaa5f456be543778f9f7e  FD13-LiteUSB.zip" | shasum -a 256 --check
+grep -q "857dcd2ebf9d3d094320154db5fb5b830acba6fb98f981a95a0ca7ab3350338b  FD14-LiteUSB.zip" verify.txt
+echo "857dcd2ebf9d3d094320154db5fb5b830acba6fb98f981a95a0ca7ab3350338b  FD14-LiteUSB.zip" | shasum -a 256 --check
 unzip FD13-LiteUSB.zip
 rm FD13-LiteUSB.zip
 wget https://github.com/Baron-von-Riedesel/Jemm/releases/download/v5.84/JemmB_v584.zip
