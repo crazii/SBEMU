@@ -327,7 +327,7 @@ BOOL VMPU_Reset(int baseaddr, int* voices, int freq, const char* sf2, uint32_t s
 
         VMPU_base = baseaddr;
 
-        memcpy(loaded_sf2, sf2, min(strlen(sf2), sizeof(loaded_sf2)-1));
+        memcpy(loaded_sf2, sf2, min(strlen(sf2)+1, sizeof(loaded_sf2)));
         loaded_sf2[sizeof(loaded_sf2)-1] = '\0';
         return TRUE;
     }
