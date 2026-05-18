@@ -12,8 +12,10 @@
 #include <opl3emu.h>
 #include <vdma.h>
 #include <sbemu.h>
+#include <vmpu.h>
 #include "vdpmi.h"
 #include "serial.h"
+#include "utility.h"
 
 #include <au_cards/au_cards.h>
 #include <au_cards/pcibios.h>
@@ -22,6 +24,8 @@ extern void _go32_dpmi_set_iret_eax(unsigned val, unsigned esp, unsigned ss);
 
 static const char *
 PROGNAME = "SBEMU";
+
+static BOOL MAIN_TSRed;
 
 #ifndef MAIN_SBEMU_VER
 #define MAIN_SBEMU_VER "1.0 beta6"
@@ -32,9 +36,37 @@ PROGNAME = "SBEMU";
 #define MAIN_USE_CLIENT_MODE_DRIVER 1   //needs to set 1 to avoid interrupt handler suppression by programs' CLI
                                         //otherwise sound might not response in time.
 #define MAIN_PCM_RESAMPLE_INTERPOLATION 1
+#define MAIN_VMPU_HDPMI_MEMFIX 1 //workaround hdpmi bug that a TSR allocated memory being treated as primary client's, also better by avoiding DPMI memory fragments
+                            //details on '_freeclientmemory' at I31MEM.ASM of HDPMI.
 
 #define MAIN_TSR_INT 0x2D   //AMIS multiplex. TODO: 0x2F?
 #define MAIN_TSR_INTSTART_ID 0x01 //start id
+
+#if SBEMU_VMPU 
+
+#define VMPU_ENABLED (MAIN_Options[OPT_VMPU_VOICES].value)
+
+#if MAIN_VMPU_HDPMI_MEMFIX
+
+#define MAIN_VMPU_MEMSIZE (7*1024*1024) //OK for a 4M SF and a 6M (Yamaha XG) SF with TSF_FLOAT_LUT
+
+static void* VMPU_Mem; //pre-alloc mem. this works because free() does not return dpmi memory immediately to dpmi host.
+
+#define MAIN_VMPU_ALLOCMEM() while(!VMPU_Mem) { \
+    VMPU_Mem = malloc(MAIN_VMPU_MEMSIZE); \
+    if(!VMPU_Mem) { MAIN_CPrintf(RED, "Failed to allocate memory.\n"); exit(-1); } \
+}
+
+#define MAIN_VMPU_FREEMEM() do { \
+    if(VMPU_Mem) {free(VMPU_Mem); VMPU_Mem = NULL; } \
+} while(0)
+#endif //MAIN_VMPU_HDPMI_MEMFIX
+
+#else //SBEMU_VMPU
+
+#define VMPU_ENABLED FALSE
+
+#endif
 
 static mpxplay_audioout_info_s aui = {0};
 static mpxplay_audioout_info_s fm_aui = {0};
@@ -342,9 +374,16 @@ SBEMU_IOPT MPUIOPT;
 SBEMU_IOPT MAIN_VDMA_IOPT;
 SBEMU_IOPT MAIN_SB_IOPT;
 
+#define MAIN_SETCMD_INTRL 0x80000000L //hack: internal. used by TSR communication
+#define MAIN_SETCMD_CHGD 0x40000000L //value changed (extra states)
+#define OPT_CHANGED(i) (MAIN_Options[i].setcmd&MAIN_SETCMD_CHGD)
+
 #define MAIN_SETCMD_SET 0x01 //set in command line
 #define MAIN_SETCMD_HIDDEN 0x02 //hidden flag on report
 #define MAIN_SETCMD_BASE10 0x04 //use decimal value (default hex)
+#define MAIN_SETCMD_STR 0x08 //string
+#define MAIN_SETCMD_STRCS 0x10 //case sensitive
+#define MAIN_SETCMD_STRCPY 0x20 //a copy of string, needs free
 
 struct MAIN_OPT
 {
@@ -367,23 +406,27 @@ struct MAIN_OPT
     "/PM", "Enable protected mode support", TRUE, 0,
     "/RM", "Enable real mode support", TRUE, 0,
 
-    "/O", "Select output. 0: headphone, 1: speaker. Intel HDA only", 1, 0,
+    "/O", "Select output. 0: headphone, 1: speaker (Intel HDA) or S/PDIF (Xonar DG)", 1, 0,
     "/VOL", "Set master volume (0-9)", 7, 0,
 
-    "/K", "Internal sample rate (default 22050)", 22050, MAIN_SETCMD_BASE10,
+    "/K", "Internal sample rate", 22050, MAIN_SETCMD_BASE10,
     "/FIXTC", "Fix time constant to match 11/22/44 kHz sample rate", FALSE, 0,
     "/SCL", "List installed sound cards", 0, MAIN_SETCMD_HIDDEN,
     "/SCFM", "Select FM(OPL) sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN|MAIN_SETCMD_BASE10,
     "/SCMPU", "Select MPU-401 sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN|MAIN_SETCMD_BASE10,
     "/SC", "Select sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN|MAIN_SETCMD_BASE10,
     "/R", "Reset sound card driver", 0, MAIN_SETCMD_HIDDEN,
-    "/P", "UART mode MPU-401 IO address (default 330) [*]", 0x330, 0,
+    "/P", "UART mode MPU-401 IO address [*]", 0x330, 0,
     "/MCOM", "UART mode MPU-401 COM port (1=COM1, 2=COM2, 3=COM3, 4=COM4, 9:HW MPU only, otherwise base address)", 9, 0,
     "/COML", "List installed COM ports", 0, MAIN_SETCMD_HIDDEN,
 #if MPU_DEBUG
     "/MDBG", "Enable MPU-401 debugging (0 to disable, 1 or 2 to enable)", 0, 0,
 #endif
-
+#if SBEMU_VMPU
+    "/VMPU","Virtual MPU max voices ([32-256]. 1=64, 0=disabled)", 0, MAIN_SETCMD_BASE10 | (MAIN_VMPU_HDPMI_MEMFIX ? 0 : MAIN_SETCMD_HIDDEN), //voice num also act as a switch. 0:turn off VMPU
+    "/VMSF", "VMPU Soundfont2 file", (uintptr_t)VMPU_DEF_SF2, MAIN_SETCMD_STR | (MAIN_VMPU_HDPMI_MEMFIX ? 0 : MAIN_SETCMD_HIDDEN), //NOTE: string ptr to int conversion always safe for 32bit code
+    "/VMSFBF", "", 0, MAIN_SETCMD_INTRL|MAIN_SETCMD_HIDDEN,
+#endif
     NULL, NULL, 0,
 };
 enum EOption
@@ -414,7 +457,11 @@ enum EOption
 #if MPU_DEBUG
     OPT_MDBG,
 #endif
-
+#if SBEMU_VMPU
+    OPT_VMPU_VOICES,
+    OPT_VMPU_SF,
+    OPT_VMPU_SFBUF,
+#endif
     OPT_COUNT,
 };
 
@@ -469,16 +516,16 @@ static void MAIN_CPrintf(int color, const char* fmt, ...)
     buf[n-2] = crlf ? '\0' : buf[n-2];
     buf[n-1] = lf ? '\0' : buf[n-1];
     textcolor(color);
-    cprintf("%s", buf); //more safe with a fmt string, incase buf contains any fmt.
+    cputs(buf); //more safe with a fmt string, incase buf contains any fmt.
     textcolor(LIGHTGRAY);
-    if(crlf || lf) cprintf("\r\n");
+    if(crlf || lf) cputs("\r\n");
 }
 
 static void
 MAIN_Print_Enabled_Newline(bool enabled)
 {
     MAIN_CPrintf(enabled ? LIGHTGREEN : LIGHTRED, "%s", enabled ? "enabled" : "disabled");
-    cprintf(".\r\n");
+    cputs(".\r\n");
 }
 
 static int
@@ -544,9 +591,16 @@ int main(int argc, char* argv[])
         int i = 0;
         while(MAIN_Options[i].option)
         {
+            if(MAIN_Options[i].setcmd&MAIN_SETCMD_INTRL) {++i; continue;}
+
             printf(" %-7s: %s", MAIN_Options[i].option, MAIN_Options[i].desc);
             if (i != 0) {
-                printf(", default: %x.\n", MAIN_Options[i].value);
+                if(MAIN_Options[i].setcmd&MAIN_SETCMD_STR)
+                    printf(", default: %s.\n", (const char*)MAIN_Options[i].value);
+                else if(MAIN_Options[i].setcmd&MAIN_SETCMD_BASE10)
+                    printf(", default: %d.\n", MAIN_Options[i].value);
+                else
+                    printf(", default: %x.\n", MAIN_Options[i].value);
             } else {
                 printf(".\n");
             }
@@ -590,9 +644,15 @@ int main(int argc, char* argv[])
             int len = strlen(MAIN_Options[j].option);
             if(memicmp(argv[i], MAIN_Options[j].option, len) == 0)
             {
+                if(argv[i][len] == '=' || argv[i][len] == ':') ++len; //optional separator
                 int arglen = strlen(argv[i]);
-                int base = (MAIN_Options[j].setcmd&MAIN_SETCMD_BASE10) ? 10 : 16;
-                MAIN_Options[j].value = arglen == len ? 1 : strtol(&argv[i][len], NULL, base);
+                if(MAIN_Options[j].setcmd&MAIN_SETCMD_STR)
+                    MAIN_Options[j].value = arglen == len ? MAIN_Options[j].value : (uintptr_t)&argv[i][len]; //default set to NULL.
+                else
+                {
+                    int base = (MAIN_Options[j].setcmd&MAIN_SETCMD_BASE10) ? 10 : 16;
+                    MAIN_Options[j].value = arglen == len ? 1 : strtol(&argv[i][len], NULL, base);
+                }
                 MAIN_Options[j].setcmd |= MAIN_SETCMD_SET;
                 break;
             }
@@ -654,8 +714,13 @@ int main(int argc, char* argv[])
         MAIN_CPrintf(RED, "Error: Invalid Sample rate.\n");
         return 1;
     }
-    if(MAIN_Options[OPT_TYPE].value != 6)
-        MAIN_Options[OPT_HDMA].value = MAIN_Options[OPT_DMA].value; //16 bit transfer through 8 bit dma
+    if(MAIN_Options[OPT_HDMA].value < 5 && MAIN_Options[OPT_HDMA].value != MAIN_Options[OPT_DMA].value) //16 bit transfer through 8 bit dma
+    {
+        MAIN_CPrintf(YELLOW, "Warning: HDMA using 8 bit channel: H=%d, "
+        "using 5/6/7 is recommended.\n"
+        "set both DMA & HDMA to %d to resolve conflicts\n", MAIN_Options[OPT_HDMA].value, MAIN_Options[OPT_DMA].value);
+        MAIN_Options[OPT_HDMA].value = MAIN_Options[OPT_DMA].value; //only one low DMA channel allowed, use same channel for hdma & low dma.
+    }
 
     MAIN_VDPMI_Present = FALSE;
     if(MAIN_Options[OPT_PM].value)
@@ -672,6 +737,10 @@ int main(int argc, char* argv[])
 
     //TSR installation check: update parameter & exit if already installed
     MAIN_TSR_InstallationCheck();
+
+#if SBEMU_VMPU && MAIN_VMPU_HDPMI_MEMFIX
+    MAIN_VMPU_ALLOCMEM();
+#endif
 
     MAIN_SetBlasterEnv(MAIN_Options);
 
@@ -705,7 +774,7 @@ int main(int argc, char* argv[])
         aui.card_irq = pcibios_AssignIRQ(aui.card_pci_dev);
         if(aui.card_irq == 0xFF)
         {
-            printf("Failed to assign a valid IRQ for sound card, abort.\n");
+            MAIN_CPrintf(RED, "Failed to assign a valid IRQ for sound card, abort.\n");
             return 1;
         }
         printf("Sound card IRQ assigned: ");
@@ -747,9 +816,38 @@ int main(int argc, char* argv[])
         printf("OPL3 %s%s at port 388: ", emutype, hwdesc);
         MAIN_Print_Enabled_Newline(true);
     }
-    
-    if(MAIN_Options[OPT_MPUADDR].value && MAIN_Options[OPT_MPUCOMPORT].value)
+
+    if(MAIN_Options[OPT_MPUADDR].value && 
+        (MAIN_Options[OPT_MPUCOMPORT].value || VMPU_ENABLED)
+    )
     {
+#if SBEMU_VMPU
+        if(VMPU_ENABLED)
+        {
+            #if MAIN_VMPU_HDPMI_MEMFIX
+            MAIN_VMPU_FREEMEM(); //not needed because there is an init, will re-alloc if init failed.
+            #endif
+
+            const char* sf = (const char*)MAIN_Options[OPT_VMPU_SF].value;
+            char fullpath[_MAX_PATH];
+            if( VMPU_Init(MAIN_Options[OPT_MPUADDR].value, &MAIN_Options[OPT_VMPU_VOICES].value, aui.freq_card, get_abs_path(fullpath, sizeof(fullpath), sf) ) )
+            {
+                MAIN_CPrintf(LIGHTGRAY, "MPU voices: %d, SoundFont: ", MAIN_Options[OPT_VMPU_VOICES].value);
+                MAIN_CPrintf(LIGHTBLUE, "%s\n", fullpath);
+            }
+            else
+            {
+                MAIN_CPrintf(YELLOW, "VMPU warning: sound font file not found: %s, functions disabled.\n", fullpath);
+                #if MAIN_VMPU_HDPMI_MEMFIX
+                MAIN_VMPU_ALLOCMEM();
+                #endif
+            }
+            //always set
+            MAIN_MPUIODT[0].handler = &VMPU_MPU; //330
+            MAIN_MPUIODT[1].handler = &VMPU_MPU; //331
+        }
+#endif
+
         for(int i = 0; i < countof(MAIN_MPUIODT); ++i) MAIN_MPUIODT[i].port = MAIN_Options[OPT_MPUADDR].value+i;
         if(!(MPUInstalled=VDPMI_Install_IOPortTrap(MAIN_MPUIODT, 2, &MPUIOPT)))
         {
@@ -779,8 +877,7 @@ int main(int argc, char* argv[])
         MAIN_Options[OPT_FIX_TC].value,
         &MAIN_SbemuExtFun);
     VDMA_Virtualize(MAIN_Options[OPT_DMA].value, TRUE);
-    if(MAIN_Options[OPT_TYPE].value == 6)
-        VDMA_Virtualize(MAIN_Options[OPT_HDMA].value, TRUE);
+    VDMA_Virtualize(MAIN_Options[OPT_HDMA].value, TRUE);
     for(int i = 0; i < countof(MAIN_SB_IODT); ++i)
         MAIN_SB_IODT[i].port += MAIN_Options[OPT_ADDR].value;
     SBEMU_IODT* SB_Iodt = MAIN_Options[OPT_OPL].value ? MAIN_SB_IODT : MAIN_SB_IODT+4;
@@ -818,7 +915,7 @@ int main(int argc, char* argv[])
             break;
         MAIN_ISR_DOSID = DPMI_HighMalloc((sizeof(MAIN_ISR_DOSID_String)+15)>>4, TRUE);
         //printf("DOSID:%x\n", DPMI_SEGOFF2L(MAIN_ISR_DOSID,0));
-        DPMI_CopyLinear(DPMI_SEGOFF2L(MAIN_ISR_DOSID,0), DPMI_PTR2L((char*)MAIN_ISR_DOSID_String), sizeof(MAIN_ISR_DOSID_String));
+        DPMI_LMemcpy(DPMI_SEGOFF2L(MAIN_ISR_DOSID,0), DPMI_PTR2L((char*)MAIN_ISR_DOSID_String), sizeof(MAIN_ISR_DOSID_String));
         break;
     }
 
@@ -907,12 +1004,12 @@ static void MAIN_InterruptPM()
 
     //note: we have full control of the calling chain, if the irq belongs to the sound card,
     //we send EOI and skip calling the chain - it will be a little faster. if other devices raises irq at the same time,
-    //the interrupt handler will enterred again (not nested) so won't be a problem.
+    //the interrupt handler will entered again (not nested) so won't be a problem.
     //also we send EOI on our own and terminate, this doesn't rely on the default implementation in IVT - some platform (i.e. VirtualBox)
     //don't send EOI on default handler in IVT.
     //
     //it has one problem that if other drivers (shared IRQ) enables interrupts (because it needs wait or is time consuming)
-    //then because we're still in MAIN_InterruptPM, so MAIN_InterruptPM is never enterred agian (guarded by go32 or MAIN_ININT_PM), 
+    //then because we're still in MAIN_InterruptPM, so MAIN_InterruptPM is never entered again (guarded by go32 or MAIN_ININT_PM),
     //so the newly coming irq will never be processed and the IRQ will flood the system (freeze)
     //an alternative chained methods will EXIT MAIN_InterruptPM FIRST and calls next handler, which will avoid this case, see @MAIN_ISR_CHAINED
     //but we need a hack if the default handler in IVT doesn't send EOI or masks the irq - this is done in the RM final wrapper, see @DPMI_RMISR_ChainedWrapper
@@ -984,7 +1081,9 @@ static void MAIN_Interrupt()
     //_LOG("samples:%d\n",samples);
     if(samples == 0)
         return;
-    
+
+    BOOL vmpu_active = VMPU_IsActive();
+    BOOL opl_active = MAIN_Options[OPT_OPL].value && OPL3EMU_IsActive();
     BOOL digital = SBEMU_HasStarted();
     BOOL paused = SBEMU_IsPaused(); //need raise interrupt after pause, still need do the timing
     if(!digital) MAIN_LastSBRate = 0;
@@ -1065,7 +1164,7 @@ static void MAIN_Interrupt()
                 if(MAIN_DMA_MappedAddr == 0 || paused) //map failed?
                     memset(pcm, 0, bytes);
                 else
-                    DPMI_CopyLinear(DPMI_PTR2L(pcm), MAIN_DMA_MappedAddr+(DMA_Addr-MAIN_DMA_Addr)+DMA_Index, bytes);
+                    DPMI_LMemcpy(DPMI_PTR2L(pcm), MAIN_DMA_MappedAddr+(DMA_Addr-MAIN_DMA_Addr)+DMA_Index, bytes);
                 if(SBEMU_GetBits()<8) //ADPCM  8bit
                     count = SBEMU_DecodeADPCM((uint8_t*)(pcm), bytes);
                 if(samplesize != 2)
@@ -1102,7 +1201,7 @@ static void MAIN_Interrupt()
                 if(!SBEMU_GetAuto())
                     SBEMU_Stop();
                 SB_Pos = SBEMU_SetPos(0);
-                
+
                 MAIN_InvokeIRQ(SBEMU_GetIRQ());
                 if(SB_Bytes <= 32) //detection routine?
                 {
@@ -1112,7 +1211,7 @@ static void MAIN_Interrupt()
                     SBEMU_SetDetectionCounter(c);
                     break; //fix crash in virtualbox.
                 }
-                
+
                 SB_Bytes = SBEMU_GetSampleBytes();
                 SB_Pos = SBEMU_GetPos();
                 SB_Rate = SBEMU_GetSampleRate();
@@ -1157,10 +1256,15 @@ static void MAIN_Interrupt()
         cv_channels_1_to_n(MAIN_PCM, samples, 2, 2);
         digital = TRUE;
     }
-    else if(!MAIN_Options[OPT_OPL].value)
+    else if(!opl_active && !vmpu_active)
+    {
+        _LOG("muted\n");
         memset(MAIN_PCM, 0, samples*sizeof(int16_t)*2); //output muted samples.
+    }
 
-    if(MAIN_Options[OPT_OPL].value)
+    if(opl_active && !fm_aui.fm
+        && !vmpu_active //NOTE: skip OPL if MPU is active
+    )
     {
         int16_t* pcm = digital ? MAIN_OPLPCM : MAIN_PCM;
         OPL3EMU_GenSamples(pcm, samples); //will generate samples*2 if stereo
@@ -1193,6 +1297,12 @@ static void MAIN_Interrupt()
     else if(digital)
         for(int i = 0; i < samples*2; ++i)
             MAIN_PCM[i] = MAIN_PCM[i] * voicevol/256 * vol/256;
+
+#if SBEMU_VMPU
+    if(vmpu_active)
+        VMPU_GenSamples(MAIN_PCM, samples, aui.freq_card, digital);
+#endif
+
     samples *= 2; //to stereo
 
     aui.samplenum = samples;
@@ -1211,26 +1321,67 @@ void MAIN_TSR_InstallationCheck()
         if(r.h.al == 0)
             continue;
         //printf("DOSID:%x\n", DPMI_SEGOFF2L(r.w.dx, r.w.di));
-        if(DPMI_CompareLinear(DPMI_SEGOFF2L(r.w.dx, r.w.di), DPMI_PTR2L((char*)MAIN_ISR_DOSID_String), 16) == 0)
+        if(DPMI_LMemcmp(DPMI_SEGOFF2L(r.w.dx, r.w.di), DPMI_PTR2L((char*)MAIN_ISR_DOSID_String), 16) == 0)
         {
             printf("%s is active.\n", PROGNAME);
 
+            //note: copy array won't copy string pointers in the array, don't reference them, use string in MAIN_Options.
+            //except for MAIN_SETCMD_STR, they are converted to linear addresses.
+            struct MAIN_OPT* opt = (struct MAIN_OPT*)alloca(sizeof(MAIN_Options));
             r.h.ah = i;
             r.h.al = 0x01; //get current settings
+            r.d.ebx = DPMI_PTR2L(opt); //dest
+            r.d.ecx = sizeof(MAIN_Options); //size: in case that a different version of SBEMU is installed
             DPMI_CallRealModeINT(MAIN_TSR_INT, &r);
-
-            struct MAIN_OPT* opt = (struct MAIN_OPT*)malloc(sizeof(MAIN_Options));
-            DPMI_CopyLinear(DPMI_PTR2L(opt), r.d.ebx, sizeof(MAIN_Options)); //note: copy array won't copy string pointers in the array, don't reference them, use string in MAIN_Options.
+            if((r.w.flags&CPU_CFLAG))
+            {
+                MAIN_CPrintf(RED, "Failed to get SBEMU TSR information.\n");
+                exit(-1);
+            }
 
             for(int j = 0; j < OPT_COUNT; ++j)
             {
-                if((MAIN_Options[j].setcmd==MAIN_SETCMD_SET) && MAIN_Options[j].value != opt[j].value)
+                if(!(MAIN_Options[j].setcmd&MAIN_SETCMD_SET) || (MAIN_Options[j].setcmd&MAIN_SETCMD_HIDDEN))
+                    continue;
+                if((MAIN_Options[j].setcmd&MAIN_SETCMD_STR) && 
+                    ( (MAIN_Options[j].setcmd&MAIN_SETCMD_STRCS) && DPMI_LStrcmp(opt[j].value, DPMI_PTR2L((char*)MAIN_Options[j].value)) != 0
+                        || DPMI_LStricmp(opt[j].value, DPMI_PTR2L((char*)MAIN_Options[j].value)) != 0 ) )
                 {
-                    printf((MAIN_Options[j].setcmd&MAIN_SETCMD_BASE10) ? "%s changed from %d to %d\n" : "%s changed from %x to %x\n",
-                           MAIN_Options[j].option, opt[j].value, MAIN_Options[j].value);
+                    uint32_t len = DPMI_LStrlen(opt[j].value);
+                    char* buf = alloca(len+1);
+                    DPMI_LMemcpy(DPMI_PTR2L(buf), opt[j].value, len+1);
+                    MAIN_CPrintf(WHITE, "%8s", MAIN_Options[j].option); MAIN_CPrintf(LIGHTGRAY, " changed from ");
+                    MAIN_CPrintf(RED, "%s", buf); MAIN_CPrintf(LIGHTGRAY, " to "); MAIN_CPrintf(LIGHTGREEN, "%s\n", (const char*)MAIN_Options[j].value);
+                    opt[j].value = DPMI_PTR2L((char*)MAIN_Options[j].value);
+                }
+                else if(!(MAIN_Options[j].setcmd&MAIN_SETCMD_STR) && MAIN_Options[j].value != opt[j].value)
+                {
+                    int radix10 = MAIN_Options[j].setcmd&MAIN_SETCMD_BASE10;
+                    MAIN_CPrintf(WHITE, "%8s", MAIN_Options[j].option); MAIN_CPrintf(LIGHTGRAY, " changed from ");
+                    MAIN_CPrintf(RED, radix10 ? "%d" : "%x", opt[j].value); MAIN_CPrintf(LIGHTGRAY, " to ");
+                    MAIN_CPrintf(LIGHTGREEN, radix10 ? "%d\n" : "%x\n", MAIN_Options[j].value);
                     opt[j].value = MAIN_Options[j].value;
                 }
             }
+
+#if SBEMU_VMPU //special handling for VMPU. the TSR has freed its RM translation buffer so it cannot do IO in PM.
+            opt[OPT_VMPU_SFBUF].value = 0;
+            if(MAIN_Options[OPT_VMPU_VOICES].value && MAIN_Options[OPT_MPUADDR].value)
+            {
+                char path[_MAX_PATH];
+                const char* sf = (const char*)MAIN_Options[OPT_VMPU_SF].value;
+                uint32_t len = 0;
+                void* sf_data = load_file(get_abs_path(path, sizeof(path), sf), sizeof(uint32_t), &len); //freed on exit
+                if(!sf_data)
+                {
+                    MAIN_CPrintf(RED, "Failed to load Soundfont file to memory: %s\n", path); //OOM? should be streaming but unable to do that.
+                    exit(-1);
+                }
+                *(uint32_t*)sf_data = len;
+                opt[OPT_VMPU_SFBUF].value = DPMI_PTR2L(sf_data);
+            }
+#endif
+
             if(MAIN_Options[OPT_RESET].value)
                 printf("Resetting sound card driver...\n");
             printf("\n");
@@ -1241,19 +1392,41 @@ void MAIN_TSR_InstallationCheck()
             r.h.ah = i;
             r.h.al = 0x02; //set new settings
             r.d.ebx = DPMI_PTR2L(opt);
+            r.d.ecx = sizeof(MAIN_Options);
             DPMI_CallRealModeINT(MAIN_TSR_INT, &r);
+            if((r.w.flags&CPU_CFLAG))
+            {
+                MAIN_CPrintf(RED, "Failed to update settings to SBEMU TSR.\n");
+                exit(-1);
+            }
 
             r.h.ah = i;
             r.h.al = 0x01; //read back to confirm
+            r.d.ebx = DPMI_PTR2L(opt);
+            r.d.ecx = sizeof(MAIN_Options);
             DPMI_CallRealModeINT(MAIN_TSR_INT, &r);
-            DPMI_CopyLinear(DPMI_PTR2L(opt), r.d.ebx, sizeof(MAIN_Options));
+            if((r.w.flags&CPU_CFLAG))
+            {
+                MAIN_CPrintf(RED, "Failed to get SBEMU TSR information.\n");
+                exit(-1);
+            }
+
             printf("Current settings:\n");
             for(int i = OPT_Help+1; i < OPT_COUNT; ++i)
             {
                 if(!(MAIN_Options[i].setcmd&MAIN_SETCMD_HIDDEN))
-                    printf( (MAIN_Options[i].setcmd&MAIN_SETCMD_BASE10) ? "%-8s: %d\n":"%-8s: %x\n", MAIN_Options[i].option, opt[i].value);
+                {
+                    if((MAIN_Options[i].setcmd&MAIN_SETCMD_STR))
+                    {
+                        uint32_t len = DPMI_LStrlen(opt[i].value);
+                        char* buf = alloca(len+1);
+                        DPMI_LMemcpy(DPMI_PTR2L(buf), opt[i].value, len+1);
+                        printf("%-8s: %s\n", MAIN_Options[i].option, buf);
+                    }
+                    else
+                        printf( (MAIN_Options[i].setcmd&MAIN_SETCMD_BASE10) ? "%-8s: %d\n":"%-8s: %x\n", MAIN_Options[i].option, opt[i].value);
+                }
             }
-            free(opt);
             exit(0);
         }
     }
@@ -1279,101 +1452,138 @@ static void MAIN_TSR_Interrupt()
         return;
         case 0x01: //query
         {
-            MAIN_TSRREG.d.ebx = DPMI_PTR2L(MAIN_Options);
+            if(MAIN_TSRREG.d.ecx != sizeof(MAIN_Options)) //different version of SBEMU?
+            {
+                MAIN_TSRREG.w.flags |= CPU_CFLAG;
+                return;
+            }
+            MAIN_TSRREG.w.flags &= ~CPU_CFLAG;
+            //convert string to linear addr, for the SBEMU client to access
+            for(int i = 0; i < countof(MAIN_Options); ++i)
+            {
+                if((MAIN_Options[i].setcmd&MAIN_SETCMD_STR))
+                    MAIN_Options[i].value = DPMI_PTR2L((char*)MAIN_Options[i].value);
+            }
+            DPMI_LMemcpy(MAIN_TSRREG.d.ebx, DPMI_PTR2L(MAIN_Options), sizeof(MAIN_Options));
+
+            for(int i = 0; i < countof(MAIN_Options); ++i) //convert back
+            {
+                if((MAIN_Options[i].setcmd&MAIN_SETCMD_STR))
+                    MAIN_Options[i].value = (uintptr_t)DPMI_L2PTR(MAIN_Options[i].value);
+            }
         }
         return;
         case 0x02: //set
         {
-            struct MAIN_OPT* opt = (struct MAIN_OPT*)malloc(sizeof(MAIN_Options));
-            DPMI_CopyLinear(DPMI_PTR2L(opt), MAIN_TSRREG.d.ebx, sizeof(MAIN_Options));
+            if(MAIN_TSRREG.d.ecx != sizeof(MAIN_Options)) //different version of SBEMU?
+            {
+                MAIN_TSRREG.w.flags |= CPU_CFLAG;
+                return;
+            }
+            MAIN_TSRREG.w.flags &= ~CPU_CFLAG;
 
-            char* fpustate = (char*)malloc(108);
+            struct MAIN_OPT* _opt = (struct MAIN_OPT*)alloca(sizeof(MAIN_Options));
+            DPMI_LMemcpy(DPMI_PTR2L(_opt), MAIN_TSRREG.d.ebx, sizeof(MAIN_Options));
+
+            for(int i = 0; i < countof(MAIN_Options); ++i)
+            {
+                if(!(MAIN_Options[i].setcmd&MAIN_SETCMD_STR))
+                {
+                    MAIN_Options[i].setcmd |= (MAIN_Options[i].value != _opt[i].value) ? MAIN_SETCMD_CHGD : 0;
+                    swapi(MAIN_Options[i].value, _opt[i].value);
+                    continue;
+                }
+
+                if((MAIN_Options[i].setcmd&MAIN_SETCMD_STRCS) && DPMI_LStrcmp(_opt[i].value, DPMI_PTR2L((char*)MAIN_Options[i].value)) == 0)
+                    continue;
+                if(!(MAIN_Options[i].setcmd&MAIN_SETCMD_STRCS) && DPMI_LStricmp(_opt[i].value, DPMI_PTR2L((char*)MAIN_Options[i].value)) == 0)
+                    continue;
+
+                uint32_t len = DPMI_LStrlen(_opt[i].value);
+                char* str = malloc(len+1);
+                DPMI_LMemcpy(DPMI_PTR2L(str), _opt[i].value, len+1);
+                if((MAIN_Options[i].setcmd&MAIN_SETCMD_STRCPY))
+                    free((void*)MAIN_Options[i].value);
+                MAIN_Options[i].value = (uintptr_t)str;
+                MAIN_Options[i].setcmd |= MAIN_SETCMD_STRCPY|MAIN_SETCMD_CHGD;
+            }
+
+            char* fpustate = (char*)alloca(108);
             #ifdef DJGPP //make vscode happy
             asm("fsave %0\n\t finit":"=m"(*fpustate));
             #endif
             int irq = aui.card_irq;
             PIC_MaskIRQ(irq);
 
+            struct MAIN_OPT* old_opt = _opt; //readibility. value swapped.
 #if MPU_DEBUG
-            mpu_debug = MAIN_Options[OPT_MDBG].value = opt[OPT_MDBG].value;
+            mpu_debug = MAIN_Options[OPT_MDBG].value;
 #endif
-            if(MAIN_Options[OPT_DEBUG_OUTPUT].value != opt[OPT_DEBUG_OUTPUT].value)
+            if(OPT_CHANGED(OPT_DEBUG_OUTPUT))
             {
-                MAIN_Options[OPT_DEBUG_OUTPUT].value = opt[OPT_DEBUG_OUTPUT].value;
                 update_serial_debug_output();
             }
-            if(MAIN_Options[OPT_MPUCOMPORT].value != opt[OPT_MPUCOMPORT].value)
+            if(OPT_CHANGED(OPT_MPUCOMPORT))
             {
-                unsigned int curval = MAIN_Options[OPT_MPUCOMPORT].value;
-                MAIN_Options[OPT_MPUCOMPORT].value = opt[OPT_MPUCOMPORT].value;
+                unsigned int oldval = old_opt[OPT_MPUCOMPORT].value;
                 update_serial_mpu_output();
-                MAIN_Options[OPT_MPUCOMPORT].value = curval;
+                MAIN_Options[OPT_MPUCOMPORT].value = oldval; //TODO: don't know why keep the old val.
             }
 
-            if(MAIN_Options[OPT_OUTPUT].value != opt[OPT_OUTPUT].value || MAIN_Options[OPT_RATE].value != opt[OPT_RATE].value || opt[OPT_RESET].value)
+            if(OPT_CHANGED(OPT_OUTPUT) || OPT_CHANGED(OPT_RATE) || MAIN_Options[OPT_RESET].value)
             {
-                if(opt[OPT_OUTPUT].value != MAIN_Options[OPT_OUTPUT].value || opt[OPT_RESET].value)
+                if(OPT_CHANGED(OPT_OUTPUT) || MAIN_Options[OPT_RESET].value)
                 {
                     _LOG("Reset\n");
                     AU_close(&aui, &fm_aui, &mpu401_aui);
                     memset(&aui, 0, sizeof(aui));
                     memset(&fm_aui, 0, sizeof(fm_aui));
                     memset(&mpu401_aui, 0, sizeof(mpu401_aui));
-                    aui.card_select_config = MAIN_Options[OPT_OUTPUT].value = opt[OPT_OUTPUT].value;
+                    aui.card_select_config = MAIN_Options[OPT_OUTPUT].value;
                     aui.card_select_index =  MAIN_Options[OPT_SC].value;
                     aui.card_controlbits |= AUINFOS_CARDCNTRLBIT_SILENT; //don't print anything in interrupt
                     AU_init(&aui, &fm_aui, &mpu401_aui);
                     AU_ini_interrupts(&aui);
                     AU_setmixer_init(&aui);
                     AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 100);
-                    MAIN_Options[OPT_VOL].value = ~opt[OPT_VOL].value; //mark volume dirty
+                    MAIN_Options[OPT_VOL].setcmd |= MAIN_SETCMD_CHGD;   //mark volume dirty
                 }
                 _LOG("Change sample rate\n");
                 _LOG("FLAGS:%x\n",CPU_FLAGS());
 
-                int samplerate = opt[OPT_RATE].value;
+                int samplerate = MAIN_Options[OPT_RATE].value;
                 mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, samplerate, SBEMU_CHANNELS, SBEMU_CHANNELS, NULL, SBEMU_BITS, SBEMU_BITS/8, 0};
                 AU_setrate(&aui, &adi);
-                if(MAIN_Options[OPT_RATE].value != opt[OPT_RATE].value)
+                if(OPT_CHANGED(OPT_RATE))
                     OPL3EMU_Init(aui.freq_card);
                 AU_prestart(&aui); //setsamplerate/reset will do stop
                 AU_start(&aui);
-                MAIN_Options[OPT_RATE].value = opt[OPT_RATE].value;
             }
-            if(MAIN_Options[OPT_VOL].value != opt[OPT_VOL].value)
+            if(OPT_CHANGED(OPT_VOL))
             {
                 _LOG("Reset volume\n");
-                MAIN_Options[OPT_VOL].value = opt[OPT_VOL].value;
                 AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, MAIN_Options[OPT_VOL].value*100/9);
             }
             #ifdef DJGPP //make vscode happy
             asm("frstor %0" ::"m"(*fpustate));
             #endif
-            free(fpustate);
             PIC_UnmaskIRQ(irq);
 
-            if(MAIN_Options[OPT_DMA].value != opt[OPT_DMA].value)
+            if(OPT_CHANGED(OPT_DMA))
             {
                 _LOG("Change DMA\n");
-                VDMA_Virtualize(MAIN_Options[OPT_DMA].value, FALSE);
-                VDMA_Virtualize(opt[OPT_DMA].value, TRUE);
+                VDMA_Virtualize(old_opt[OPT_DMA].value, FALSE);
+                VDMA_Virtualize(MAIN_Options[OPT_DMA].value, TRUE);
             }
-            if(MAIN_Options[OPT_HDMA].value != opt[OPT_HDMA].value)
+            if(OPT_CHANGED(OPT_HDMA))
             {
                 _LOG("Change HDMA\n");
-                VDMA_Virtualize(MAIN_Options[OPT_HDMA].value, FALSE);
-                VDMA_Virtualize(opt[OPT_HDMA].value, TRUE);
+                VDMA_Virtualize(old_opt[OPT_HDMA].value, FALSE);
+                VDMA_Virtualize(MAIN_Options[OPT_HDMA].value, TRUE);
             }
-            if( MAIN_Options[OPT_DMA].value != opt[OPT_DMA].value || MAIN_Options[OPT_HDMA].value != opt[OPT_HDMA].value ||
-                MAIN_Options[OPT_IRQ].value != opt[OPT_IRQ].value || opt[OPT_TYPE].value != MAIN_Options[OPT_TYPE].value ||
-                MAIN_Options[OPT_FIX_TC].value != opt[OPT_FIX_TC].value)
+            if(OPT_CHANGED(OPT_DMA) || OPT_CHANGED(OPT_HDMA) || OPT_CHANGED(OPT_IRQ) || OPT_CHANGED(OPT_TYPE) || OPT_CHANGED(OPT_FIX_TC))
             {
                 _LOG("Reinit SBEMU\n");
-                MAIN_Options[OPT_DMA].value = opt[OPT_DMA].value;
-                MAIN_Options[OPT_HDMA].value = opt[OPT_HDMA].value;
-                MAIN_Options[OPT_IRQ].value = opt[OPT_IRQ].value;
-                MAIN_Options[OPT_TYPE].value = opt[OPT_TYPE].value;
-                MAIN_Options[OPT_FIX_TC].value = opt[OPT_FIX_TC].value;
                 SBEMU_Init(
                     MAIN_Options[OPT_IRQ].value,
                     MAIN_Options[OPT_DMA].value,
@@ -1383,55 +1593,84 @@ static void MAIN_TSR_Interrupt()
                     &MAIN_SbemuExtFun);
             }
 
-            if(MAIN_Options[OPT_OPL].value == opt[OPT_OPL].value && MAIN_Options[OPT_ADDR].value == opt[OPT_ADDR].value &&
-               MAIN_Options[OPT_MPUADDR].value == opt[OPT_MPUADDR].value && MAIN_Options[OPT_MPUCOMPORT].value == opt[OPT_MPUCOMPORT].value)
+            do
             {
-                free(opt);
-                return;
-            }
-            
-            //re-install all
-            _LOG("uninstall iotraps\n");
-            if(MAIN_Options[OPT_OPL].value) VDPMI_Uninstall_IOPortTrap(&OPL3IOPT);
-            if(MAIN_Options[OPT_MPUADDR].value && MAIN_Options[OPT_MPUCOMPORT].value) VDPMI_Uninstall_IOPortTrap(&MPUIOPT);
-            VDPMI_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT);
-            VDPMI_Uninstall_IOPortTrap(&MAIN_SB_IOPT);
+                if(!OPT_CHANGED(OPT_OPL) && OPT_CHANGED(OPT_ADDR) && !OPT_CHANGED(OPT_PM) && !OPT_CHANGED(OPT_RM) && !OPT_CHANGED(OPT_FIX_TC) &&
+                !OPT_CHANGED(OPT_MPUADDR) && OPT_CHANGED(OPT_MPUCOMPORT)
+    #if SBEMU_VMPU
+                    && !OPT_CHANGED(OPT_VMPU_VOICES) && (!VMPU_ENABLED || !OPT_CHANGED(OPT_VMPU_SF))
+    #endif
+                )
+                {
+                    break;
+                }
 
-            if(opt[OPT_OPL].value)
-            {
-                _LOG("install opl\n");
-                SBEMU_IODT *iodt = fm_aui.fm ? MAIN_HW_OPL3IODT : MAIN_OPL3IODT;
-                VDPMI_Install_IOPortTrap(iodt, 4, &OPL3IOPT);
-            }
+                //re-install all
+                _LOG("uninstall opl, dma, sb iotraps\n");
+                if(MAIN_Options[OPT_OPL].value && OPLInstalled) VDPMI_Uninstall_IOPortTrap(&OPL3IOPT);
+                if(MAIN_Options[OPT_MPUADDR].value && MAIN_Options[OPT_MPUCOMPORT].value) VDPMI_Uninstall_IOPortTrap(&MPUIOPT);
+                VDPMI_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT);
+                VDPMI_Uninstall_IOPortTrap(&MAIN_SB_IOPT);
 
-            if(opt[OPT_MPUADDR].value && opt[OPT_MPUCOMPORT].value)
-            {
-                _LOG("install mpu\n");
-                for(int i = 0; i < countof(MAIN_MPUIODT); ++i) MAIN_MPUIODT[i].port = opt[OPT_MPUADDR].value+i;
-                VDPMI_Install_IOPortTrap(MAIN_MPUIODT, 2, &MPUIOPT);
-            }
-            MAIN_Options[OPT_MPUADDR].value = opt[OPT_MPUADDR].value;
-            MAIN_Options[OPT_MPUCOMPORT].value = opt[OPT_MPUCOMPORT].value;
 
-            SBEMU_IODT* SB_Iodt = opt[OPT_OPL].value ? MAIN_SB_IODT : MAIN_SB_IODT+4;
-            int SB_IodtCount = opt[OPT_OPL].value ? countof(MAIN_SB_IODT) : countof(MAIN_SB_IODT)-4;
-            if(opt[OPT_ADDR].value != MAIN_Options[OPT_ADDR].value)
-            {
-                for(int i = 0; i < countof(MAIN_SB_IODT); ++i)
-                    MAIN_SB_IODT[i].port = MAIN_SB_IODT[i].port - MAIN_Options[OPT_ADDR].value + opt[OPT_ADDR].value;
-                MAIN_Options[OPT_ADDR].value = opt[OPT_ADDR].value;
-            }
+                if(MAIN_Options[OPT_OPL].value && !(fm_aui.fm && fm_aui.fm_port == 0x388))
+                {
+                    _LOG("install opl\n");
+                    SBEMU_IODT *iodt = fm_aui.fm ? MAIN_HW_OPL3IODT : MAIN_OPL3IODT;
+                    VDPMI_Install_IOPortTrap(iodt, 4, &OPL3IOPT);
+                }
 
-            if(opt[OPT_RM].value)
-            {
-                _LOG("install vdma+sb\n");
+                if(MAIN_Options[OPT_MPUADDR].value && (MAIN_Options[OPT_MPUCOMPORT].value || VMPU_ENABLED) )
+                {
+                    _LOG("install mpu\n");
+#if SBEMU_VMPU
+                    if(VMPU_ENABLED) //NOTE: OPT_VMPU_SF maybe not changed when changed previously but not enabled
+                    {
+                        #if MAIN_VMPU_HDPMI_MEMFIX
+                        MAIN_VMPU_FREEMEM();
+                        #endif
+
+                        uint32_t size = DPMI_LoadD(MAIN_Options[OPT_VMPU_SFBUF].value);
+                        if(!VMPU_Reset(MAIN_Options[OPT_MPUADDR].value, &MAIN_Options[OPT_VMPU_VOICES].value, aui.freq_card, 
+                            (const char*)MAIN_Options[OPT_VMPU_SF].value, MAIN_Options[OPT_VMPU_SFBUF].value+sizeof(size), size) )
+                        {
+                            MAIN_CPrintf(YELLOW, "VMPU warning: setup failed with SF: %s, functions disabled.\n", (const char*)MAIN_Options[OPT_VMPU_SF].value);
+                            #if MAIN_VMPU_HDPMI_MEMFIX
+                            MAIN_VMPU_ALLOCMEM();
+                            #endif
+                        }
+                        MAIN_Options[OPT_VMPU_SFBUF].value = 0;
+                        //always set
+                        MAIN_MPUIODT[0].handler = &VMPU_MPU; //330
+                        MAIN_MPUIODT[1].handler = &VMPU_MPU; //331
+                    }
+                    else
+                    {
+                        MAIN_MPUIODT[0].handler = &MAIN_MPU_330; //330
+                        MAIN_MPUIODT[1].handler = &MAIN_MPU_331; //331
+                    }
+#endif
+                    for(int i = 0; i < countof(MAIN_MPUIODT); ++i) MAIN_MPUIODT[i].port = MAIN_Options[OPT_MPUADDR].value+i;
+                    VDPMI_Install_IOPortTrap(MAIN_MPUIODT, 2, &MPUIOPT);
+                }
+
+                SBEMU_IODT* SB_Iodt = MAIN_Options[OPT_OPL].value ? MAIN_SB_IODT : MAIN_SB_IODT+4;
+                int SB_IodtCount = MAIN_Options[OPT_OPL].value ? countof(MAIN_SB_IODT) : countof(MAIN_SB_IODT)-4;
+                if(OPT_CHANGED(OPT_ADDR))
+                {
+                    for(int i = 0; i < countof(MAIN_SB_IODT); ++i)
+                        MAIN_SB_IODT[i].port = MAIN_SB_IODT[i].port - old_opt[OPT_ADDR].value + MAIN_Options[OPT_ADDR].value;
+                }
+
+                _LOG("install vdma+sb iotraps\n");
                 VDPMI_Install_IOPortTrap(MAIN_VDMA_IODT, countof(MAIN_VDMA_IODT), &MAIN_VDMA_IOPT);
                 VDPMI_Install_IOPortTrap(SB_Iodt, SB_IodtCount, &MAIN_SB_IOPT);
-            }
-            MAIN_Options[OPT_PM].value = opt[OPT_PM].value;
-            MAIN_Options[OPT_RM].value = opt[OPT_RM].value;
-            MAIN_Options[OPT_OPL].value = opt[OPT_OPL].value;
-            free(opt);
+
+            } while(0);
+
+            //cleanup changed states for all
+            for(int i = 0; i < countof(MAIN_Options); ++i)
+                MAIN_Options[i].setcmd &= ~MAIN_SETCMD_CHGD;
         }
         return;
     }

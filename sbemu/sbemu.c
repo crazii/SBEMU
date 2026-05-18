@@ -352,7 +352,6 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
                 else
                 {
                     SBEMU_Samples |= value<<8;
-                    ++SBEMU_Samples;
                     SBEMU_Started = SBEMU_DSPCMD==SBEMU_CMD_8BIT_OUT_1; //start transfer
                     SBEMU_HighSpeed = FALSE;
                     SBEMU_Auto = FALSE;

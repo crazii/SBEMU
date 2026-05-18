@@ -358,7 +358,7 @@ static void YMF_close (struct mpxplay_audioout_info_s *aui)
     MDma_free_cardmem(card->dm);
   if (card->dm2)
     MDma_free_cardmem(card->dm2);
-  if(card->pci_dev)
+  if (card->pci_dev)
     pds_free(card->pci_dev);
   pds_free(card);
   aui->card_private_data = NULL;

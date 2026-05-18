@@ -171,7 +171,7 @@ BOOL DPMI_InitTSR(uint32_t base, uint32_t newbase, uint32_t* outputp poffset, ui
     //asm("movl $., %0" :: "r"(eip) :"memory");
     //printf("%04x:%08lx, %08lx, %08lx, %08lx\n", fjmp[1], fjmp[0], newbase, size-1,eip);
     //printf("src: %08lx, dest : %08lx, size: %08lx\n", base + ProgramOffset, newbase + ProgramOffset, ProgramSize);
-    DPMI_CopyLinear(newbase + ProgramOffset, base + ProgramOffset, ProgramSize);    //after local vars inited
+    DPMI_LMemcpy(newbase + ProgramOffset, base + ProgramOffset, ProgramSize);    //after local vars inited
     //TODO: we could probably use physical remap instead of jump.
     asm("ljmp *%0" :: "m"(fjmp));
 switch_space:
@@ -213,9 +213,9 @@ BOOL DPMI_ShutdownTSR(void)
 
     __djgpp_exception_toggle();
     int x = __dpmi_get_and_disable_virtual_interrupt_state();
-    //DPMI_CopyLinear(__djgpp_base_address_old + ProgramOffset, __djgpp_base_address + ProgramOffset, ProgramSize);
+    //DPMI_LMemcpy(__djgpp_base_address_old + ProgramOffset, __djgpp_base_address + ProgramOffset, ProgramSize);
     uint32_t stack = SectionOffset[2] + SectionSize[2];
-    DPMI_CopyLinear(__djgpp_base_address_old + stack, __djgpp_base_address + stack, ProgramSize-stack);
+    DPMI_LMemcpy(__djgpp_base_address_old + stack, __djgpp_base_address + stack, ProgramSize-stack);
     __dpmi_get_and_set_virtual_interrupt_state(x);
     __djgpp_exception_toggle();
 
@@ -281,6 +281,13 @@ BOOL DPMI_TSR()
 
     DPMI_REG r = {0};
 
+    //free env seg
+    uint16_t env = DPMI_LoadW(_go32_info_block.linear_address_of_original_psp+0x2C);
+    r.w.ax = 0x4900;
+    r.w.es = env;
+    DPMI_CallRealModeINT(0x21, &r);
+    DPMI_StoreW(_go32_info_block.linear_address_of_original_psp+0x2C, 0);
+
     _LOG("Transfer buffer: %08lx, PSP: %08lx, transfer buffer size: %08lx\n", _go32_info_block.linear_address_of_transfer_buffer,
         _go32_info_block.linear_address_of_original_psp, _go32_info_block.size_of_transfer_buffer);
         
@@ -288,7 +295,9 @@ BOOL DPMI_TSR()
         - _go32_info_block.linear_address_of_original_psp
         + _go32_info_block.size_of_transfer_buffer) >> 4);
 
-    r.w.dx= 256>>4; //only psp
+    //will be totally free psp on TSR in the future (and support unloading),
+    //for now just leave it.
+    r.w.dx= 0;
     _LOG("TSR size: %d\n", r.w.dx<<4);
     r.w.ax = 0x3100;
     return DPMI_CallRealModeINT(0x21, &r) == 0; //won't return on success

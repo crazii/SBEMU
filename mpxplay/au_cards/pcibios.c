@@ -812,8 +812,13 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
         else
         {
             _LOG("PCI_SET_INTERRUPT failed %x\n", ((r.EAX>>8)&0xFF));
-            PIC_SetIRQMask(irqmask);
+            #if 1 //try pci config space register only
+            printf("warning: set IRQ failed, set pci config space INTLINE only\n");
+            pcibios_WriteConfig_Byte(ppkey, PCIR_INTR_LN, irq);
+            #else
             irq = 0xFF;
+            #endif
+            PIC_SetIRQMask(irqmask);
         }
 
         //LEAVE_CRITICAL;
@@ -837,7 +842,7 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
             ++irq;
         }
         assert(irq > 2 && irq <= 15);
-        _LOG("warning: IRQ conflict, set pci config space intline only\n");
+        printf("warning: IRQ conflict, set pci config space INTLINE only\n");
         pcibios_WriteConfig_Byte(ppkey, PCIR_INTR_LN, irq); //only set pci config space irq, tested work in cases of usbddos, but may not work on all PCs
     }
 

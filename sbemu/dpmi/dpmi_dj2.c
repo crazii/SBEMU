@@ -625,7 +625,7 @@ uint16_t DPMI_InstallRealModeISR(uint8_t i, void(*ISR_RM)(void), DPMI_REG* RMReg
         memcpy(buf+10, &irq, 1);
         //copy warpper code
         memcpy(buf+extra_size, &DPMI_RMISR_ChainedWrapper, codesize);
-        DPMI_CopyLinear(DPMI_SEGOFF2L(handle->chainedDOSMem, 0), DPMI_PTR2L(buf), codesize+extra_size);
+        DPMI_LMemcpy(DPMI_SEGOFF2L(handle->chainedDOSMem, 0), DPMI_PTR2L(buf), codesize+extra_size);
         free(buf);
 
         go32pa_rm.rm_segment = handle->chainedDOSMem&0xFFFF;

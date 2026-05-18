@@ -9,6 +9,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+      - name: Enforce Conventional Commits
+        uses: webiny/action-conventional-commits@v1.3.0
       - name: Install DJGPP
         run: |
           wget -P /tmp https://github.com/andrewwutw/build-djgpp/releases/download/v3.4/djgpp-linux64-gcc1220.tar.bz2

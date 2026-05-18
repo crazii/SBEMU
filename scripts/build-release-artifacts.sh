@@ -1,20 +1,26 @@
 #!/usr/bin/env bash
 set -e
+
 PATH_TO_SBEMU_EXE=${1?param 1 missing - path to SBEMU.EXE}
 test -f "$PATH_TO_SBEMU_EXE" || (echo "File $PATH_TO_SBEMU_EXE does not exit"; exit 1)
 FULL_PATH_TO_SBEMU_EXE=$(readlink -f "$PATH_TO_SBEMU_EXE")
-PATH_TO_OUTPUT_ARTIFACTS=${2?param 2 missing - path to output directory}
+PATH_TO_RELEASE_NOTES=${2?param 2 missing - path to RELEASE_NOTES.md}
+test -f "$PATH_TO_RELEASE_NOTES" || (echo "File $PATH_TO_RELEASE_NOTES does not exit"; exit 1)
+FULL_PATH_TO_RELEASE_NOTES=$(readlink -f "$PATH_TO_RELEASE_NOTES")
+
+PATH_TO_OUTPUT_ARTIFACTS=${3?param 3 missing - path to output directory}
 test -d "$PATH_TO_OUTPUT_ARTIFACTS" || (echo "Directory $PATH_TO_OUTPUT_ARTIFACTS does not exit"; exit 1)
 FULL_PATH_TO_OUTPUT_ARTIFACTS=$(readlink -f "$PATH_TO_OUTPUT_ARTIFACTS")
+
 mkdir -p /tmp/sbemu_usb_img
 rm -rf /tmp/sbemu_usb_img/*
 pushd /tmp/sbemu_usb_img
-wget https://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/distributions/1.3/official/FD13-LiteUSB.zip
+wget https://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/distributions/1.4/FD14-LiteUSB.zip
 wget https://www.freedos.org/download/verify.txt
-grep -q "64a934585087ccd91a18c55e20ee01f5f6762be712eeaa5f456be543778f9f7e  FD13-LiteUSB.zip" verify.txt
-echo "64a934585087ccd91a18c55e20ee01f5f6762be712eeaa5f456be543778f9f7e  FD13-LiteUSB.zip" | shasum -a 256 --check
-unzip FD13-LiteUSB.zip
-rm FD13-LiteUSB.zip
+grep -q "857dcd2ebf9d3d094320154db5fb5b830acba6fb98f981a95a0ca7ab3350338b  FD14-LiteUSB.zip" verify.txt
+echo "857dcd2ebf9d3d094320154db5fb5b830acba6fb98f981a95a0ca7ab3350338b  FD14-LiteUSB.zip" | shasum -a 256 --check
+unzip FD14-LiteUSB.zip
+rm FD14-LiteUSB.zip
 wget https://github.com/Baron-von-Riedesel/Jemm/releases/download/v5.84/JemmB_v584.zip
 echo "80bee162c9574066112a3204af6f72666428f7c139836f4418d92aae7bfb5056  JemmB_v584.zip" | shasum -a 256 --check
 wget https://github.com/crazii/HX/releases/download/v0.1-beta4fix2/HDPMI32i.zip
@@ -23,10 +29,12 @@ wget https://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/repositories/1.3/b
 echo "a891124cd5b13e8141778fcae718f3b2667b0a49727ce92b782ab11a8c4bb63a  ctmouse.zip" | shasum -a 256 --check
 mkdir -p /tmp/SBEMU
 mkdir -p /tmp/mnt
-sudo mount FD13LITE.img /tmp/mnt -t vfat -o loop,offset=$((63*512)),rw,uid="$(id -u)",gid="$(id -g)"
+sudo mount FD14LITE.img /tmp/mnt -t vfat -o loop,offset=$((63*512)),rw,uid="$(id -u)",gid="$(id -g)"
 mkdir /tmp/mnt/sbemu
 cp "$FULL_PATH_TO_SBEMU_EXE" /tmp/mnt/sbemu
+cp "$FULL_PATH_TO_RELEASE_NOTES" /tmp/mnt/sbemu
 cp "$FULL_PATH_TO_SBEMU_EXE" /tmp/SBEMU
+cp "$FULL_PATH_TO_RELEASE_NOTES" /tmp/SBEMU
 pushd /tmp/mnt
 mkdir jemm
 cd jemm
@@ -58,9 +66,9 @@ mv SBEMU.zip "$FULL_PATH_TO_OUTPUT_ARTIFACTS"
 ls -lh SBEMU
 rm -rf SBEMU
 popd
-mv FD13LITE.img SBEMU-FD13-USB.img
-xz -k -9e SBEMU-FD13-USB.img
-mv SBEMU-FD13-USB.img.xz "$FULL_PATH_TO_OUTPUT_ARTIFACTS"
+mv FD14LITE.img SBEMU-FD14-USB.img
+xz -k -9e SBEMU-FD14-USB.img
+mv SBEMU-FD14-USB.img.xz "$FULL_PATH_TO_OUTPUT_ARTIFACTS"
 popd
 rm -rf /tmp/sbemu_usb_img
 rm -rf /tmp/mnt

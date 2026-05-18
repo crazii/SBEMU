@@ -57,12 +57,13 @@ extern one_sndcard_info IHD_sndcard_info;
 extern one_sndcard_info VIA82XX_sndcard_info;
 extern one_sndcard_info SBLIVE_sndcard_info;
 extern one_sndcard_info CMI8X38_sndcard_info;
-extern one_sndcard_info EMU20KX_sndcard_info;
+//extern one_sndcard_info EMU20KX_sndcard_info;
 extern one_sndcard_info CTXFI_sndcard_info;
 extern one_sndcard_info EMU10K1X_sndcard_info;
 extern one_sndcard_info TRIDENT_sndcard_info;
 extern one_sndcard_info ALS4000_sndcard_info;
 extern one_sndcard_info OXYGEN_sndcard_info;
+extern one_sndcard_info ALLEGRO_sndcard_info;
 extern one_sndcard_info YMF_sndcard_info;
 extern one_sndcard_info YMFSB_sndcard_info;
 #ifndef SBEMU
@@ -101,6 +102,12 @@ static one_sndcard_info *all_sndcard_info[]={
 #ifdef AU_CARDS_LINK_YMF
  &YMF_sndcard_info,
 #endif
+#ifdef AU_CARDS_LINK_ALLEGRO
+ &ALLEGRO_sndcard_info,
+#endif
+#ifdef AU_CARDS_LINK_ALS4000
+ &ALS4000_sndcard_info,
+#endif
 #ifdef AU_CARDS_LINK_SB16
  &SB16_sndcard_info,
 #endif
@@ -121,6 +128,18 @@ static one_sndcard_info *all_sndcard_info[]={
 #endif
 #ifdef AU_CARDS_LINK_ES1371
  &ES1371_sndcard_info,
+#endif
+#ifdef AU_CARDS_LINK_CTXFI
+ &CTXFI_sndcard_info,
+#endif
+#ifdef AU_CARDS_LINK_TRIDENT
+ &TRIDENT_sndcard_info,
+#endif
+#ifdef AU_CARDS_LINK_EMU10K1X
+ &EMU10K1X_sndcard_info,
+#endif
+#ifdef AU_CARDS_LINK_OXYGEN
+ &OXYGEN_sndcard_info,
 #endif
 #ifdef AU_CARDS_LINK_ICH
  &ICH_sndcard_info,
@@ -564,7 +583,7 @@ void AU_ini_interrupts(struct mpxplay_audioout_info_s *aui)
   if(intsoundconfig&INTSOUND_NOBUSYWAIT){
     aucards_writedata_func = &aucards_writedata_nowait;
   }
-  #endif 
+  #endif
 }
 
 void AU_del_interrupts(struct mpxplay_audioout_info_s *aui)
