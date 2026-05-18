@@ -1180,8 +1180,8 @@ void Chip::WriteReg( uint32_t reg, uint8_t val ) {
 			int reg_index = (reg&0xf);
 			if(reg_index <= 8) //b0-b8
 			{
-				oplActive &= 1<<reg_index;
-				oplActive |= (val&20) ? (1<<reg_index) : 0; //note on?
+				oplActive &= (1<<reg_index);
+				oplActive |= (val&0x20) ? (1<<reg_index) : 0; //note on?
 			}
 		}
 		break;
