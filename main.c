@@ -1314,6 +1314,7 @@ static void MAIN_Interrupt()
         return;
 
     BOOL vmpu_active = VMPU_IsActive();
+    BOOL opl_active = MAIN_Options[OPT_OPL].value && OPL3EMU_IsActive();
     BOOL digital = SBEMU_HasStarted();
     int dma = (SBEMU_GetBits() <= 8 /*|| MAIN_Options[OPT_TYPE].value < 6*/) ? SBEMU_GetDMA() : SBEMU_GetHDMA();
     int32_t DMA_Count = VDMA_GetCounter(dma); //count in bytes
@@ -1459,10 +1460,13 @@ static void MAIN_Interrupt()
         cv_channels_1_to_n(MAIN_PCM, samples, 2, 2);
         digital = TRUE;
     }
-    else if(!MAIN_Options[OPT_OPL].value && !vmpu_active)
+    else if(!opl_active && !vmpu_active)
+    {
+        _LOG("muted\n");
         memset(MAIN_PCM, 0, samples*sizeof(int16_t)*2); //output muted samples.
+    }
 
-    if(MAIN_Options[OPT_OPL].value && !fm_aui.fm
+    if(opl_active && !fm_aui.fm
         && !vmpu_active //NOTE: skip OPL if MPU is active
     )
     {

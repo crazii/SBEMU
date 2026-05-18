@@ -33,6 +33,11 @@ void OPL3EMU_Init(int samplerate)
     OPL3EMU_Chip->Setup(samplerate);
 }
 
+int OPL3EMU_IsActive()
+{
+    return !!OPL3EMU_Chip->oplActive;
+}
+
 int OPL3EMU_GetMode()
 {
     return OPL3EMU_Chip->opl3Active;

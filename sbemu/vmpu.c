@@ -160,7 +160,7 @@ static void VMPU_Process_Messages(void)
 static void VMPU_Write(uint16_t port, uint8_t value)
 ////////////////////////////////////////////////////
 {
-    _LOG(("VMPU_Write(%X)=%X\n", port, value));
+    _LOG("VMPU_Write(%X)=%X\n", port, value);
     if (port == VMPU_base+1)
     {
         if (value == 0x3f)
@@ -237,7 +237,7 @@ static void VMPU_Write(uint16_t port, uint8_t value)
 static uint8_t VMPU_Read(uint16_t port)
 ///////////////////////////////////////
 {
-    _LOG(("VMPU_Read(%X)\n", port));
+    _LOG("VMPU_Read(%X)\n", port);
     if (port == VMPU_base)
     {
         midi_mpu_status |= 0x80;
