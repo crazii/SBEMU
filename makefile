@@ -62,8 +62,7 @@ SBEMU_SRC := sbemu/dbopl.cpp \
 		 sbemu/dpmi/djgpp/gopint.c \
 	     main.c \
 	     utility.c \
-	     vdpmi.c \
-		 irqguard.c \
+	     vdpmi.c
 
 SRC := $(CARDS_SRC) $(SBEMU_SRC)
 OBJS := $(patsubst %.cpp,output/%.o,$(patsubst %.c,output/%.o,$(SRC)))

@@ -14,7 +14,6 @@
 #include <sbemu.h>
 #include "vdpmi.h"
 #include "serial.h"
-#include "irqguard.h"
 
 #include <au_cards/au_cards.h>
 #include <au_cards/pcibios.h>
@@ -25,7 +24,7 @@ static const char *
 PROGNAME = "SBEMU";
 
 #ifndef MAIN_SBEMU_VER
-#define MAIN_SBEMU_VER "1.0 beta4"
+#define MAIN_SBEMU_VER "1.0 beta6"
 #endif
 
 #define MAIN_INSTALL_RM_ISR 0 //not needed. but to workaround some rm games' problem. need RAW_HOOk in dpmi_dj2.c - disble for more tests.
@@ -443,9 +442,7 @@ static int MAIN_SB_DSPVersion[] =
 
 static void MAIN_InvokeIRQ(uint8_t irq) //generate virtual IRQ
 {
-    IRQGUARD_Enable();
     VDPMI_RaiseIRQ(irq);
-    IRQGUARD_Disable();
 }
 
 static void MAIN_SetBlasterEnv(struct MAIN_OPT* opt) //alter BLASTER env.
@@ -525,7 +522,6 @@ static void MAIN_Cleanup()
         VDPMI_Uninstall_IOPortTrap(&OPL3IOPT);
     if(MPUInstalled)
         VDPMI_Uninstall_IOPortTrap(&MPUIOPT);
-    IRQGUARD_Uninstall();
 }
 
 int main(int argc, char* argv[])
@@ -882,7 +878,6 @@ int main(int argc, char* argv[])
         exit(-1);
     }
 
-    IRQGUARD_Install(MAIN_Options[OPT_IRQ].value);
     PIC_UnmaskIRQ(aui.card_irq);
     AU_prestart(&aui);
     AU_start(&aui);
@@ -1379,7 +1374,6 @@ static void MAIN_TSR_Interrupt()
                 MAIN_Options[OPT_IRQ].value = opt[OPT_IRQ].value;
                 MAIN_Options[OPT_TYPE].value = opt[OPT_TYPE].value;
                 MAIN_Options[OPT_FIX_TC].value = opt[OPT_FIX_TC].value;
-                IRQGUARD_Install(MAIN_Options[OPT_IRQ].value);
                 SBEMU_Init(
                     MAIN_Options[OPT_IRQ].value,
                     MAIN_Options[OPT_DMA].value,
