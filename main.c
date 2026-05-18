@@ -31,10 +31,7 @@ static BOOL MAIN_TSRed;
 #define MAIN_SBEMU_VER "1.0 beta6"
 #endif
 
-#define MAIN_INSTALL_RM_ISR 0 //not needed. but to workaround some rm games' problem. need RAW_HOOk in dpmi_dj2.c - disble for more tests.
 #define MAIN_DOUBLE_OPL_VOLUME 1 //hack: double the amplitude of OPL PCM. should be 1 or 0
-#define MAIN_USE_CLIENT_MODE_DRIVER 1   //needs to set 1 to avoid interrupt handler suppression by programs' CLI
-                                        //otherwise sound might not response in time.
 #define MAIN_PCM_RESAMPLE_INTERPOLATION 1
 #define MAIN_VMPU_HDPMI_MEMFIX 1 //workaround hdpmi bug that a TSR allocated memory being treated as primary client's, also better by avoiding DPMI memory fragments
                             //details on '_freeclientmemory' at I31MEM.ASM of HDPMI.
@@ -92,12 +89,7 @@ static uint8_t MAIN_VDPMI_Present = 0;
 SBEMU_EXTFUNS MAIN_SbemuExtFun;
 
 static void MAIN_Interrupt();
-#if MAIN_USE_CLIENT_MODE_DRIVER
 static void MAIN_InterruptPM(unsigned esp, unsigned ss);
-#else
-static void MAIN_InterruptPM(); //don't decl esp/ss to avoid gcc optimization problem, it's too hacky anyway
-#endif
-static void MAIN_InterruptRM();
 
 static DPMI_ISR_HANDLE MAIN_TSRIntHandle;
 static DPMI_REG MAIN_TSRREG;
@@ -403,8 +395,6 @@ struct MAIN_OPT
     "/H", "16-bit (\"high\") DMA channel (5, 6 or 7) [*]", 5, 0,
 
     "/OPL", "Enable OPL3 emulation", TRUE, 0,
-    "/PM", "Enable protected mode support", TRUE, 0,
-    "/RM", "Enable real mode support", TRUE, 0,
 
     "/O", "Select output. 0: headphone, 1: speaker (Intel HDA) or S/PDIF (Xonar DG)", 1, 0,
     "/VOL", "Set master volume (0-9)", 7, 0,
@@ -440,8 +430,6 @@ enum EOption
     OPT_TYPE,
     OPT_HDMA,
     OPT_OPL,
-    OPT_PM,
-    OPT_RM,
     OPT_OUTPUT,
     OPT_VOL,
     OPT_RATE,
@@ -722,18 +710,13 @@ int main(int argc, char* argv[])
         MAIN_Options[OPT_HDMA].value = MAIN_Options[OPT_DMA].value; //only one low DMA channel allowed, use same channel for hdma & low dma.
     }
 
-    MAIN_VDPMI_Present = FALSE;
-    if(MAIN_Options[OPT_PM].value)
+    MAIN_VDPMI_Present = VDPMI_Detect(); //another DPMI host used other than VDPMI
+    if(!MAIN_VDPMI_Present)
     {
-        MAIN_Options[OPT_PM].value = TRUE; //set to known value for compare
-        MAIN_VDPMI_Present = VDPMI_Detect(); //another DPMI host used other than VDPMI
-        if(!MAIN_VDPMI_Present)
-        {
-            MAIN_CPrintf(RED, "Error: VDPMI not installed.\n");
-            exit(-1);
-        }
+        MAIN_CPrintf(RED, "Error: VDPMI not installed.\n");
+        exit(-1);
     }
-    MAIN_Options[OPT_OPL].value = (MAIN_Options[OPT_OPL].value) ? TRUE : FALSE;
+    MAIN_Options[OPT_OPL].value = !!(MAIN_Options[OPT_OPL].value);
 
     //TSR installation check: update parameter & exit if already installed
     MAIN_TSR_InstallationCheck();
@@ -743,14 +726,6 @@ int main(int argc, char* argv[])
 #endif
 
     MAIN_SetBlasterEnv(MAIN_Options);
-
-    BOOL enablePM = MAIN_Options[OPT_PM].value;
-    BOOL enableRM = MAIN_Options[OPT_RM].value;
-    if(!enablePM && !enableRM)
-    {
-        MAIN_CPrintf(RED, "Both real mode & protected mode support are disabled, exiting.\r\n");
-        return 1;
-    }
 
     if(MAIN_Options[OPT_SCLIST].value)
         aui.card_controlbits |= AUINFOS_CARDCNTRLBIT_TESTCARD; //note: this bit will make aui.card_handler == NULL and quit.
@@ -790,10 +765,10 @@ int main(int argc, char* argv[])
     pcibios_enable_interrupt(aui.card_pci_dev);
 
     printf("Real mode support: ");
-    MAIN_Print_Enabled_Newline(enableRM);
+    MAIN_Print_Enabled_Newline(TRUE);
 
     printf("Protected mode support: ");
-    MAIN_Print_Enabled_Newline(enablePM);
+    MAIN_Print_Enabled_Newline(TRUE);
 
     if(MAIN_Options[OPT_OPL].value)
     {
@@ -934,16 +909,9 @@ int main(int argc, char* argv[])
         OPL3EMU_Init(aui.freq_card); //aui.freq_card available after AU_setrate
 
     BOOL RM_ISR = TRUE;
-#if MAIN_USE_CLIENT_MODE_DRIVER
     BOOL PM_ISR = VDPMI_InstallISR(aui.card_irq, (void(*)(void))MAIN_InterruptPM, &MAIN_IntHandlePM);
-#else
-    BOOL PM_ISR = DPMI_InstallISR(PIC_IRQ2VEC(aui.card_irq), (void(*)(void))MAIN_InterruptPM, &MAIN_IntHandlePM, TRUE) == 0;
-#endif
-#if MAIN_INSTALL_RM_ISR
-    RM_ISR = DPMI_InstallRealModeISR(PIC_IRQ2VEC(aui.card_irq), MAIN_InterruptRM, &MAIN_RMIntREG, &MAIN_IntHandleRM, TRUE) == 0;
-#endif
     
-    BOOL TSR = TRUE;
+    BOOL MAIN_TSRed = TRUE;
     if(!PM_ISR || !RM_ISR || !TSR_ISR
     || !InstalledVDMA || !InstalledSB)
     {
@@ -955,13 +923,8 @@ int main(int argc, char* argv[])
         if(!PM_ISR)
             MAIN_CPrintf(RED, "Error: Failed installing sound card ISR.\n");
         else
-        {
-#if MAIN_USE_CLIENT_MODE_DRIVER
             VDPMI_UninstallISR(&MAIN_IntHandlePM);
-#else
-            DPMI_UninstallISR(&MAIN_IntHandlePM);
-#endif
-        }
+
         if(!RM_ISR)
             MAIN_CPrintf(RED, "Error: Failed installing sound card ISR.\n");
 #if MAIN_INSTALL_RM_ISR
@@ -979,7 +942,7 @@ int main(int argc, char* argv[])
     AU_prestart(&aui);
     AU_start(&aui);
 
-    if(!(TSR=DPMI_TSR()))
+    if(!(MAIN_TSRed=DPMI_TSR()))
     {
         PIC_SetIRQMask(ori_irqmask);
         MAIN_CPrintf(RED, "Error: Failed installing TSR.\n"); 
@@ -987,50 +950,15 @@ int main(int argc, char* argv[])
     return 1;
 }
 
-//VDPMI will route PM interrupts to IVT.
-//IRQ routing path:
-//PM: IDT -> PM handlers after SBEMU -> SBEMU MAIN_InterruptPM(*) -> PM handlers befoe SBEMU -> IVT -> SBEMU MAIN_InterruptRM(*) -> DPMI entrance -> IVT handlers before DPMI installed
-//RM: IVT -> RM handlers before SBEMU -> SBEMU MAIN_InterruptRM(*) -> RM handlers after SBEMU -> DPMI entrance -> PM handlers after SBEMU -> SBEMU MAIN_InterruptPM(*) -> PM handlers befoe SBEMU -> IVT handlers before DPMI installed
-//(*) means SBEMU might early terminate the calling chain if sound irq is handled (when MAIN_ISR_CHAINED==0).
-//early terminating is OK because PCI irq are level triggered, IRQ signal will keep high (raised) unless the hardware IRQ is ACKed.
-
-#if MAIN_USE_CLIENT_MODE_DRIVER
 static void MAIN_InterruptPM(unsigned esp, unsigned ss)
-#else
-static void MAIN_InterruptPM()
-#endif
 {
-    uint32_t retval = DPMI_DRVF_SKIPVM;
-
-    //note: we have full control of the calling chain, if the irq belongs to the sound card,
-    //we send EOI and skip calling the chain - it will be a little faster. if other devices raises irq at the same time,
-    //the interrupt handler will entered again (not nested) so won't be a problem.
-    //also we send EOI on our own and terminate, this doesn't rely on the default implementation in IVT - some platform (i.e. VirtualBox)
-    //don't send EOI on default handler in IVT.
-    //
-    //it has one problem that if other drivers (shared IRQ) enables interrupts (because it needs wait or is time consuming)
-    //then because we're still in MAIN_InterruptPM, so MAIN_InterruptPM is never entered again (guarded by go32 or MAIN_ININT_PM),
-    //so the newly coming irq will never be processed and the IRQ will flood the system (freeze)
-    //an alternative chained methods will EXIT MAIN_InterruptPM FIRST and calls next handler, which will avoid this case, see @MAIN_ISR_CHAINED
-    //but we need a hack if the default handler in IVT doesn't send EOI or masks the irq - this is done in the RM final wrapper, see @DPMI_RMISR_ChainedWrapper
-    
+    uint32_t retval = DPMI_DRVF_SKIPVM;    
     if(aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
     {
         MAIN_Interrupt();
         PIC_SendEOIWithIRQ(aui.card_irq); //some BIOS driver doesn't works well if not sending EOI, there's extra check for EOI in DPMI_RMISR_ChainedWrapper
     }
-#if MAIN_USE_CLIENT_MODE_DRIVER
     _go32_dpmi_set_iret_eax(retval, esp, ss);
-#endif
-}
-
-static void MAIN_InterruptRM()
-{
-    if(aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
-    {
-        MAIN_Interrupt();
-        PIC_SendEOIWithIRQ(aui.card_irq); //some BIOS driver doesn't works well if not sending EOI, there's extra check for EOI in DPMI_RMISR_ChainedWrapper
-    }
 }
 
 static void MAIN_Interrupt()
@@ -1083,7 +1011,7 @@ static void MAIN_Interrupt()
         return;
 
     BOOL vmpu_active = VMPU_IsActive();
-    BOOL opl_active = MAIN_Options[OPT_OPL].value && OPL3EMU_IsActive();
+    BOOL opl_active = MAIN_Options[OPT_OPL].value && !fm_aui.fm && OPL3EMU_IsActive();
     BOOL digital = SBEMU_HasStarted();
     BOOL paused = SBEMU_IsPaused(); //need raise interrupt after pause, still need do the timing
     if(!digital) MAIN_LastSBRate = 0;
@@ -1262,9 +1190,7 @@ static void MAIN_Interrupt()
         memset(MAIN_PCM, 0, samples*sizeof(int16_t)*2); //output muted samples.
     }
 
-    if(opl_active && !fm_aui.fm
-        && !vmpu_active //NOTE: skip OPL if MPU is active
-    )
+    if(opl_active && !vmpu_active) //NOTE: skip OPL if MPU is active
     {
         int16_t* pcm = digital ? MAIN_OPLPCM : MAIN_PCM;
         OPL3EMU_GenSamples(pcm, samples); //will generate samples*2 if stereo
@@ -1595,7 +1521,7 @@ static void MAIN_TSR_Interrupt()
 
             do
             {
-                if(!OPT_CHANGED(OPT_OPL) && OPT_CHANGED(OPT_ADDR) && !OPT_CHANGED(OPT_PM) && !OPT_CHANGED(OPT_RM) && !OPT_CHANGED(OPT_FIX_TC) &&
+                if(!OPT_CHANGED(OPT_OPL) && OPT_CHANGED(OPT_ADDR) && !OPT_CHANGED(OPT_FIX_TC) &&
                 !OPT_CHANGED(OPT_MPUADDR) && OPT_CHANGED(OPT_MPUCOMPORT)
     #if SBEMU_VMPU
                     && !OPT_CHANGED(OPT_VMPU_VOICES) && (!VMPU_ENABLED || !OPT_CHANGED(OPT_VMPU_SF))
@@ -1635,9 +1561,6 @@ static void MAIN_TSR_Interrupt()
                             (const char*)MAIN_Options[OPT_VMPU_SF].value, MAIN_Options[OPT_VMPU_SFBUF].value+sizeof(size), size) )
                         {
                             MAIN_CPrintf(YELLOW, "VMPU warning: setup failed with SF: %s, functions disabled.\n", (const char*)MAIN_Options[OPT_VMPU_SF].value);
-                            #if MAIN_VMPU_HDPMI_MEMFIX
-                            MAIN_VMPU_ALLOCMEM();
-                            #endif
                         }
                         MAIN_Options[OPT_VMPU_SFBUF].value = 0;
                         //always set
