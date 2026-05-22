@@ -40,7 +40,7 @@ int OPL3EMU_IsActive()
         ++OPL_Inactive;
     else
         OPL_Inactive = 0;
-    return OPL_Inactive <= 50; //add some delays & accumulations
+    return OPL_Inactive <= 100; //add some delays & accumulations
 }
 
 int OPL3EMU_GetMode()

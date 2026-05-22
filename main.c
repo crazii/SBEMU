@@ -397,7 +397,7 @@ struct MAIN_OPT
     "/OPL", "Enable OPL3 emulation", TRUE, 0,
 
     "/O", "Select output. 0: headphone, 1: speaker (Intel HDA) or S/PDIF (Xonar DG)", 1, 0,
-    "/VOL", "Set master volume (0-9)", 7, 0,
+    "/VOL", "Set master volume (0-9)", 8, 0,
 
     "/K", "Internal sample rate", 22050, MAIN_SETCMD_BASE10,
     "/FIXTC", "Fix time constant to match 11/22/44 kHz sample rate", FALSE, 0,
