@@ -280,6 +280,7 @@ BOOL VMPU_Init(int baseaddr, int* voices, int freq, const char* sf2)
     if (tsfrenderer)
     {
         int channel = 0;
+        tsf_set_max_voices(tsfrenderer, 256); //pre-alloc
         tsf_set_max_voices(tsfrenderer, *voices);
         tsf_set_output(tsfrenderer, TSF_STEREO_INTERLEAVED, freq, 0);
         for (channel = 15; channel >= 0; --channel)
@@ -319,6 +320,7 @@ BOOL VMPU_Reset(int baseaddr, int* voices, int freq, const char* sf2, uint32_t s
     if (tsfrenderer)
     {
         int channel = 0;
+        tsf_set_max_voices(tsfrenderer, 256); //pre-alloc
         tsf_set_max_voices(tsfrenderer, *voices);
         tsf_set_output(tsfrenderer, TSF_STEREO_INTERLEAVED, freq, 0);
         for (channel = 15; channel >= 0; --channel)
