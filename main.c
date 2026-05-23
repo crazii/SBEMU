@@ -40,6 +40,7 @@ static BOOL MAIN_TSRed;
 #define MAIN_ISR_CHAINED 0 //auto calls next handler AFTER current handler exits - cause more mode switches, disable for more tests.
 #define MAIN_VMPU_HDPMI_MEMFIX 1 //workaround hdpmi bug that a TSR allocated memory being treated as primary client's, also better by avoiding DPMI memory fragments
                             //details on '_freeclientmemory' at I31MEM.ASM of HDPMI.
+#define MAIN_PCM_RESAMPLE_INTERPOLATION 0
 
 #define MAIN_TSR_INT 0x2D   //AMIS multiplex. TODO: 0x2F?
 #define MAIN_TSR_INTSTART_ID 0x01 //start id
@@ -1326,11 +1327,13 @@ static void MAIN_Interrupt()
         uint32_t SB_Bytes = SBEMU_GetSampleBytes();
         uint32_t SB_Pos = SBEMU_GetPos();
         uint32_t SB_Rate = SBEMU_GetSampleRate();
+        #if MAIN_PCM_RESAMPLE_INTERPOLATION
         if(MAIN_LastSBRate != SB_Rate)
         {
             for(int i = 0; i < SBEMU_CHANNELS; ++i) MAIN_LastResample[i] = 0;
             MAIN_LastSBRate = SB_Rate;
         }
+        #endif
         int samplesize = max(1, SBEMU_GetBits()/8); //sample size in bytes 1 for 8bit. 2 for 16bit
         int channels = SBEMU_GetChannels();
         _LOG("sample rate: %d %d\n", SB_Rate, aui.freq_card);
@@ -1371,7 +1374,7 @@ static void MAIN_Interrupt()
             int bytes = count * samplesize * channels;
 
             {
-                int16_t* pcm = resample ? MAIN_PCMResample+channels : MAIN_PCM + pos*2;
+                int16_t* pcm = resample ? MAIN_PCMResample+channels*MAIN_PCM_RESAMPLE_INTERPOLATION  : MAIN_PCM + pos*2;
                 if(MAIN_DMA_MappedAddr == 0) //map failed?
                     memset(pcm, 0, bytes);
                 else
@@ -1382,11 +1385,14 @@ static void MAIN_Interrupt()
                     cv_bits_n_to_m(pcm, count*channels, samplesize, 2);
                 if(resample/*SB_Rate != aui.freq_card*/)
                 {
+                    #if MAIN_PCM_RESAMPLE_INTERPOLATION
                     for(int i = 0; i < channels; ++i)
                     {
                         MAIN_PCMResample[i] = MAIN_LastResample[i]; //put last sample at beginning for interpolation
                         MAIN_LastResample[i] = *(pcm + (count-1)*channels + i); //record last sample
                     }
+                    count += channels;
+                    #endif
                     count = mixer_speed_lq(MAIN_PCM+pos*2, MAIN_PCM_SAMPLESIZE-pos*2, MAIN_PCMResample, count*channels, channels, SB_Rate, aui.freq_card)/channels;
                 }
             }
