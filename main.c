@@ -32,7 +32,7 @@ static BOOL MAIN_TSRed;
 #endif
 
 #define MAIN_DOUBLE_OPL_VOLUME 1 //hack: double the amplitude of OPL PCM. should be 1 or 0
-#define MAIN_PCM_RESAMPLE_INTERPOLATION 1
+#define MAIN_PCM_RESAMPLE_INTERPOLATION 0
 #define MAIN_VMPU_HDPMI_MEMFIX 1 //workaround hdpmi bug that a TSR allocated memory being treated as primary client's, also better by avoiding DPMI memory fragments
                             //details on '_freeclientmemory' at I31MEM.ASM of HDPMI.
 

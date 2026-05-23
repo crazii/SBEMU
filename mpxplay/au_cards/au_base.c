@@ -1087,7 +1087,7 @@ unsigned int mixer_speed_lq(PCM_CV_TYPE_S* dest, unsigned int destsample, const 
   m2=inpos&0xFFF;
   m1=4096-m2;
   ch=channels;
-  ipi*=ch;
+  ipi <<= (ch-1);
   intmp1=intmp+ipi;
   intmp2=intmp1+ch;
   do{
@@ -1101,6 +1101,17 @@ unsigned int mixer_speed_lq(PCM_CV_TYPE_S* dest, unsigned int destsample, const 
     return pcm - buff;
   }
  }while(inpos<inend);
+
+ #if 0
+ if(pcm - buff < destsample - channels)
+ {
+  unsigned int ch=channels;
+  unsigned int ipi = (inend>>12)<<(ch-1);
+  do{
+   *pcm++= (*intmp+(ipi++));
+  }while(--ch);
+ }
+  #endif
 
  mpxplay_debugf(MPXPLAY_DEBUG_OUTPUT, "sample count: %d\n", pcm-buff);
  //_LOG("MIXER_SPEED_LQ: %d, %d\n", pcm-buff, buffcount);
