@@ -60,7 +60,7 @@
 #define VIA_REG_PLAYBACK_CURR_COUNT  0x0C    /* dword - channel current count */
 
 // VT8233
-#define VIA_REG_CTRL_AUTOSTART         0x20
+#define VIA_REG_CTRL_AUTOSTART         0x20  /* auto restart at EOL */
 #define VIA_REG_CTRL_INT_STOP_IDX      0x04  /* interrupt on stop index */
 #define VIA_REG_CTRL_INT_EOL           0x02  /* interrupt on end of link */
 #define VIA_REG_CTRL_INT_FLAG          0x01  /* interrupt on flag */
@@ -102,7 +102,7 @@
 #define PCI_DEVICE_ID_VT8233     0x3059
 
 #define VIRTUALPAGETABLESIZE   4096
-#define PCMBUFFERPAGESIZE      512//4096 //page size determines the interrupt interval
+#define PCMBUFFERPAGESIZE      256//4096 //page size determines the interrupt interval. 512 bytes: interval not enough for doom.
 
 #define VIA_INT_INTERVAL 1
 
@@ -338,7 +338,7 @@ static void VIA82XX_setrate(struct mpxplay_audioout_info_s *aui)
    card->virtualpagetable[pagecount*2+1]=PCMBUFFERPAGESIZE; // 0x00001000; // period continues to the next
    #endif
   else
-   card->virtualpagetable[pagecount*2+1]=VIA_TBL_BIT_EOL|PCMBUFFERPAGESIZE; // 0x80001000; // buffer boundary
+   card->virtualpagetable[pagecount*2+1]=VIA_TBL_BIT_FLAG|VIA_TBL_BIT_EOL|PCMBUFFERPAGESIZE; // 0x80001000; // buffer boundary
   pcmbufp+=PCMBUFFERPAGESIZE;
  }
 
