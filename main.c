@@ -1054,12 +1054,8 @@ static void MAIN_Interrupt()
                 MAIN_DMA_Addr = DMA_Addr&~0xFFF;
                 _LOG("DMA_ADDR map: %x\n", MAIN_DMA_Addr);
                 MAIN_DMA_Size = align(max(DMA_Addr-MAIN_DMA_Addr+DMA_Index+DMA_Count, 64*1024), 4096);
-                if(DMA_Addr < 0xF0000)
+                if(DMA_Addr < 0x100000)
                     MAIN_DMA_MappedAddr = MAIN_DMA_Addr;
-                else if(DMA_Addr >= 0xF0000 && DMA_Addr+DMA_Index+DMA_Count <= 1024*1024 + 64*1024)
-                //note: VDPMI will guarantee the physical addr is directly accessible (1:1 mapped)
-                //FIXME: not gonna work if in EMS and EMS swaps page (dma address not changed but physical address changes)
-                    MAIN_DMA_MappedAddr = VDPMI_GetPhysicalAddr(MAIN_DMA_Addr);
                 else
                 {
                     MAIN_DMA_MappedAddr = DPMI_MapMemory(MAIN_DMA_Addr, MAIN_DMA_Size);
