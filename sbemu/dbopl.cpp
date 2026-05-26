@@ -1173,14 +1173,15 @@ void Chip::WriteReg( uint32_t reg, uint8_t val ) {
 			WriteBD( val );
 
 			oplActive &= ~0x80000000L;
-			oplActive |= (val&0x20) ? 0x80000000L : 0; //Percussion 
+			oplActive |= (val&0x20) ? 0x80000000L : 0; //Percussion, low reg set only
 		} else {
 			REGCHAN( WriteB0 );
 
-			int reg_index = (reg&0xf);
+			uint32_t reg_index = (reg&0xf);
 			if(reg_index <= 8) //b0-b8
 			{
-				oplActive &= (1<<reg_index);
+				reg_index += (reg&0x100) ? 16 : 0; //opl3/opl2?
+				oplActive &= ~(1<<reg_index);
 				oplActive |= (val&0x20) ? (1<<reg_index) : 0; //note on?
 			}
 		}
