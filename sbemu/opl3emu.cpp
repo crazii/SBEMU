@@ -1,3 +1,6 @@
+#include <malloc.h> //alloca
+#include "platform.h"
+#include "../utility.h"
 #include "opl3emu.h"
 #include "dbopl.h"
 
@@ -32,7 +35,7 @@ static DBOPL::Chip* OPL3EMU_Chip;
 static int OPL_Inactive;
 #endif
 
-void OPL3EMU_Init(int samplerate)
+void OPL3EMU_Init(uint32_t samplerate)
 {
     if(OPL3EMU_Chip)
         delete OPL3EMU_Chip;

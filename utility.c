@@ -4,6 +4,9 @@
 #include <stdlib.h>
 #include "utility.h"
 
+int fpu_state_saved;
+unsigned char fpu_buffer[512] __attribute__((aligned(16)));
+
 // http://www.techhelpmanual.com/346-dos_environment.html
 // NOTE: this replaces the libc's default implementation of 'setenv'
 // the default setenv only sets env for current program (and its children)

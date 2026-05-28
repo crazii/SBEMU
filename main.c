@@ -31,8 +31,7 @@ static BOOL MAIN_TSRed;
 #define MAIN_SBEMU_VER "1.0 beta6"
 #endif
 
-#define MAIN_DOUBLE_OPL_VOLUME 1 //hack: double the amplitude of OPL PCM. should be 1 or 0
-#define MAIN_PCM_RESAMPLE_INTERPOLATION 0
+#define MAIN_PCM_RESAMPLE_INTERPOLATION 0 //causing slight noises, don't enable
 #define MAIN_VMPU_HDPMI_MEMFIX 1 //workaround hdpmi bug that a TSR allocated memory being treated as primary client's, also better by avoiding DPMI memory fragments
                             //details on '_freeclientmemory' at I31MEM.ASM of HDPMI.
 
@@ -74,8 +73,10 @@ static mpxplay_audioout_info_s mpu401_aui = {0};
 static int16_t MAIN_OPLPCM[MAIN_PCM_SAMPLESIZE];
 static int16_t MAIN_PCM[MAIN_PCM_SAMPLESIZE];
 static int16_t MAIN_PCMResample[MAIN_PCM_SAMPLESIZE];
-static int MAIN_LastSBRate = 0;
 static int16_t MAIN_LastResample[SBEMU_CHANNELS];
+#if MAIN_PCM_RESAMPLE_INTERPOLATION
+static int MAIN_LastSBRate = 0;
+#endif
 
 static DPMI_ISR_HANDLE MAIN_IntHandlePM;
 static DPMI_ISR_HANDLE MAIN_IntHandleRM;
@@ -718,6 +719,21 @@ int main(int argc, char* argv[])
     }
     MAIN_Options[OPT_OPL].value = !!(MAIN_Options[OPT_OPL].value);
 
+#if SBEMU_VMPU
+    //HW MPU is the default, if VMPU being set, override HW MPU. othewise error.
+    //should be checked before MAIN_TSR_InstallationCheck
+    if((MAIN_Options[OPT_SCMPU].value || (MAIN_Options[OPT_MPUCOMPORT].value != 9 && MAIN_Options[OPT_MPUCOMPORT].value != 0)) && VMPU_ENABLED)
+    {
+        MAIN_CPrintf(RED, "Conflict settings: %s with %s or %s.\n", 
+            MAIN_Options[OPT_VMPU_VOICES].option, MAIN_Options[OPT_SCMPU].option, MAIN_Options[OPT_MPUCOMPORT].option);
+        return -1;
+    }
+    if(VMPU_ENABLED && MAIN_Options[OPT_VMPU_VOICES].value == 1) //default: /VMPU without params
+        MAIN_Options[OPT_VMPU_VOICES].value = 64;
+    if(!MAIN_Options[OPT_VMPU_SF].value) //NULL="/VMSF"
+        MAIN_Options[OPT_VMPU_SF].value = (uintptr_t)VMPU_DEF_SF2;
+#endif
+
     //TSR installation check: update parameter & exit if already installed
     MAIN_TSR_InstallationCheck();
 
@@ -1014,7 +1030,9 @@ static void MAIN_Interrupt()
     BOOL opl_active = MAIN_Options[OPT_OPL].value && !fm_aui.fm && OPL3EMU_IsActive();
     BOOL digital = SBEMU_HasStarted();
     BOOL paused = SBEMU_IsPaused(); //need raise interrupt after pause, still need do the timing
+    #if MAIN_PCM_RESAMPLE_INTERPOLATION
     if(!digital) MAIN_LastSBRate = 0;
+    #endif
     if(digital)
     {
         int dma = (SBEMU_GetBits() <= 8 || MAIN_Options[OPT_TYPE].value < 6) ? SBEMU_GetDMA() : SBEMU_GetHDMA();
@@ -1157,26 +1175,9 @@ static void MAIN_Interrupt()
         _LOG("direct out:%d %d\n",samples,aui.card_samples_per_int);
         memcpy(MAIN_PCMResample, SBEMU_GetDirectPCM8(), samples);
         SBEMU_ResetDirect();
-#if 0   //fix noise for some games - SBEMU-X NOTE: unlikely to be needed
-        //note: this is a "pop" on games' init, and it can be ignored.
-        int zeros = TRUE;
-        for(int i = 0; i < samples && zeros; ++i)
-        {
-            if(((uint8_t*)MAIN_PCM)[i] != 0)
-                zeros = FALSE;
-        }
-        if(zeros)
-        {
-            for(int i = 0; i < samples; ++i)
-                ((uint8_t*)MAIN_PCM)[i] = 128;
-        }
-#endif
-        //for(int i = 0; i < samples; ++i) _LOG("%d ",((uint8_t*)MAIN_PCM)[i]); _LOG("\n");
         cv_bits_n_to_m(MAIN_PCMResample, samples, 1, 2);
-        //for(int i = 0; i < samples; ++i) _LOG("%d ",MAIN_PCM[i]); _LOG("\n");
         // the actual sample rate is derived from current count of samples in direct output buffer
         samples = mixer_speed_lq(MAIN_PCM, MAIN_PCM_SAMPLESIZE, MAIN_PCMResample, samples, 1, (samples * aui.freq_card) / aui.card_samples_per_int, aui.freq_card);
-        //for(int i = 0; i < samples; ++i) _LOG("%d ",MAIN_PCM[i]); _LOG("\n");
         cv_channels_1_to_n(MAIN_PCM, samples, 2, 2);
         digital = TRUE;
     }
@@ -1202,7 +1203,7 @@ static void MAIN_Interrupt()
                 #if 1
                 // https://stackoverflow.com/questions/12089662/mixing-16-bit-linear-pcm-streams-and-avoiding-clipping-overflow
                 int a = (int)(MAIN_PCM[i] * voicevol/256) + 32768;
-                int b = (int)(MAIN_OPLPCM[i] * midivol/256 * (MAIN_DOUBLE_OPL_VOLUME+1)) + 32768;
+                int b = (int)(MAIN_OPLPCM[i] * midivol/256) + 32768;
                 int mixed = (a < 32768 || b < 32768) ? (a*b/32768) : ((a+b)*2 - a*b/32768 - 65536);
                 if(mixed == 65536) mixed = 65535;
                 MAIN_PCM[i] = (mixed - 32768) * vol/256;
@@ -1430,10 +1431,7 @@ static void MAIN_TSR_Interrupt()
                 MAIN_Options[i].setcmd |= MAIN_SETCMD_STRCPY|MAIN_SETCMD_CHGD;
             }
 
-            char* fpustate = (char*)alloca(108);
-            #ifdef DJGPP //make vscode happy
-            asm("fsave %0\n\t finit":"=m"(*fpustate));
-            #endif
+            FPUSS();
             int irq = aui.card_irq;
             PIC_MaskIRQ(irq);
 
@@ -1486,9 +1484,7 @@ static void MAIN_TSR_Interrupt()
                 _LOG("Reset volume\n");
                 AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, MAIN_Options[OPT_VOL].value*100/9);
             }
-            #ifdef DJGPP //make vscode happy
-            asm("frstor %0" ::"m"(*fpustate));
-            #endif
+            FPUSR();
             PIC_UnmaskIRQ(irq);
 
             if(OPT_CHANGED(OPT_DMA))
