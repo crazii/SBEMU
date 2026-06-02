@@ -81,17 +81,32 @@ static void SBMEU_UpdateTCSampleRate()
     if(!SBEMU_UseTimeConst)
         return;
 
-    uint8_t tc = SBEMU_TimeConst;
-    uint8_t limit = 212; //23K Hz. limit time constant. reference: sblaster.cpp from DOSBox-X.
-    if(SBEMU_DSPVER >= 0x0400) //SB16
-        limit = SBEMU_GetBits() == 2 ? 165 : (SBEMU_GetBits() == 3 ? 179 : (SBEMU_GetBits() == 4 ? 172 : 234));
-    else if(SBEMU_DSPVER >= 0x0200 && SBEMU_DSPVER < 0x300) //SB16
-        limit = SBEMU_GetBits() == 2 ? 189 : (SBEMU_GetBits() <= 4 ? 172 : ((SBEMU_HighSpeed?234:210)));
-    else //SBPro
-        limit = SBEMU_GetBits() == 2 ? 165 : (SBEMU_GetBits() == 3 ? 179 : (SBEMU_GetBits() == 4 ? 172 : (SBEMU_HighSpeed?234:212)));
-    //DBG_Log("tc val: %d, limit: %d, bits: %d\n", value, limit, SBEMU_GetBits());
-    tc = min(tc, limit);
-    SBEMU_SampleRate = 256000000/(65536-(tc<<8)) / SBEMU_GetChannels();
+    SBEMU_SampleRate = 0;
+    if (SBEMU_FixTC != 0) for(int i = 0; i < 3; ++i)
+    {
+        if(SBEMU_TimeConst >= SBEMU_TimeConstantMapMono[i][0]-3 && SBEMU_TimeConst <= SBEMU_TimeConstantMapMono[i][0]+3)
+        {
+            SBEMU_SampleRate = SBEMU_TimeConstantMapMono[i][1] / SBEMU_GetChannels();
+            break;
+        }
+    }        
+
+    if(!SBEMU_SampleRate)
+    {
+        uint8_t tc = SBEMU_TimeConst;
+        uint8_t limit = 212; //23K Hz. limit time constant. reference: sblaster.cpp from DOSBox-X.
+        if(SBEMU_DSPVER >= 0x0400) //SB16
+            limit = SBEMU_GetBits() == 2 ? 165 : (SBEMU_GetBits() == 3 ? 179 : (SBEMU_GetBits() == 4 ? 172 : 234));
+        else if(SBEMU_DSPVER >= 0x0200 && SBEMU_DSPVER < 0x300) //SB16
+            limit = SBEMU_GetBits() == 2 ? 189 : (SBEMU_GetBits() <= 4 ? 172 : ((SBEMU_HighSpeed?234:210)));
+        else //SBPro
+            limit = SBEMU_GetBits() == 2 ? 165 : (SBEMU_GetBits() == 3 ? 179 : (SBEMU_GetBits() == 4 ? 172 : (SBEMU_HighSpeed?234:212)));
+        //DBG_Log("tc val: %d, limit: %d, bits: %d\n", value, limit, SBEMU_GetBits());
+        tc = min(tc, limit);
+        SBEMU_SampleRate = 256000000/(65536-(tc<<8)) / SBEMU_GetChannels();
+    }
+    _LOG("sample rate %d, ch=%d", SBEMU_SampleRate, SBEMU_GetChannels());
+
     SBEMU_UseTimeConst = SBEMU_GetChannels();
 }
 
@@ -323,21 +338,9 @@ void SBEMU_DSP_Write(uint16_t port, uint8_t value)
         {
             case SBEMU_CMD_SET_TIMECONST:
             {
-                SBEMU_SampleRate = 0;
-                if (SBEMU_FixTC != 0) for(int i = 0; i < 3; ++i)
-                {
-                    if(value >= SBEMU_TimeConstantMapMono[i][0]-3 && value <= SBEMU_TimeConstantMapMono[i][0]+3)
-                    {
-                        SBEMU_SampleRate = SBEMU_TimeConstantMapMono[i][1] / SBEMU_GetChannels();
-                        break;
-                    }
-                }
-
-                SBEMU_UseTimeConst = SBEMU_GetChannels(); // 1 or 2
                 SBEMU_TimeConst = value;
-
-                if(SBEMU_SampleRate == 0)
-                    SBMEU_UpdateTCSampleRate();
+                SBEMU_UseTimeConst = SBEMU_GetChannels();
+                SBMEU_UpdateTCSampleRate();
 
                 SBEMU_DSPCMD_Subindex = 2; //only 1byte
                 //_LOG("SBEMU: set sampling rate: %d", SBEMU_SampleRate);
