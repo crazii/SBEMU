@@ -102,7 +102,7 @@
 #define PCI_DEVICE_ID_VT8233     0x3059
 
 #define VIRTUALPAGETABLESIZE   4096
-#define PCMBUFFERPAGESIZE      256//4096 //page size determines the interrupt interval. 512 bytes: interval not enough for doom.
+#define PCMBUFFERPAGESIZE      512//4096 //page size determines the interrupt interval.
 
 #define VIA_INT_INTERVAL 1
 
@@ -393,13 +393,13 @@ static void VIA82XX_start(struct mpxplay_audioout_info_s *aui)
  if(card->pci_dev->device_id==PCI_DEVICE_ID_VT82C686)
  {
   #ifdef SBEMU //enable interrupt
-  outb(card->iobase+VIA_REG_OFFSET_TYPE, inb(card->iobase+VIA_REG_OFFSET_TYPE) | VIA_REG_TYPE_INT_EOL | VIA_REG_TYPE_INT_FLAG);
+  outb(card->iobase+VIA_REG_OFFSET_TYPE, inb(card->iobase+VIA_REG_OFFSET_TYPE) | VIA_REG_TYPE_INT_FLAG);
   #endif
   outb(card->iobase + VIA_REG_OFFSET_CONTROL, VIA_REG_CTRL_START);
  }
  else
  #ifdef SBEMU
-  outb(card->iobase + VIA_REG_OFFSET_CONTROL, VIA_REG_CTRL_START | VIA_REG_CTRL_AUTOSTART | VIA_REG_CTRL_INT_FLAG | VIA_REG_CTRL_INT_EOL | VIA_REG_CTRL_INT_STOP_IDX); //enable EOL & FLAG interrupt
+  outb(card->iobase + VIA_REG_OFFSET_CONTROL, VIA_REG_CTRL_START | VIA_REG_CTRL_AUTOSTART | VIA_REG_CTRL_INT_FLAG); //enable EOL & FLAG interrupt
  #else
   outb(card->iobase + VIA_REG_OFFSET_CONTROL, VIA_REG_CTRL_START | VIA_REG_CTRL_AUTOSTART);
  #endif
@@ -439,12 +439,12 @@ static long VIA82XX_getbufpos(struct mpxplay_audioout_info_s *aui)
  count &= 0xffffff;
 
 #ifdef SBEMU
- if((card->pci_dev->device_id!=PCI_DEVICE_ID_VT82C686 || count) && (count<=PCMBUFFERPAGESIZE)) { //VT8233/8235/8237 's count can be 0 on interrupt
+ if(1) {
+    bufpos = (idx * PCMBUFFERPAGESIZE); //align to page size to prevent over-transfering, helps eliminating doom SFX atrifacts
 #else
  if(count && (count<=PCMBUFFERPAGESIZE)) {
+    bufpos = (idx * PCMBUFFERPAGESIZE) + PCMBUFFERPAGESIZE - count;
 #endif
-
-  bufpos = (idx * PCMBUFFERPAGESIZE) + PCMBUFFERPAGESIZE - count;
 
   if(bufpos<aui->card_dmasize)
    aui->card_dma_lastgoodpos=bufpos;
