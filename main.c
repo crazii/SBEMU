@@ -401,7 +401,7 @@ struct MAIN_OPT
     "/VOL", "Set master volume (0-9)", 8, 0,
 
     "/K", "Internal sample rate", 22050, MAIN_SETCMD_BASE10,
-    "/FIXTC", "Fix time constant to match 11/22/44 kHz sample rate", FALSE, 0,
+    "/FIXTC", "Fix time constant to match 11/22/44 kHz sample rate", TRUE, 0,
     "/SCL", "List installed sound cards", 0, MAIN_SETCMD_HIDDEN,
     "/SCFM", "Select FM(OPL) sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN|MAIN_SETCMD_BASE10,
     "/SCMPU", "Select MPU-401 sound card index in list (/SCL)", 0, MAIN_SETCMD_HIDDEN|MAIN_SETCMD_BASE10,
