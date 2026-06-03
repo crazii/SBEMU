@@ -105,7 +105,7 @@ static void SBMEU_UpdateTCSampleRate()
         tc = min(tc, limit);
         SBEMU_SampleRate = 256000000/(65536-(tc<<8)) / SBEMU_GetChannels();
     }
-    _LOG("sample rate %d, ch=%d", SBEMU_SampleRate, SBEMU_GetChannels());
+    _LOG("sample rate %d, ch=%d\n", SBEMU_SampleRate, SBEMU_GetChannels());
 
     SBEMU_UseTimeConst = SBEMU_GetChannels();
 }
