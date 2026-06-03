@@ -21,6 +21,7 @@
 #include <au_cards/pcibios.h>
 
 extern void _go32_dpmi_set_iret_eax(unsigned val, unsigned esp, unsigned ss);
+extern unsigned int _go32_dpmi_get_eax(unsigned esp, unsigned ss);
 
 static const char *
 PROGNAME = "SBEMU";
@@ -968,10 +969,11 @@ int main(int argc, char* argv[])
 
 static void MAIN_InterruptPM(unsigned esp, unsigned ss)
 {
-    uint32_t retval = DPMI_DRVF_SKIPVM;    
+    uint32_t retval = 0;
     if(aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
     {
         MAIN_Interrupt();
+        retval = DPMI_DRVF_SKIPVM;
         PIC_SendEOIWithIRQ(aui.card_irq); //some BIOS driver doesn't works well if not sending EOI, there's extra check for EOI in DPMI_RMISR_ChainedWrapper
     }
     _go32_dpmi_set_iret_eax(retval, esp, ss);
@@ -980,6 +982,10 @@ static void MAIN_InterruptPM(unsigned esp, unsigned ss)
 static void MAIN_Interrupt()
 {
     if(!(aui.card_infobits&AUINFOS_CARDINFOBIT_PLAYING))
+        return;
+    aui.card_outbytes = aui.card_dmasize;
+    uint32_t samples = AU_cardbuf_space(&aui) / sizeof(int16_t) / SBEMU_CHANNELS; //16 bit, 2 channels
+    if(samples == 0)
         return;
         
     int32_t vol;
@@ -1020,11 +1026,7 @@ static void MAIN_Interrupt()
         last_cdvol = cdvol;
     }
 
-    aui.card_outbytes = aui.card_dmasize;
-    int samples = AU_cardbuf_space(&aui) / sizeof(int16_t) / SBEMU_CHANNELS; //16 bit, 2 channels
     //_LOG("samples:%d\n",samples);
-    if(samples == 0)
-        return;
 
     BOOL vmpu_active = VMPU_IsActive();
     BOOL opl_active = MAIN_Options[OPT_OPL].value && !fm_aui.fm && OPL3EMU_IsActive();
@@ -1093,9 +1095,8 @@ static void MAIN_Interrupt()
                 count = count*SB_Rate/aui.freq_card;
             else
                 resample = FALSE;
-            if(!paused)
-                count = min(count, max(1,(DMA_Count)/samplesize/channels)); //max for stereo initial 1 byte
-            count = min(count, max(1,(SB_Bytes-SB_Pos)/samplesize/channels)); //max for stereo initial 1 byte. 1/2channel = 0, make it 1
+            count = min(count, max(1,(DMA_Count)>>(samplesize-1)>>(channels-1))); //max for stereo initial 1 byte
+            count = min(count, max(1,(SB_Bytes-SB_Pos)>>(samplesize-1)>>(channels-1))); //max for stereo initial 1 byte. 1/2channel = 0, make it 1
             if(SBEMU_GetBits()<8) //ADPCM 8bit
                 count = max(1, count / (9 / SBEMU_GetBits()));
             _LOG("samples:%d %d %d, %d %d, %d %d\n", samples, pos+count, count, DMA_Count, DMA_Index, SB_Bytes, SB_Pos);
@@ -1119,7 +1120,7 @@ static void MAIN_Interrupt()
                         MAIN_PCMResample[i] = MAIN_LastResample[i]; //put last sample at beginning for interpolation
                         MAIN_LastResample[i] = *(pcm + (count-1)*channels + i); //record last sample
                     }
-                    count += channels;
+                    count += 1;
                     #endif
                     count = mixer_speed_lq(MAIN_PCM+pos*2, MAIN_PCM_SAMPLESIZE-pos*2, MAIN_PCMResample, count*channels, channels, SB_Rate, aui.freq_card)/channels;
                 }
@@ -1145,6 +1146,11 @@ static void MAIN_Interrupt()
                 SB_Pos = SBEMU_SetPos(0);
 
                 MAIN_InvokeIRQ(SBEMU_GetIRQ());
+                //NOTE: with vdpmi the irq may not triggered immediately (IF=0 or IRQ with higher priority (0,1) in process),
+                //should do break here
+                //NOTE: doom (DMX) uses prepending method to fill data "after" transferred data address, this also require no further transfer, wait needed.
+                break;
+                #if 0
                 if(SB_Bytes <= 32) //detection routine?
                 {
                     int c = SBEMU_GetDetectionCounter();
@@ -1162,10 +1168,9 @@ static void MAIN_Interrupt()
                 DMA_Count = VDMA_GetCounter(dma);
                 DMA_Addr = VDMA_GetAddress(dma);
                 //_LOG("DMACount: %d, DMAIndex:%d, DMA_Addr:%x\n",DMA_Count, DMA_Index, DMA_Addr);
-                if(!VDMA_GetAuto(dma))
-                    break;
+                #endif
             }
-        } while((pos < samples) && SBEMU_HasStarted());
+        } while((pos < samples) && SBEMU_HasStarted() && VDMA_GetAuto(dma));
         //_LOG("digital end %d %d\n", samples, pos);
         samples = min(samples, pos);
     }

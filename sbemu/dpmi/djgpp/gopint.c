@@ -259,3 +259,8 @@ void _go32_dpmi_set_iret_eax(unsigned val, unsigned esp, unsigned ss)
 {
   _farpokel(ss, esp+28, val); //EAX of pusha on stack
 }
+
+unsigned int _go32_dpmi_get_eax(unsigned esp, unsigned ss)
+{
+  return _farpeekl(ss, esp+28); //EAX of pusha on stack
+}
