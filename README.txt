@@ -131,6 +131,7 @@ NOTE: after SBEMU installs, you can change them by a another run of SBEMU with n
 
     With this switch on, it makes SBEMU works more efficiently because the PCM resample will be skipped or simplified.
     If you have faced any sound pops/noises/stuttering, you can try using /FIXTC
+    1.0beta.6rc2: FIXTC is turned on by default to provide better stability for SFX playback.
 
 /SCL: List the PCI sound cards installed on your PC. Each will be shown with a number before it.
     NOTE: this option only works BEFORE SBEMU installs,
@@ -162,7 +163,8 @@ NOTE: after SBEMU installs, you can change them by a another run of SBEMU with n
         this option Conflicts with /MCOM=[1/2/3/4]; errors will be generated if there is a conflict.
 
 /VMSF:  Set VMPU Soundfont2 file, if the file path is a relative path, it is relative to the location of SBEMU.EXE, NOT current working directory.
-        ONLY effective if /VMPU is enabled.
+        ONLY effective if /VMPU is enabled. the default value is "sbemusf.sf2"
+        a fast & easy setup would be put a soundfont2 file in the SBEMU folder, and rename it to sbemusf.sf2, and run SBEMU with /vmpu option
 
 5. Trouble Shooting
 
