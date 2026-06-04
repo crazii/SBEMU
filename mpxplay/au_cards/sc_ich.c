@@ -91,9 +91,9 @@ static int ich_irq_cnt = 0;
 #define ICH_BD_IOC        0x8000 //buffer descriptor high word: interrupt on completion (IOC)
 
 #define ICH_DMABUF_MAX_PERIODS  32 // number of entries in the Buffer Descriptor List
-#define ICH_DMABUF_PERIODS   4 // number of "used" entries in the Buffer Descriptor List
+#define ICH_DMABUF_PERIODS   8 // number of "used" entries in the Buffer Descriptor List
 #define ICH_BDL_ENTRY_SIZE (2 * sizeof(uint32_t))  // size of one entry in the Buffer Descriptor List
-#define ICH_DMABUF_ALIGN (ICH_DMABUF_MAX_PERIODS*ICH_BDL_ENTRY_SIZE) // 256
+#define ICH_DMABUF_ALIGN (ICH_DMABUF_MAX_PERIODS*ICH_BDL_ENTRY_SIZE*2) // 512
 #ifdef SBEMU
 #define ICH_INT_INTERVAL     1 //interrupt interval in periods //long interval won't work for doom/doom2
 #endif
@@ -726,8 +726,8 @@ static long INTELICH_getbufpos(struct mpxplay_audioout_info_s *aui)
 {
  struct intel_card_s *card=aui->card_private_data;
  unsigned long bufpos=0;
- unsigned int index,pcmpos,retry=3;
-
+ unsigned int index,pcmpos,retry=6;
+#if !defined(SBEMU)
  do{
   index=snd_intel_read_8(card,ICH_PO_CIV_REG);    // number of current period
   #ifndef SBEMU
@@ -775,6 +775,20 @@ static long INTELICH_getbufpos(struct mpxplay_audioout_info_s *aui)
   }
 
  }while(--retry);
+ #else
+  //NOTE: align dma pos at the beginning of periods, and free dma space to be in period sizes 
+  //this helps with stability and timing
+  do {
+  index=snd_intel_read_8(card,ICH_PO_CIV_REG);    // number of current period
+  if(index>=(ICH_DMABUF_PERIODS-1))
+    continue;
+  bufpos=index*card->period_size_bytes;
+  if(bufpos<aui->card_dmasize){
+   aui->card_dma_lastgoodpos=bufpos;
+   break;
+  }
+ }while(--retry);
+ #endif
 
  //mpxplay_debugf(ICH_DEBUG_OUTPUT,"bufpos:%5d dmasize:%5d",bufpos,aui->card_dmasize);
 
