@@ -1061,13 +1061,15 @@ unsigned int cv_channels_1_to_n(PCM_CV_TYPE_S *pcm_sample,unsigned int samplenum
 //sample rates
 unsigned int mixer_speed_lq(PCM_CV_TYPE_S* dest, unsigned int destsample, const PCM_CV_TYPE_S* source, unsigned int sourcesample, unsigned int channels, unsigned int samplerate, unsigned int newrate)
 {
- const unsigned int instep=((samplerate/newrate)<<12) | (((4096*(samplerate%newrate)-1)/(newrate-1))&0xFFF);
- const unsigned int inend=(sourcesample/channels - 1) << 12; //for n samples, interpolation n-1 steps
- int16_t *pcm; int16_t const* intmp;
- //unsigned long ipi;
- unsigned int inpos = 0;//(samplerate<newrate) ? instep/2 : 0;
- if(!sourcesample)
+if(!sourcesample)
   return 0;
+
+ const unsigned int instep=((samplerate/newrate)<<12) | (((4096*(samplerate%newrate)-1)/(newrate-1))&0xFFF);
+ const unsigned int total = sourcesample>>(channels-1);
+ //const unsigned int inend=(total - 1) << 12; //for n samples, interpolation n-1 steps
+ const unsigned int inend=total << 12; //beta6rc2: revert to 1.0beta3: this provide better buffer size alignment to improve timing & performance
+ int16_t *pcm; int16_t const* intmp;
+ unsigned int inpos = 0;
  assert(((sourcesample/channels)&0xFFF00000) == 0); //too many samples, need other approches.
  unsigned int buffcount = max(((unsigned long long)max(sourcesample,512)*newrate+samplerate-1)/samplerate,max(sourcesample,512))*2+32;
  assert(buffcount <= destsample);
@@ -1077,7 +1079,6 @@ unsigned int mixer_speed_lq(PCM_CV_TYPE_S* dest, unsigned int destsample, const 
 
  pcm = buff;
  intmp = source;
- //int total = sourcesample/channels;
 
  do{
   int m1,m2;
@@ -1087,9 +1088,10 @@ unsigned int mixer_speed_lq(PCM_CV_TYPE_S* dest, unsigned int destsample, const 
   m2=inpos&0xFFF;
   m1=4096-m2;
   ch=channels;
-  ipi*=ch;
+  ipi <<= (ch-1);
   intmp1=intmp+ipi;
-  intmp2=intmp1+ch;
+  //intmp2=intmp1+ch;
+  intmp2=ipi < total-ch ? intmp1+ch : intmp1; //beta6rc2: revert to 1.0beta3: this provide better buffer size alignment to improve timing & performance
   do{
    *pcm++= ((*intmp1++)*m1+(*intmp2++)*m2)/4096;// >> 12; //don't use shift, signed right shift impl defined, maybe logical shift
   }while(--ch);
@@ -1101,6 +1103,7 @@ unsigned int mixer_speed_lq(PCM_CV_TYPE_S* dest, unsigned int destsample, const 
     return pcm - buff;
   }
  }while(inpos<inend);
+
 
  mpxplay_debugf(MPXPLAY_DEBUG_OUTPUT, "sample count: %d\n", pcm-buff);
  //_LOG("MIXER_SPEED_LQ: %d, %d\n", pcm-buff, buffcount);
