@@ -992,7 +992,9 @@ Chip::Chip( bool _opl3Mode ) : opl3Mode( _opl3Mode ) {
 	regBD = 0;
 	reg104 = 0;
 	opl3Active = 0;
+	#ifdef SBEMU
 	oplActive = 0;
+	#endif
 
 	InitTables();
 }
@@ -1172,17 +1174,22 @@ void Chip::WriteReg( uint32_t reg, uint8_t val ) {
 		if ( reg == 0xbd ) {
 			WriteBD( val );
 
+			#ifdef SBEMU
 			oplActive &= ~0x80000000L;
-			oplActive |= (val&0x20) ? 0x80000000L : 0; //Percussion 
+			oplActive |= (val&0x20) ? 0x80000000L : 0; //Percussion, low reg set only
+			#endif
 		} else {
 			REGCHAN( WriteB0 );
 
-			int reg_index = (reg&0xf);
+			#ifdef SBEMU
+			uint32_t reg_index = (reg&0xf);
 			if(reg_index <= 8) //b0-b8
 			{
-				oplActive &= (1<<reg_index);
+				reg_index += (reg&0x100) ? 16 : 0; //opl3/opl2?
+				oplActive &= ~(1<<reg_index);
 				oplActive |= (val&0x20) ? (1<<reg_index) : 0; //note on?
 			}
+			#endif
 		}
 		break;
 	case 0xc0 >> 4:

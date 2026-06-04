@@ -24,7 +24,6 @@ static uint32_t OPL3EMU_ADLG_CtrlEnable = 0;    //seems not working for Miles So
 static uint32_t OPL3EMU_ADLG_Volume[2] = {0x08,0x08};
 
 static DBOPL::Chip* OPL3EMU_Chip;
-static int OPL_Inactive;
 
 void OPL3EMU_Init(int samplerate)
 {
@@ -36,11 +35,7 @@ void OPL3EMU_Init(int samplerate)
 
 int OPL3EMU_IsActive()
 {
-    if(!OPL3EMU_Chip->oplActive)
-        ++OPL_Inactive;
-    else
-        OPL_Inactive = 0;
-    return OPL_Inactive <= 50; //add some delays & accumulations
+    return (OPL3EMU_Chip->oplActive&(OPL3EMU_Chip->opl3Active?0xFFFFFFFF:0x8000FFFF));
 }
 
 int OPL3EMU_GetMode()
