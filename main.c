@@ -1205,10 +1205,10 @@ static void MAIN_Interrupt()
         {
             for(int i = 0; i < samples*2; ++i)
             {
-                #if 1
+                #if 0
                 // https://stackoverflow.com/questions/12089662/mixing-16-bit-linear-pcm-streams-and-avoiding-clipping-overflow
                 int a = (int)(MAIN_PCM[i] * voicevol/256) + 32768;
-                int b = (int)(MAIN_OPLPCM[i] * midivol/256) + 32768;
+                int b = (int)((MAIN_OPLPCM[i]+MAIN_OPLPCM[i]/2*SBEMU_OPL_VOLUME_AMPLICATION) * midivol/256) + 32768;
                 int mixed = (a < 32768 || b < 32768) ? (a*b/32768) : ((a+b)*2 - a*b/32768 - 65536);
                 if(mixed == 65536) mixed = 65535;
                 MAIN_PCM[i] = (mixed - 32768) * vol/256;
@@ -1220,7 +1220,7 @@ static void MAIN_Interrupt()
             }
         }
         else for(int i = 0; i < samples*2; ++i)
-            MAIN_PCM[i] = MAIN_PCM[i] * midivol/256 * vol/256;
+            MAIN_PCM[i] = (MAIN_PCM[i] + MAIN_PCM[i]/2 * SBEMU_OPL_VOLUME_AMPLICATION) * midivol/256 * vol/256;
     }
     else if(digital)
         for(int i = 0; i < samples*2; ++i)
