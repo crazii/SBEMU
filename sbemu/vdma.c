@@ -65,6 +65,7 @@ void VDMA_Write(uint16_t port, uint8_t byte)
 
         //some programs (known duke3d, rott) doesn't write flipflop before access 16 bit data
         //prevent unlrelated channel writes (e.g. floppy DMA accessed by BIOS) to change flipflop during program and cause crash (reading incorrect addresses)
+        //TODO: virtualize individual flipflop for each channel
         if(VMDA_IS_CHANNEL_VIRTUALIZED(channel))
         {
             if(((VDMA_Regs[base+VDMA_REG_FLIPFLOP]++)&0x1) == 0)
