@@ -485,8 +485,8 @@ static void MAIN_InvokeIRQ(uint8_t irq) //generate virtual IRQ
 static void MAIN_SetBlasterEnv(struct MAIN_OPT* opt) //alter BLASTER env.
 {
     char buf[256];
-    if(opt[OPT_TYPE].value != 6)
-        sprintf(buf, "A%x I%x D%x P%x", opt[OPT_ADDR].value, opt[OPT_IRQ].value, opt[OPT_DMA].value, opt[OPT_MPUADDR].value);
+    if(opt[OPT_TYPE].value != 6) //T5 not working for some games, should use T4 for SBPro (t=4/5)
+        sprintf(buf, "A%x I%x D%x P%x T%x", opt[OPT_ADDR].value, opt[OPT_IRQ].value, opt[OPT_DMA].value, opt[OPT_MPUADDR].value, opt[OPT_TYPE].value == 5 ? 4 : opt[OPT_TYPE].value);
     else
         sprintf(buf, "A%x I%x D%x T%x H%x P%x", opt[OPT_ADDR].value, opt[OPT_IRQ].value, opt[OPT_DMA].value, opt[OPT_TYPE].value, opt[OPT_HDMA].value, opt[OPT_MPUADDR].value);
     #ifdef DJGPP //makes vscode happy
