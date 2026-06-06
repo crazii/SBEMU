@@ -1196,14 +1196,12 @@ static void MAIN_Interrupt()
     {
         int16_t* pcm = digital ? MAIN_OPLPCM : MAIN_PCM;
         OPL3EMU_GenSamples(pcm, samples); //will generate samples*2 if stereo
-        //always use 2 channels
-        int channels = OPL3EMU_GetMode() ? 2 : 1;
-        if(channels == 1)
+        if(!OPL3EMU_GetMode()) //always use 2 channels, convert opl2 samples to 2 channel
             cv_channels_1_to_n(pcm, samples, 2, SBEMU_BITS/8);
 
         if(digital)
         {
-            for(int i = 0; i < samples*2; ++i)
+            for(int i = 0; i < samples*2; i+=2)
             {
                 #if 0
                 // https://stackoverflow.com/questions/12089662/mixing-16-bit-linear-pcm-streams-and-avoiding-clipping-overflow
@@ -1212,19 +1210,42 @@ static void MAIN_Interrupt()
                 int mixed = (a < 32768 || b < 32768) ? (a*b/32768) : ((a+b)*2 - a*b/32768 - 65536);
                 if(mixed == 65536) mixed = 65535;
                 MAIN_PCM[i] = (mixed - 32768) * vol/256;
+                #if SBEMU_SWAP_STEREO
+                #error SBEMU_SWAP_STEREO not implemented!
+                #endif
                 #else //simple average: sounds the same as DOSBox
-                int a = (int)(MAIN_PCM[i] * voicevol/256);
-                int b = (int)(MAIN_OPLPCM[i] * midivol/256);
-                MAIN_PCM[i] = (a+b)/2 * vol/256;
+
+                int la = (int)(MAIN_PCM[i] * voicevol/256); //SFX PCM
+                int ra = (int)(MAIN_PCM[i+1] * voicevol/256);
+                #if SBEMU_SWAP_STEREO
+                /*if(channels == 2)*/ {int x = la; la = ra; ra = x;}
+                #endif
+
+                int lb = (int)((MAIN_OPLPCM[i]+MAIN_PCM[i]/2 * SBEMU_OPL_VOLUME_AMPLICATION) * midivol/256); //OPL PCM
+                int rb = (int)((MAIN_OPLPCM[i+1]+MAIN_PCM[i+1]/2 * SBEMU_OPL_VOLUME_AMPLICATION) * midivol/256);
+                int l = (la+lb)/2 * vol/256;
+                int r = (ra+rb)/2 * vol/256;
+                MAIN_PCM[i] = l;
+                MAIN_PCM[i+1] = r;
                 #endif
             }
         }
-        else for(int i = 0; i < samples*2; ++i)
+        else for(int i = 0; i < samples*2; ++i) //MAIN_PCM is opl here
             MAIN_PCM[i] = (MAIN_PCM[i] + MAIN_PCM[i]/2 * SBEMU_OPL_VOLUME_AMPLICATION) * midivol/256 * vol/256;
     }
     else if(digital)
-        for(int i = 0; i < samples*2; ++i)
-            MAIN_PCM[i] = MAIN_PCM[i] * voicevol/256 * vol/256;
+        for(int i = 0; i < samples*2; i+=2)
+        {
+            int16_t l = MAIN_PCM[i] * voicevol/256 * vol/256;
+            int16_t r = MAIN_PCM[i+1] * voicevol/256 * vol/256;
+            #if SBEMU_SWAP_STEREO
+            MAIN_PCM[i] = r;
+            MAIN_PCM[i+1] = l;
+            #else
+            MAIN_PCM[i] = l;
+            MAIN_PCM[i+1] = r;
+            #endif
+        }
 
 #if SBEMU_VMPU
     if(vmpu_active)
