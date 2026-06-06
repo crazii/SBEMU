@@ -1,6 +1,7 @@
 #include "platform.h"
 #include "dpmi/dbgutil.h"
 #include "sbemu.h"
+#include "sbemucfg.h"
 #include "ctadpcm.h"
 #include <string.h>
 
@@ -89,9 +90,10 @@ static void SBMEU_UpdateTCSampleRate()
             SBEMU_SampleRate = SBEMU_TimeConstantMapMono[i][1] / SBEMU_GetChannels();
             break;
         }
-    }        
+    }
 
-    if(!SBEMU_SampleRate)
+    int original_sample_rate = 0;
+    if(!SBEMU_SampleRate || SBEMU_FIXTC_THRESHOLD)
     {
         uint8_t tc = SBEMU_TimeConst;
         uint8_t limit = 212; //23K Hz. limit time constant. reference: sblaster.cpp from DOSBox-X.
@@ -103,9 +105,11 @@ static void SBMEU_UpdateTCSampleRate()
             limit = SBEMU_GetBits() == 2 ? 165 : (SBEMU_GetBits() == 3 ? 179 : (SBEMU_GetBits() == 4 ? 172 : (SBEMU_HighSpeed?234:212)));
         //DBG_Log("tc val: %d, limit: %d, bits: %d\n", value, limit, SBEMU_GetBits());
         tc = min(tc, limit);
-        SBEMU_SampleRate = 256000000/(65536-(tc<<8)) / SBEMU_GetChannels();
+        original_sample_rate = 256000000/(65536-(tc<<8)) / SBEMU_GetChannels();
+        if(!SBEMU_SampleRate || abs(SBEMU_SampleRate-original_sample_rate) > SBEMU_FixTC )
+            SBEMU_SampleRate = original_sample_rate;
     }
-    _LOG("sample rate %d, ch=%d\n", SBEMU_SampleRate, SBEMU_GetChannels());
+    _LOG("tc=%d sample rate %d, original sample rate %d ch=%d\n", SBEMU_TimeConst, SBEMU_SampleRate, original_sample_rate, SBEMU_GetChannels());
 
     SBEMU_UseTimeConst = SBEMU_GetChannels();
 }
@@ -580,6 +584,8 @@ void SBEMU_Init(int irq, int dma, int hdma, int DSPVer, int FixTC, SBEMU_EXTFUNS
     SBEMU_DSPVER = DSPVer;
     SBEMU_ExtFuns = extfuns;
     SBEMU_FixTC = FixTC;
+    if(SBEMU_FixTC == 1 && SBEMU_FIXTC_THRESHOLD)
+        SBEMU_FixTC = SBEMU_FIXTC_THRESHOLD;
 
     SBEMU_Mixer_WriteAddr(0, SBEMU_MIXERREG_RESET);
     SBEMU_Mixer_Write(0, 1);
