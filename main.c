@@ -1203,16 +1203,28 @@ static void MAIN_Interrupt()
         {
             for(int i = 0; i < samples*2; i+=2)
             {
-                #if 0
+                #if 1
                 // https://stackoverflow.com/questions/12089662/mixing-16-bit-linear-pcm-streams-and-avoiding-clipping-overflow
-                int a = (int)(MAIN_PCM[i] * voicevol/256) + 32768;
-                int b = (int)((MAIN_OPLPCM[i]+MAIN_OPLPCM[i]/2*SBEMU_OPL_VOLUME_AMPLICATION) * midivol/256) + 32768;
-                int mixed = (a < 32768 || b < 32768) ? (a*b/32768) : ((a+b)*2 - a*b/32768 - 65536);
-                if(mixed == 65536) mixed = 65535;
-                MAIN_PCM[i] = (mixed - 32768) * vol/256;
+                int l;
+                {
+                    int la = (int)(MAIN_PCM[i] * voicevol/256) + 32768;
+                    int lb = (int)((MAIN_OPLPCM[i]+MAIN_OPLPCM[i]/2*SBEMU_OPL_VOLUME_AMPLICATION) * midivol/256) + 32768;
+                    l = (la < 32768 || lb < 32768) ? (la*lb/32768) : ((la+lb)*2 - la*lb/32768 - 65536);
+                    if(l == 65536) l = 65535;
+                }
+                int r;
+                {
+                    int ra = (int)(MAIN_PCM[i+1] * voicevol/256) + 32768;
+                    int rb = (int)((MAIN_OPLPCM[i+1]+MAIN_OPLPCM[i+1]/2*SBEMU_OPL_VOLUME_AMPLICATION) * midivol/256) + 32768;
+                    r = (ra < 32768 || rb < 32768) ? (ra*rb/32768) : ((ra+rb)*2 - ra*rb/32768 - 65536);
+                    if(r == 65536) r = 65535;
+                }
                 #if SBEMU_SWAP_STEREO
-                #error SBEMU_SWAP_STEREO not implemented!
+                {int x = l; l = r; r = x;}
                 #endif
+                MAIN_PCM[i] = (l - 32768) * vol/256;
+                MAIN_PCM[i+1] = (r - 32768) * vol/256;
+                
                 #else //simple average: sounds the same as DOSBox
 
                 int la = (int)(MAIN_PCM[i] * voicevol/256); //SFX PCM
