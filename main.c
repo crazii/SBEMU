@@ -36,6 +36,19 @@ static BOOL MAIN_TSRed;
 #define MAIN_VMPU_HDPMI_MEMFIX 1 //workaround hdpmi bug that a TSR allocated memory being treated as primary client's, also better by avoiding DPMI memory fragments
                             //details on '_freeclientmemory' at I31MEM.ASM of HDPMI.
 
+//we can enable IF but VIF cannot be enabled because we don't know if current vm is safe for (virtual) interrupts,
+//and the primary client's rm stack will be used for rm ints and it is not safe when VIF=0.
+//TODO: shedule for event when VIF=1, e.g. Call_When_VM_Ints_Enabled (not supported by VDPMI yet, no temporary implementation and wait for VxD)
+#define MAIN_SETIF 1
+
+#if MAIN_SETIF
+#define SETIF() __asm __volatile__ ("sti")
+#define RESETIF() __asm __volatile__ ("cli")
+#else
+#define SETIF() 
+#define RESETIF() 
+#endif
+
 #define MAIN_TSR_INT 0x2D   //AMIS multiplex. TODO: 0x2F?
 #define MAIN_TSR_INTSTART_ID 0x01 //start id
 
@@ -969,10 +982,13 @@ int main(int argc, char* argv[])
 
 static void MAIN_InterruptPM(unsigned esp, unsigned ss)
 {
-    uint32_t retval = 0;
+    uint32_t retval = DPMI_DRVF_SKIPVM; //if no sound irq here, calling vm handler (bios) will mask out sound card irq.
     if(aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
     {
+        SETIF();
         MAIN_Interrupt();
+        RESETIF();
+
         retval = DPMI_DRVF_SKIPVM;
         PIC_SendEOIWithIRQ(aui.card_irq); //some BIOS driver doesn't works well if not sending EOI, there's extra check for EOI in DPMI_RMISR_ChainedWrapper
     }
@@ -1131,9 +1147,11 @@ static void MAIN_Interrupt()
             _LOG("samples:%d %d %d\n", count, pos, samples);
             if(!paused)
             {
+                RESETIF();
                 //_LOG("DMA counter: %d\n",DMA_Count-bytes);
                 DMA_Index = VDMA_SetIndexCounter(dma, DMA_Index+bytes, DMA_Count-bytes);
                 DMA_Count = VDMA_GetCounter(dma);
+                SETIF();
             }
             SB_Pos = SBEMU_SetPos(SB_Pos+bytes);
             //_LOG("SB bytes: %d %d\n", SB_Pos, SB_Bytes);
@@ -1237,18 +1255,18 @@ static void MAIN_Interrupt()
             }
         }
         else for(int i = 0; i < samples*2; ++i) //MAIN_PCM is opl here
-            MAIN_PCM[i] = (MAIN_PCM[i] + MAIN_PCM[i]*SBEMU_OPL_VOLUME_AMPLICATION/2) * SBEMU_OPL_RATIO * midivol/256 * vol/256;
+            MAIN_PCM[i] = (MAIN_PCM[i] + MAIN_PCM[i]*SBEMU_OPL_VOLUME_AMPLICATION/2) * midivol/256 * SBEMU_OPL_RATIO * vol/256;
     }
     else if(digital)
         for(int i = 0; i < samples*2; i+=2)
         {
-            int16_t l = MAIN_PCM[i] * voicevol/256 * vol/256;
-            int16_t r = MAIN_PCM[i+1] * voicevol/256 * vol/256;
+            int16_t l = MAIN_PCM[i] * voicevol/256 * SBEMU_SFX_RATIO * vol/256;
+            int16_t r = MAIN_PCM[i+1] * voicevol/256 * SBEMU_SFX_RATIO * vol/256;
             #if SBEMU_SWAP_STEREO
             {int x = l; l = r; r = x;}
             #endif
-            MAIN_PCM[i] = l*SBEMU_SFX_RATIO;
-            MAIN_PCM[i+1] = r*SBEMU_SFX_RATIO;
+            MAIN_PCM[i] = l;
+            MAIN_PCM[i+1] = r;
         }
 
 #if SBEMU_VMPU
