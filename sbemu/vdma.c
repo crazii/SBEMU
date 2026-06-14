@@ -63,25 +63,30 @@ void VDMA_Write(uint16_t port, uint8_t byte)
         }
         //_LOG("base:%d port:%d\n", base, port);
 
-        if(((VDMA_Regs[base+VDMA_REG_FLIPFLOP]++)&0x1) == 0)
+        //some programs (known duke3d, rott) doesn't write flipflop before access 16 bit data
+        //prevent unlrelated channel writes (e.g. floppy DMA accessed by BIOS) to change flipflop during program and cause crash (reading incorrect addresses)
+        if(VMDA_IS_CHANNEL_VIRTUALIZED(channel))
         {
-            VDMA_InIO[channel] = TRUE;
-            VDMA_Regs[base+port] = (VDMA_Regs[base+port]&~0xFF) | byte;
-        }
-        else
-        {
-            VDMA_Regs[base+port] = (VDMA_Regs[base+port]&~0xFF00) | (byte<<8);
-            VDMA_InIO[channel] = FALSE;
-            VDMA_DelayUpdate[channel] = FALSE;
-        }
+            if(((VDMA_Regs[base+VDMA_REG_FLIPFLOP]++)&0x1) == 0)
+            {
+                VDMA_InIO[channel] = TRUE;
+                VDMA_Regs[base+port] = (VDMA_Regs[base+port]&~0xFF) | byte;
+            }
+            else
+            {
+                VDMA_Regs[base+port] = (VDMA_Regs[base+port]&~0xFF00) | (byte<<8);
+                VDMA_InIO[channel] = FALSE;
+                VDMA_DelayUpdate[channel] = FALSE;
+            }
 
-        if((port&0x1) == 0)//addr
-        {
-            VDMA_Index[channel] = 0;
-            VDMA_Addr[channel] = (VDMA_Addr[channel]&~0xFFFF) | VDMA_Regs[base+port];
+            if((port&0x1) == 0)//addr
+            {
+                VDMA_Index[channel] = 0;
+                VDMA_Addr[channel] = (VDMA_Addr[channel]&~0xFFFF) | VDMA_Regs[base+port];
+            }
+            else //counter
+                VDMA_CurCounter[channel] = VDMA_Counter[channel] = VDMA_Regs[base+port] + 1;
         }
-        else //counter
-            VDMA_CurCounter[channel] = VDMA_Counter[channel] = VDMA_Regs[base+port] + 1;
     }
     else if(port >= 0x80 && port <= 0x8F)//page registers 0x87~0x8F
     {
