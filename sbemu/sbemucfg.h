@@ -22,4 +22,8 @@
 //this is the default threshold for fixtc, can be overridded by command line.
 #define SBEMU_FIXTC_THRESHOLD 1000
 
+//swap left/right chanel (SFX only)
+//it has historical reasons related to the legacy SB cards so previously I was reluctant to do it.
+#define SBEMU_SWAP_STEREO 1
+
 #endif//_SBEMUCFG_H_
