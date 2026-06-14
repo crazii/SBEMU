@@ -95,9 +95,8 @@ NOTE: after SBEMU installs, you can change them by a another run of SBEMU with n
     4: SB Pro 2 (or Pro new, with OPL3)
     5: SB Pro 2 (MCA - microchannel)
     6: SB16
-    NOTE:   For compatibility reason, SBEMU won't set 'Tx' in BLASTER environment variable, except T6 for /T6.
-            Some games will ignore the 'T' settings in BLASTER, especially for auto-detection. SBEMU should
-            work for such cases, because no matter what '/T' is set, the full emulation is not stripped.
+    NOTE:   For compatibility reason, SBEMU won't set 'T5' in BLASTER environment variable, 
+            for /T5 option, the BLASTER env being set is 'T4'
 
 /OPL: Enable the OPL FM emulation, usually for music. default: 1.
 
@@ -118,6 +117,7 @@ NOTE: after SBEMU installs, you can change them by a another run of SBEMU with n
 
 /K: Set the sample rate for the real sound card. Default: /K22050
     It's not recommended to set value above 44100 for games, as most DOS games output 11025/22050 Hz.
+    A higher sample rate won't increase the sound quality; on the contrary it will impose the burden to resample and cause instability. 
     But you may try to set it higher if your want, or for music players.
 
 /FIXTC: Use fixed time constant. Default: /FIXTC0 (disabled)
