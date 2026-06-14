@@ -399,7 +399,7 @@ struct MAIN_OPT
     "/OPL", "Enable OPL3 emulation", TRUE, 0,
 
     "/O", "Select output. 0: headphone, 1: speaker (Intel HDA) or S/PDIF (Xonar DG)", 1, 0,
-    "/VOL", "Set master volume (0-9)", 8, 0,
+    "/VOL", "Set master volume (0-" STR(SBEMU_VOLUME_MAX) ")", 80, MAIN_SETCMD_BASE10,
 
     "/K", "Internal sample rate", 22050, MAIN_SETCMD_BASE10,
     "/FIXTC", "Fix time constant to match 11/22/44 kHz sample rate", TRUE, 0,
@@ -694,7 +694,7 @@ int main(int argc, char* argv[])
         MAIN_CPrintf(RED, "Error: Invalid Output.\n");
         return 1;
     }
-    if(MAIN_Options[OPT_VOL].value < 0 || MAIN_Options[OPT_VOL].value > 9)
+    if(MAIN_Options[OPT_VOL].value < 0 || MAIN_Options[OPT_VOL].value > SBEMU_VOLUME_MAX)
     {
         MAIN_CPrintf(RED, "Error: Invalid Volume.\n");
         return 1;
@@ -921,7 +921,7 @@ int main(int argc, char* argv[])
     AU_setmixer_init(&aui);
     AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 100);
     //set volume
-    AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, MAIN_Options[OPT_VOL].value*100/9);
+    AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, MAIN_Options[OPT_VOL].value);
     if(MAIN_Options[OPT_OPL].value)
         OPL3EMU_Init(aui.freq_card); //aui.freq_card available after AU_setrate
 
@@ -1512,7 +1512,7 @@ static void MAIN_TSR_Interrupt()
             if(OPT_CHANGED(OPT_VOL))
             {
                 _LOG("Reset volume\n");
-                AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, MAIN_Options[OPT_VOL].value*100/9);
+                AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, MAIN_Options[OPT_VOL].value);
             }
             FPUSR();
             PIC_UnmaskIRQ(irq);

@@ -111,9 +111,13 @@ NOTE: after SBEMU installs, you can change them by a another run of SBEMU with n
     default: /O1.
     Try changing it if SBEMU doesn't have any sounds for your HDA, or use /O0 if you're using a headphone.
 
-/VOL: Set the volume of sound card, it will set to the real sound card directly. Range: 0-9, default: /VOL7
+/VOL: Set the volume of sound card, it will set to the real sound card directly. Range: 0-100, default: /VOL80
     NOTE: This is the volume for the real PCI sound card, 
     if you change the emulated SB volume via SB utility like SBMIX, this volume won't change, unless you run 'SBEMU /VOLx' again.
+
+    1.0beta.6: /VOL changes its range to [0, 100], for better granuarity control and reading,
+    for some AC97 sound sound cards, internal volmue ranges (0, 31) or (0, 63), the effective steps could be 3 or 5.
+    for HDA chips, max range could be 128, and [0, 100] maps better to it.
 
 /K: Set the sample rate for the real sound card. Default: /K22050
     It's not recommended to set value above 44100 for games, as most DOS games output 11025/22050 Hz.

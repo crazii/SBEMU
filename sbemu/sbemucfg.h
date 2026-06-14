@@ -41,4 +41,7 @@
 #define SBEMU_OPL_RATIO 1
 #endif
 
+//master volume
+#define SBEMU_VOLUME_MAX 100
+
 #endif//_SBEMUCFG_H_

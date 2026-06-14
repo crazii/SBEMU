@@ -399,6 +399,9 @@ static __INLINE uint32_t EndianSwap32(uint32_t x) {return (x<<24) | ((x<<8)&0xFF
 
 #define swapi(x, y) do {int t = x; x = y; y = t;} while(0)
 
+#define STR_I(x) #x
+#define STR(x) STR_I(x)
+
 #define CPU_CFLAG 0x0001    //carry flag (CF)
 #define CPU_IFLAG 0x0200    //interrupt flag (IF)
 #define CPU_ZFLAG 0x0040    //zero flag
