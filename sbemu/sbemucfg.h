@@ -26,4 +26,19 @@
 //it has historical reasons related to the legacy SB cards so previously I was reluctant to do it.
 #define SBEMU_SWAP_STEREO 1
 
+//mixing method 2: (SFX*a+PCM*b)
+#define SBEMU_LINEAR_MIX 1
+
+//static volume balancing (because DBOPL volume is lower than real HW, even with SBEMU_OPL_VOLUME_AMPLICATION=1)
+#define SBEMU_LINEAR_MIX_FRACTION 16
+#define SBEMU_LINEAR_MIX_SFX_RATIO 4
+
+#if SBEMU_LINEAR_MIX
+#define SBEMU_SFX_RATIO SBEMU_LINEAR_MIX_SFX_RATIO/SBEMU_LINEAR_MIX_FRACTION //don't use () for int math, careful on use
+#define SBEMU_OPL_RATIO (SBEMU_LINEAR_MIX_FRACTION-SBEMU_LINEAR_MIX_SFX_RATIO)/SBEMU_LINEAR_MIX_FRACTION //don't use () for int math, careful on use
+#else
+#define SBEMU_SFX_RATIO 1
+#define SBEMU_OPL_RATIO 1
+#endif
+
 #endif//_SBEMUCFG_H_

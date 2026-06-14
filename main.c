@@ -936,7 +936,7 @@ int main(int argc, char* argv[])
             printf("Not installing IO port trap. Using hardware OPL3 at port 388.\n");
         }
 
-        char *emutype = fm_aui.fm ? "hardware" : "emulation";
+        const char *emutype = fm_aui.fm ? "hardware" : "emulation";
         char hwdesc[64];
         hwdesc[0] = '\0';
         if (fm_aui.fm)
@@ -988,7 +988,7 @@ int main(int argc, char* argv[])
             return 1;
         }
 
-        char *emutype = mpu401_aui.mpu401 ? "hardware" : "emulation";
+        const char *emutype = mpu401_aui.mpu401 ? "hardware" : "emulation";
         char hwdesc[64];
         hwdesc[0] = '\0';
         if (mpu401_aui.mpu401)
@@ -1485,22 +1485,22 @@ static void MAIN_Interrupt()
         {
             for(int i = 0; i < samples*2; i+=2)
             {
-                #if 0
+                #if !SBEMU_LINEAR_MIX
                 // https://stackoverflow.com/questions/12089662/mixing-16-bit-linear-pcm-streams-and-avoiding-clipping-overflow
                 int la = (int)(MAIN_PCM[i] * voicevol/256) + 32768;
                 int ra = (int)(MAIN_PCM[i+1] * voicevol/256) + 32768;
                 #if SBEMU_SWAP_STEREO
                 {int x = la; la = ra; ra = x;}
                 #endif
-                int lb = (int)((MAIN_OPLPCM[i]+MAIN_OPLPCM[i]/2*SBEMU_OPL_VOLUME_AMPLICATION) * midivol/256) + 32768;
-                int rb = (int)((MAIN_OPLPCM[i+1]+MAIN_OPLPCM[i+1]/2*SBEMU_OPL_VOLUME_AMPLICATION) * midivol/256) + 32768;
+                int lb = (int)((MAIN_OPLPCM[i]+MAIN_OPLPCM[i]*SBEMU_OPL_VOLUME_AMPLICATION/2) * midivol/256) + 32768;
+                int rb = (int)((MAIN_OPLPCM[i+1]+MAIN_OPLPCM[i+1]*SBEMU_OPL_VOLUME_AMPLICATION/2) * midivol/256) + 32768;
                 int l = (la < 32768 || lb < 32768) ? (la*lb/32768) : ((la+lb)*2 - la*lb/32768 - 65536);
                 if(l == 65536) l = 65535;
                 int r = (ra < 32768 || rb < 32768) ? (ra*rb/32768) : ((ra+rb)*2 - ra*rb/32768 - 65536);
                 if(r == 65536) r = 65535;
                 MAIN_PCM[i] = (l - 32768) * vol/256;
                 MAIN_PCM[i+1] = (r - 32768) * vol/256;
-
+                
                 #else //simple average: sounds the same as DOSBox
 
                 int la = (int)(MAIN_PCM[i] * voicevol/256); //SFX PCM
@@ -1508,17 +1508,18 @@ static void MAIN_Interrupt()
                 #if SBEMU_SWAP_STEREO
                 /*if(channels == 2)*/ {int x = la; la = ra; ra = x;}
                 #endif
-                int lb = (int)((MAIN_OPLPCM[i]+MAIN_PCM[i]/2 * SBEMU_OPL_VOLUME_AMPLICATION) * midivol/256); //OPL PCM
-                int rb = (int)((MAIN_OPLPCM[i+1]+MAIN_PCM[i+1]/2 * SBEMU_OPL_VOLUME_AMPLICATION) * midivol/256);
-                int l = (la+lb)/2 * vol/256;
-                int r = (ra+rb)/2 * vol/256;
+
+                int lb = (int)((MAIN_OPLPCM[i]+MAIN_PCM[i]*SBEMU_OPL_VOLUME_AMPLICATION/2) * midivol/256); //OPL PCM
+                int rb = (int)((MAIN_OPLPCM[i+1]+MAIN_PCM[i+1]*SBEMU_OPL_VOLUME_AMPLICATION/2) * midivol/256);
+                int l = (la*SBEMU_SFX_RATIO + lb*SBEMU_OPL_RATIO) * vol/256;
+                int r = (ra*SBEMU_SFX_RATIO + rb*SBEMU_OPL_RATIO) * vol/256;
                 MAIN_PCM[i] = l;
                 MAIN_PCM[i+1] = r;
                 #endif
             }
         }
         else for(int i = 0; i < samples*2; ++i) //MAIN_PCM is opl here
-            MAIN_PCM[i] = (MAIN_PCM[i] + MAIN_PCM[i]/2 * SBEMU_OPL_VOLUME_AMPLICATION) * midivol/256 * vol/256;
+            MAIN_PCM[i] = (MAIN_PCM[i] + MAIN_PCM[i]*SBEMU_OPL_VOLUME_AMPLICATION/2) * SBEMU_OPL_RATIO * midivol/256 * vol/256;
     }
     else if(digital)
         for(int i = 0; i < samples*2; i+=2)
@@ -1526,12 +1527,10 @@ static void MAIN_Interrupt()
             int16_t l = MAIN_PCM[i] * voicevol/256 * vol/256;
             int16_t r = MAIN_PCM[i+1] * voicevol/256 * vol/256;
             #if SBEMU_SWAP_STEREO
-            MAIN_PCM[i] = r;
-            MAIN_PCM[i+1] = l;
-            #else
-            MAIN_PCM[i] = l;
-            MAIN_PCM[i+1] = r;
+            {int x = l; l = r; r = x;}
             #endif
+            MAIN_PCM[i] = l*SBEMU_SFX_RATIO;
+            MAIN_PCM[i+1] = r*SBEMU_SFX_RATIO;
         }
 
 #if SBEMU_VMPU
