@@ -120,7 +120,7 @@ NOTE: after SBEMU installs, you can change them by a another run of SBEMU with n
     A higher sample rate won't increase the sound quality; on the contrary it will impose the burden to resample and cause instability. 
     But you may try to set it higher if your want, or for music players.
 
-/FIXTC: Use fixed time constant. Default: /FIXTC0 (disabled)
+/FIXTC: Use fixed time constant. Default: /FIXTC1 (enabled with threshold 1000)
     Old SB hardware doesn't set sample rate directly, but using a byte of 'time-constant' to calculate sample rate indirectly,
     when 'time-constant' is used, there's some inevitable PRECISION LOSS: if a game set sample rate to 22050 through time-constant,
     the real sample rate calculated back from the time constant is not exactly 22050, and SBEMU will try to fix it using
@@ -131,7 +131,13 @@ NOTE: after SBEMU installs, you can change them by a another run of SBEMU with n
 
     With this switch on, it makes SBEMU works more efficiently because the PCM resample will be skipped or simplified.
     If you have faced any sound pops/noises/stuttering, you can try using /FIXTC
-    1.0beta.6rc2: FIXTC is turned on by default to provide better stability for SFX playback.
+    1.0beta.6:
+        FIXTC is turned on by default to provide better stability for SFX playback.
+        FIXTC changed to a threshold in Hz, not a switch (0/1), when the difference between calculated NEWVALUE and Fixed Sample rate
+        is larger than this threshold, the calcualted one is used.
+        Default value is 1 (as 1000). i.e. if abs(22050-NEWAVLUE) < 1000, then 22050 is used, otherwise NEWVALUE is used.
+        If you notice obvious pitch/speed changes, you can lower the value, e.g. /FIXTC500
+
 
 /SCL: List the PCI sound cards installed on your PC. Each will be shown with a number before it.
     NOTE: this option only works BEFORE SBEMU installs,
@@ -164,7 +170,9 @@ NOTE: after SBEMU installs, you can change them by a another run of SBEMU with n
 
 /VMSF:  Set VMPU Soundfont2 file, if the file path is a relative path, it is relative to the location of SBEMU.EXE, NOT current working directory.
         ONLY effective if /VMPU is enabled. the default value is "sbemusf.sf2"
+
         a fast & easy setup would be put a soundfont2 file in the SBEMU folder, and rename it to sbemusf.sf2, and run SBEMU with /vmpu option
+        for a typical game sound setup, choose "General Midi" for music, "port 330", and it's ready to go.
 
 5. Trouble Shooting
 
@@ -224,8 +232,9 @@ SBEMU /I7
 `
 There're IRQ in both BLASTER (I5) and commandline (/I7), then IRQ7 will be the working one.
 
-NOTE: For compatibility reasons, SBEMU won't set T in BLASTER unless /T6 is used, if you need T in BLASTER,
-you can set it manually AFTER SBEMU installs.
+SBEMU supports changing paramters dynamically.
+e.g. if you want to change irq to 7, or change to SB16, or change volume setting,
+then just run SBEMU /I7 or /T6 or /VOL8 again, any changes in the BLASTER env will updated by SBEMU.
 
 
 Q2: DO I need LH for SBEMU to load it into UMB?
