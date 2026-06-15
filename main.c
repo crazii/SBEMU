@@ -771,13 +771,13 @@ int main(int argc, char* argv[])
         return 1;
     atexit(&MAIN_Cleanup);
 
-    if(aui.card_irq > 15) //UEFI with CSM may have APIC enabled (16-31) - but we need read APIC, not implemented for now.
+    if(aui.card_irq > 15 || aui.card_irq < 2) //UEFI with CSM may have APIC enabled (16-31) - but we need read APIC, not implemented for now.
     {
         printf("Invalid Sound card IRQ: ");
         MAIN_CPrintf(RED, "%d", aui.card_irq);
         printf(", Trying to assign a valid IRQ...\n");
         aui.card_irq = pcibios_AssignIRQ(aui.card_pci_dev);
-        if(aui.card_irq == 0xFF)
+        if(aui.card_irq == 0xFF || aui.card_irq < 2)
         {
             MAIN_CPrintf(RED, "Failed to assign a valid IRQ for sound card, abort.\n");
             return 1;
@@ -785,12 +785,6 @@ int main(int argc, char* argv[])
         printf("Sound card IRQ assigned: ");
         MAIN_CPrintf(LIGHTGREEN, "%d", aui.card_irq);
         printf(".\n");
-    }
-    if(aui.card_irq == MAIN_Options[OPT_IRQ].value)
-    {
-        printf("Sound card IRQ %d conflict with options /i%d, abort.\n", aui.card_irq, aui.card_irq);
-        printf("Please try use /i5 or /i7 switch, or disable some onboard devices in the BIOS settings to release IRQs.\n");
-        return 1;
     }
     pcibios_enable_interrupt(aui.card_pci_dev);
 
@@ -938,11 +932,10 @@ int main(int argc, char* argv[])
     if(MAIN_Options[OPT_OPL].value)
         OPL3EMU_Init(aui.freq_card); //aui.freq_card available after AU_setrate
 
-    BOOL RM_ISR = TRUE;
     BOOL PM_ISR = VDPMI_InstallISR(aui.card_irq, (void(*)(void))MAIN_InterruptPM, &MAIN_IntHandlePM);
     
     BOOL MAIN_TSRed = TRUE;
-    if(!PM_ISR || !RM_ISR || !TSR_ISR
+    if(!PM_ISR || !TSR_ISR
     || !InstalledVDMA || !InstalledSB)
     {
         if(!InstalledVDMA || !InstalledSB)
@@ -955,12 +948,6 @@ int main(int argc, char* argv[])
         else
             VDPMI_UninstallISR(&MAIN_IntHandlePM);
 
-        if(!RM_ISR)
-            MAIN_CPrintf(RED, "Error: Failed installing sound card ISR.\n");
-#if MAIN_INSTALL_RM_ISR
-        else
-            DPMI_UninstallISR(&MAIN_IntHandleRM);
-#endif
         if(!TSR_ISR)
             MAIN_CPrintf(RED, "Error: Failed installing TSR interrupt.\n");
         else

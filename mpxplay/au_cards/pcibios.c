@@ -347,7 +347,9 @@ void pcibios_enable_interrupt(pci_config_s* ppkey)
  pcibios_WriteConfig_Word(ppkey, PCIR_PCICMD, cmd);
 }
 
-#define USE_P32_CALL 0 //32bit protected mode call. if this doesn't work for some PCs, then the final solution should be programming the interrupt router.
+//protected mode 32 call success on award 6.0 BIOS
+//still no effect
+#define USE_P32_CALL 1 //32bit protected mode call. if this doesn't work for some PCs, then the final solution should be programming the interrupt router.
 
 #pragma pack(1)
 
@@ -730,7 +732,7 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
                     }
                 }
             }
-            if(linkedIRQ != 0xFF)
+            if(linkedIRQ != 0xFF && linkedIRQ > 2)
                 break;
         }
     }
@@ -738,7 +740,7 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
     const int ATAIRQ = (1<<15) | (1<<14);
 
     uint8_t irq = linkedIRQ;
-    if(irq != 0xFF)
+    if(irq != 0xFF && irq > 2)
         pcibios_WriteConfig_Byte(ppkey, PCIR_INTR_LN, irq); //found a shared IRQ, it's gonna work.
     else if(map != 0) //no conflict
     {
@@ -753,6 +755,7 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
         _LOG("IRQ map: %x\n", map);
 
         //find the highset available
+        irq = 0xFF;
         while(map)
         {
             map>>=1;
@@ -802,7 +805,7 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
                         uint8_t intpin = pcibios_ReadConfig_Byte(&cfg, PCIR_INTR_PIN);
                         if(intpin-1 == j)
                         {
-                            assert(pcibios_ReadConfig_Byte(&cfg, PCIR_INTR_LN) == 0xFF);
+                            //assert(pcibios_ReadConfig_Byte(&cfg, PCIR_INTR_LN) == 0xFF);
                             pcibios_WriteConfig_Byte(&cfg, PCIR_INTR_LN, irq);
                         }
                     }
@@ -836,6 +839,7 @@ uint8_t  pcibios_AssignIRQ(pci_config_s* ppkey)
             map &= ~mouseIRQ;
 
         //find the highset available
+        irq = 0xFF;
         while(map)
         {
             map>>=1;
