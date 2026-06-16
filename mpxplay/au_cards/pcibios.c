@@ -348,7 +348,7 @@ void pcibios_enable_interrupt(pci_config_s* ppkey)
 }
 
 //protected mode 32 call success on award 6.0 BIOS
-//still no effect
+//still no effect after win9x reboot to MS-DOS mode (probably device powered off. TODO: needs ACPI to powerup)
 #define USE_P32_CALL 1 //32bit protected mode call. if this doesn't work for some PCs, then the final solution should be programming the interrupt router.
 
 #pragma pack(1)
