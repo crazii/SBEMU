@@ -36,11 +36,22 @@ static BOOL MAIN_TSRed;
 #define MAIN_TRAP_PMPIC_ONDEMAND 0 //now we need a Virtual PIC to hide some IRQ for protected mode games (doom especially)
 #define MAIN_TRAP_RMPIC_ONDEMAND 1 //don't hide IRQ for rm, as some driver(i.e.usbuhci) will use it
 #define MAIN_INSTALL_RM_ISR 1 //not needed. but to workaround some rm games' problem. need RAW_HOOk in dpmi_dj2.c - disble for more tests.
-#define MAIN_DOUBLE_OPL_VOLUME 1 //hack: double the amplitude of OPL PCM. should be 1 or 0
 #define MAIN_ISR_CHAINED 0 //auto calls next handler AFTER current handler exits - cause more mode switches, disable for more tests.
 #define MAIN_VMPU_HDPMI_MEMFIX 1 //workaround hdpmi bug that a TSR allocated memory being treated as primary client's, also better by avoiding DPMI memory fragments
                             //details on '_freeclientmemory' at I31MEM.ASM of HDPMI.
 #define MAIN_PCM_RESAMPLE_INTERPOLATION 0
+
+#define MAIN_SETIF 1 //merge form vdpmi branch, not suree if this works well enough
+
+//note: use __dpmi_get_and_disable_virtual_interrupt_state()/__dpmi_get_and_enable_virtual_interrupt_state() causes crash.
+//needs to find why HDPMI traps #GP well but int31h not not working.
+#if MAIN_SETIF
+#define SETIF()  __asm__ __volatile__("sti") //STI() //call __dpmi_get_and_disable_virtual_interrupt_state() directly
+#define RESETIF() __asm__ __volatile__("cli") //CLI() //call __dpmi_get_and_enable_virtual_interrupt_state() directly
+#else
+#define SETIF() 
+#define RESETIF() 
+#endif
 
 #define MAIN_TSR_INT 0x2D   //AMIS multiplex. TODO: 0x2F?
 #define MAIN_TSR_INTSTART_ID 0x01 //start id
@@ -1214,7 +1225,9 @@ static void MAIN_InterruptPM()
     HDPMIPT_GetInterrupContext(&MAIN_IntContext);
     if(/*!(MAIN_InINT&MAIN_ININT_RM) && */aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
     {
+        SETIF();
         MAIN_Interrupt();
+        RESETIF();
         PIC_SendEOIWithIRQ(aui.card_irq); //some BIOS driver doesn't works well if not sending EOI, there's extra check for EOI in DPMI_RMISR_ChainedWrapper
     }
     #if !MAIN_ISR_CHAINED
@@ -1245,7 +1258,9 @@ static void MAIN_InterruptRM()
     {
         MAIN_IntContext.regs = MAIN_RMIntREG;
         MAIN_IntContext.EFLAGS = MAIN_RMIntREG.w.flags | CPU_VMFLAG;
+        SETIF();
         MAIN_Interrupt();
+        RESETIF();
         PIC_SendEOIWithIRQ(aui.card_irq); //some BIOS driver doesn't works well if not sending EOI, there's extra check for EOI in DPMI_RMISR_ChainedWrapper
     }
     #if !MAIN_ISR_CHAINED
@@ -1400,7 +1415,9 @@ static void MAIN_Interrupt()
                 cv_channels_1_to_n(MAIN_PCM+pos*2, count, 2, 2);
             pos += count;
             //_LOG("samples:%d %d %d\n", count, pos, samples);
+            RESETIF();
             DMA_Index = VDMA_SetIndexCounter(dma, DMA_Index+bytes, DMA_Count-bytes);
+            SETIF();
             DMA_Count = VDMA_GetCounter(dma);
             SB_Pos = SBEMU_SetPos(SB_Pos+bytes);
             //_LOG("SB bytes: %d %d\n", SB_Pos, SB_Bytes);
