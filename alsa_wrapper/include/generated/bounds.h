@@ -1,0 +1,1 @@
+#define MAX_NR_ZONES __MAX_NR_ZONES

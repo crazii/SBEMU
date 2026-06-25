@@ -1,0 +1,3 @@
+
+#define RLIM_INFINITY -1
+#define RLIM_NLIMITS 1
