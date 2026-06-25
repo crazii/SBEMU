@@ -95,6 +95,7 @@ VPATH += sbemu/dpmi
 
 all: $(TARGET)
 
+ALSA_SRC := $(shell find ./alsa -type f -name "*.c")
 ALSA_SRC := $(shell find . -type f -name "*.c")
 
 #some .c files are included in another .c file, thus excluded in build.
@@ -167,7 +168,7 @@ ALSA_SRC_EXCLUDE := ./alsa/sound/aoa/core/gpio-pmf.c \
 					./alsa/sound/soc/soc-topology-test.c \
 					./alsa/sound/soc/soc-usb.c \
 					./alsa/sound/soc/sof/sof-client.c \
-					./alsa/sound/soc/ti/davinci-evm.c \	
+					./alsa/sound/soc/ti/davinci-evm.c \
 					./alsa/sound/soc/ti/n810.c \
 					./alsa/sound/soc/ti/omap3pandora.c \
 					./alsa/sound/soc/ti/osk5912.c \
@@ -176,7 +177,7 @@ ALSA_SRC_EXCLUDE := ./alsa/sound/aoa/core/gpio-pmf.c \
 					./alsa/sound/soc/ux500/ux500_msp_dai.c \
 					./alsa/sound/soc/codecs/cs35l56-shared-test.c \
 					./alsa/sound/soc/codecs/cs42l43-sdw.c \
-					./alsa/sound/soc/codecs/pm4125-sdw.c \
+					./alsa/sound/soc/codecs/pm4125-sdw.c
 					
 
 ALSA_SRC_EXCLUDE += $(shell find ./alsa/sound/core/oss -type f -name "*.c")
