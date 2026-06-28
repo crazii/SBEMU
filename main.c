@@ -36,6 +36,19 @@ static BOOL MAIN_TSRed;
 #define MAIN_VMPU_HDPMI_MEMFIX 1 //workaround hdpmi bug that a TSR allocated memory being treated as primary client's, also better by avoiding DPMI memory fragments
                             //details on '_freeclientmemory' at I31MEM.ASM of HDPMI.
 
+//we can enable IF but VIF cannot be enabled because we don't know if current vm is safe for (virtual) interrupts,
+//and the primary client's rm stack will be used for rm ints and it is not safe when VIF=0.
+//TODO: shedule for event when VIF=1, e.g. Call_When_VM_Ints_Enabled (not supported by VDPMI yet, no temporary implementation and wait for VxD)
+#define MAIN_SETIF 1
+
+#if MAIN_SETIF
+#define SETIF() __asm __volatile__ ("sti")
+#define RESETIF() __asm __volatile__ ("cli")
+#else
+#define SETIF() 
+#define RESETIF() 
+#endif
+
 #define MAIN_TSR_INT 0x2D   //AMIS multiplex. TODO: 0x2F?
 #define MAIN_TSR_INTSTART_ID 0x01 //start id
 
@@ -399,7 +412,7 @@ struct MAIN_OPT
     "/OPL", "Enable OPL3 emulation", TRUE, 0,
 
     "/O", "Select output. 0: headphone, 1: speaker (Intel HDA) or S/PDIF (Xonar DG)", 1, 0,
-    "/VOL", "Set master volume (0-9)", 8, 0,
+    "/VOL", "Set master volume (0-" STR(SBEMU_VOLUME_MAX) ")", 80, MAIN_SETCMD_BASE10,
 
     "/K", "Internal sample rate", 22050, MAIN_SETCMD_BASE10,
     "/FIXTC", "Fix time constant to match 11/22/44 kHz sample rate", TRUE, 0,
@@ -694,7 +707,7 @@ int main(int argc, char* argv[])
         MAIN_CPrintf(RED, "Error: Invalid Output.\n");
         return 1;
     }
-    if(MAIN_Options[OPT_VOL].value < 0 || MAIN_Options[OPT_VOL].value > 9)
+    if(MAIN_Options[OPT_VOL].value < 0 || MAIN_Options[OPT_VOL].value > SBEMU_VOLUME_MAX)
     {
         MAIN_CPrintf(RED, "Error: Invalid Volume.\n");
         return 1;
@@ -758,13 +771,13 @@ int main(int argc, char* argv[])
         return 1;
     atexit(&MAIN_Cleanup);
 
-    if(aui.card_irq > 15) //UEFI with CSM may have APIC enabled (16-31) - but we need read APIC, not implemented for now.
+    if(aui.card_irq > 15 || aui.card_irq < 2) //UEFI with CSM may have APIC enabled (16-31) - but we need read APIC, not implemented for now.
     {
         printf("Invalid Sound card IRQ: ");
         MAIN_CPrintf(RED, "%d", aui.card_irq);
         printf(", Trying to assign a valid IRQ...\n");
         aui.card_irq = pcibios_AssignIRQ(aui.card_pci_dev);
-        if(aui.card_irq == 0xFF)
+        if(aui.card_irq == 0xFF || aui.card_irq < 2)
         {
             MAIN_CPrintf(RED, "Failed to assign a valid IRQ for sound card, abort.\n");
             return 1;
@@ -772,12 +785,6 @@ int main(int argc, char* argv[])
         printf("Sound card IRQ assigned: ");
         MAIN_CPrintf(LIGHTGREEN, "%d", aui.card_irq);
         printf(".\n");
-    }
-    if(aui.card_irq == MAIN_Options[OPT_IRQ].value)
-    {
-        printf("Sound card IRQ %d conflict with options /i%d, abort.\n", aui.card_irq, aui.card_irq);
-        printf("Please try use /i5 or /i7 switch, or disable some onboard devices in the BIOS settings to release IRQs.\n");
-        return 1;
     }
     pcibios_enable_interrupt(aui.card_pci_dev);
 
@@ -800,7 +807,7 @@ int main(int argc, char* argv[])
             printf("Not installing IO port trap. Using hardware OPL3 at port 388.\n");
         }
 
-        char *emutype = fm_aui.fm ? "hardware" : "emulation";
+        const char *emutype = fm_aui.fm ? "hardware" : "emulation";
         char hwdesc[64];
         hwdesc[0] = '\0';
         if (fm_aui.fm)
@@ -847,7 +854,7 @@ int main(int argc, char* argv[])
             return 1;
         }
 
-        char *emutype = mpu401_aui.mpu401 ? "hardware" : "emulation";
+        const char *emutype = mpu401_aui.mpu401 ? "hardware" : "emulation";
         char hwdesc[64];
         hwdesc[0] = '\0';
         if (mpu401_aui.mpu401)
@@ -921,15 +928,14 @@ int main(int argc, char* argv[])
     AU_setmixer_init(&aui);
     AU_setmixer_outs(&aui, MIXER_SETMODE_ABSOLUTE, 100);
     //set volume
-    AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, MAIN_Options[OPT_VOL].value*100/9);
+    AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, MAIN_Options[OPT_VOL].value);
     if(MAIN_Options[OPT_OPL].value)
         OPL3EMU_Init(aui.freq_card); //aui.freq_card available after AU_setrate
 
-    BOOL RM_ISR = TRUE;
     BOOL PM_ISR = VDPMI_InstallISR(aui.card_irq, (void(*)(void))MAIN_InterruptPM, &MAIN_IntHandlePM);
     
     BOOL MAIN_TSRed = TRUE;
-    if(!PM_ISR || !RM_ISR || !TSR_ISR
+    if(!PM_ISR || !TSR_ISR
     || !InstalledVDMA || !InstalledSB)
     {
         if(!InstalledVDMA || !InstalledSB)
@@ -942,12 +948,6 @@ int main(int argc, char* argv[])
         else
             VDPMI_UninstallISR(&MAIN_IntHandlePM);
 
-        if(!RM_ISR)
-            MAIN_CPrintf(RED, "Error: Failed installing sound card ISR.\n");
-#if MAIN_INSTALL_RM_ISR
-        else
-            DPMI_UninstallISR(&MAIN_IntHandleRM);
-#endif
         if(!TSR_ISR)
             MAIN_CPrintf(RED, "Error: Failed installing TSR interrupt.\n");
         else
@@ -969,10 +969,13 @@ int main(int argc, char* argv[])
 
 static void MAIN_InterruptPM(unsigned esp, unsigned ss)
 {
-    uint32_t retval = 0;
+    uint32_t retval = DPMI_DRVF_SKIPVM; //if no sound irq here, calling vm handler (bios) will mask out sound card irq.
     if(aui.card_handler->irq_routine && aui.card_handler->irq_routine(&aui)) //check if the irq belong the sound card
     {
+        SETIF();
         MAIN_Interrupt();
+        RESETIF();
+
         retval = DPMI_DRVF_SKIPVM;
         PIC_SendEOIWithIRQ(aui.card_irq); //some BIOS driver doesn't works well if not sending EOI, there's extra check for EOI in DPMI_RMISR_ChainedWrapper
     }
@@ -1131,9 +1134,11 @@ static void MAIN_Interrupt()
             _LOG("samples:%d %d %d\n", count, pos, samples);
             if(!paused)
             {
+                RESETIF();
                 //_LOG("DMA counter: %d\n",DMA_Count-bytes);
                 DMA_Index = VDMA_SetIndexCounter(dma, DMA_Index+bytes, DMA_Count-bytes);
                 DMA_Count = VDMA_GetCounter(dma);
+                SETIF();
             }
             SB_Pos = SBEMU_SetPos(SB_Pos+bytes);
             //_LOG("SB bytes: %d %d\n", SB_Pos, SB_Bytes);
@@ -1203,16 +1208,22 @@ static void MAIN_Interrupt()
         {
             for(int i = 0; i < samples*2; i+=2)
             {
-                #if 0
+                #if !SBEMU_LINEAR_MIX
                 // https://stackoverflow.com/questions/12089662/mixing-16-bit-linear-pcm-streams-and-avoiding-clipping-overflow
-                int a = (int)(MAIN_PCM[i] * voicevol/256) + 32768;
-                int b = (int)((MAIN_OPLPCM[i]+MAIN_OPLPCM[i]/2*SBEMU_OPL_VOLUME_AMPLICATION) * midivol/256) + 32768;
-                int mixed = (a < 32768 || b < 32768) ? (a*b/32768) : ((a+b)*2 - a*b/32768 - 65536);
-                if(mixed == 65536) mixed = 65535;
-                MAIN_PCM[i] = (mixed - 32768) * vol/256;
+                int la = (int)(MAIN_PCM[i] * voicevol/256) + 32768;
+                int ra = (int)(MAIN_PCM[i+1] * voicevol/256) + 32768;
                 #if SBEMU_SWAP_STEREO
-                #error SBEMU_SWAP_STEREO not implemented!
+                {int x = la; la = ra; ra = x;}
                 #endif
+                int lb = (int)((MAIN_OPLPCM[i]+MAIN_OPLPCM[i]*SBEMU_OPL_VOLUME_AMPLICATION/2) * midivol/256) + 32768;
+                int rb = (int)((MAIN_OPLPCM[i+1]+MAIN_OPLPCM[i+1]*SBEMU_OPL_VOLUME_AMPLICATION/2) * midivol/256) + 32768;
+                int l = (la < 32768 || lb < 32768) ? (la*lb/32768) : ((la+lb)*2 - la*lb/32768 - 65536);
+                if(l == 65536) l = 65535;
+                int r = (ra < 32768 || rb < 32768) ? (ra*rb/32768) : ((ra+rb)*2 - ra*rb/32768 - 65536);
+                if(r == 65536) r = 65535;
+                MAIN_PCM[i] = (l - 32768) * vol/256;
+                MAIN_PCM[i+1] = (r - 32768) * vol/256;
+                
                 #else //simple average: sounds the same as DOSBox
 
                 int la = (int)(MAIN_PCM[i] * voicevol/256); //SFX PCM
@@ -1221,30 +1232,28 @@ static void MAIN_Interrupt()
                 /*if(channels == 2)*/ {int x = la; la = ra; ra = x;}
                 #endif
 
-                int lb = (int)((MAIN_OPLPCM[i]+MAIN_PCM[i]/2 * SBEMU_OPL_VOLUME_AMPLICATION) * midivol/256); //OPL PCM
-                int rb = (int)((MAIN_OPLPCM[i+1]+MAIN_PCM[i+1]/2 * SBEMU_OPL_VOLUME_AMPLICATION) * midivol/256);
-                int l = (la+lb)/2 * vol/256;
-                int r = (ra+rb)/2 * vol/256;
+                int lb = (int)((MAIN_OPLPCM[i]+MAIN_PCM[i]*SBEMU_OPL_VOLUME_AMPLICATION/2) * midivol/256); //OPL PCM
+                int rb = (int)((MAIN_OPLPCM[i+1]+MAIN_PCM[i+1]*SBEMU_OPL_VOLUME_AMPLICATION/2) * midivol/256);
+                int l = (la*SBEMU_SFX_RATIO + lb*SBEMU_OPL_RATIO) * vol/256;
+                int r = (ra*SBEMU_SFX_RATIO + rb*SBEMU_OPL_RATIO) * vol/256;
                 MAIN_PCM[i] = l;
                 MAIN_PCM[i+1] = r;
                 #endif
             }
         }
         else for(int i = 0; i < samples*2; ++i) //MAIN_PCM is opl here
-            MAIN_PCM[i] = (MAIN_PCM[i] + MAIN_PCM[i]/2 * SBEMU_OPL_VOLUME_AMPLICATION) * midivol/256 * vol/256;
+            MAIN_PCM[i] = (MAIN_PCM[i] + MAIN_PCM[i]*SBEMU_OPL_VOLUME_AMPLICATION/2) * midivol/256 * SBEMU_OPL_RATIO * vol/256;
     }
     else if(digital)
         for(int i = 0; i < samples*2; i+=2)
         {
-            int16_t l = MAIN_PCM[i] * voicevol/256 * vol/256;
-            int16_t r = MAIN_PCM[i+1] * voicevol/256 * vol/256;
+            int16_t l = MAIN_PCM[i] * voicevol/256 * SBEMU_SFX_RATIO * vol/256;
+            int16_t r = MAIN_PCM[i+1] * voicevol/256 * SBEMU_SFX_RATIO * vol/256;
             #if SBEMU_SWAP_STEREO
-            MAIN_PCM[i] = r;
-            MAIN_PCM[i+1] = l;
-            #else
+            {int x = l; l = r; r = x;}
+            #endif
             MAIN_PCM[i] = l;
             MAIN_PCM[i+1] = r;
-            #endif
         }
 
 #if SBEMU_VMPU
@@ -1508,7 +1517,7 @@ static void MAIN_TSR_Interrupt()
             if(OPT_CHANGED(OPT_VOL))
             {
                 _LOG("Reset volume\n");
-                AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, MAIN_Options[OPT_VOL].value*100/9);
+                AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, MAIN_Options[OPT_VOL].value);
             }
             FPUSR();
             PIC_UnmaskIRQ(irq);
