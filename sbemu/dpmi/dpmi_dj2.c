@@ -329,11 +329,7 @@ void* DPMI_L2PTR(uint32_t addr)
 uint32_t DPMI_MapMemory(uint32_t physicaladdr, uint32_t size)
 {
     if(size == 0)
-    {
-        assert(FALSE);
         return 0;
-    }
-
     __dpmi_meminfo info;
     info.handle = 0;
     info.address = physicaladdr;
@@ -354,6 +350,8 @@ BOOL DPMI_UnmappMemory(uint32_t mappedaddr)
     if(index == -1)
         return FALSE;
     AddressMap* map = &AddresMapTable[index];
+    //if(map->Handle == 0 || map->Handle == ~0x0UL)
+    //    return FALSE;
     __dpmi_meminfo info;
     info.handle = map->Handle;
     info.address = map->LinearAddr;
