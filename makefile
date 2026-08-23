@@ -90,10 +90,12 @@ SBEMU_SRC := sbemu/dbopl.cpp \
 	     sbemu/opl3emu.cpp \
 	     sbemu/pic.c \
 	     sbemu/sbemu.c \
-	     sbemu/untrapio.c \
+	     sbemu/iotrap.c \
 	     sbemu/vdma.c \
-	     sbemu/virq.c \
 	     sbemu/serial.c \
+	     sbemu/vgus.c \
+	     sbemu/vdisney.c \
+	     sbemu/vpcspeaker.c \
 	     sbemu/dpmi/xms.c \
 	     sbemu/dpmi/dpmi.c \
 	     sbemu/dpmi/dbgutil.c \
@@ -102,11 +104,9 @@ SBEMU_SRC := sbemu/dbopl.cpp \
 	     sbemu/dpmi/djgpp/gormcb.c \
 		 sbemu/dpmi/djgpp/gopint.c \
 	     main.c \
-	     qemm.c \
+	     vdpmi.c \
 	     utility.c \
-	     hdpmipt.c \
-		 irqguard.c \
-		 vmpu.c \
+		 vmpu.c
 
 LINUX_DRIVERS_SRC := $(CTXFI_SRC) $(EMU10K1_SRC) $(TRIDENT_SRC) $(ALS4000_SRC) $(OXYGEN_SRC) $(ALLEGRO_SRC)
 SRC := $(LINUX_DRIVERS_SRC) $(CARDS_SRC) $(SBEMU_SRC)
