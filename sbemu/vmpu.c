@@ -33,13 +33,10 @@ static uint8_t bUART = 0;
 
 static const int midi_lengths[8] = {3, 3, 3, 3, 2, 2, 3, 1};
 static unsigned char midi_buffer[4096];
-static unsigned char midi_temp_buffer[4096];
 static unsigned int midi_ptr = 0;
 static unsigned int midi_available_ptr = 0;
 static unsigned int midi_message_cntr = 0;
-static bool midi_check_status_byte = 0;
 static bool midi_in_sysex = false;
-static unsigned char midi_status_byte = 0x80;
 static unsigned char midi_mpu_status = 0x80;
 static const unsigned char gm_reset[6] = {0xF0, 0x7E, 0x7F, 0x09, 0x01, 0xF7};
 static const unsigned char gs_reset[11] = {0xF0, 0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41, 0xF7};
@@ -52,8 +49,22 @@ static void VMPU_Process_Messages(void)
 {
     unsigned char *temp_buffer = midi_buffer;
     unsigned int index = 0;
+
+    if(index < midi_available_ptr)
+    {
+        #if _LOG_ENABLE
+        DBG_Logi("[");
+        for(int i = 0; i < midi_available_ptr; ++i)
+            DBG_Logi("%x ", temp_buffer[i]);
+        DBG_Logi("]");
+        #endif
+    }
+    else
+        return;
+
     while (index < midi_available_ptr)
     {
+        _LOG("MIDI:%x, i=%d, a=%d\n", *temp_buffer, index, midi_available_ptr);
         switch (*temp_buffer & 0xF0)
         {
         case 0xD0:
@@ -150,17 +161,22 @@ static void VMPU_Process_Messages(void)
         }
         }
     }
+    //safe clamp, not needed, but just in case
+    if(index > midi_available_ptr) index = midi_available_ptr;
 
-    memcpy(midi_temp_buffer, midi_buffer + midi_available_ptr, midi_ptr - midi_available_ptr);
-    memcpy(midi_buffer, midi_temp_buffer, midi_ptr - midi_available_ptr);
-    midi_ptr -= midi_available_ptr;
-    midi_available_ptr = 0;
+    memmove(midi_buffer, midi_buffer + index, midi_ptr - index);
+    midi_ptr -= index;
+    midi_message_cntr = midi_ptr;
+    midi_available_ptr -= index;
 }
 
 static void VMPU_Write(uint16_t port, uint8_t value)
 ////////////////////////////////////////////////////
 {
-    _LOG("VMPU_Write(%X)=%X\n", port, value);
+    //if(VMPU_base == port)
+    {
+        _LOG("VMPU_Write(%X)=%X\n", port, value);
+    }
     if (port == VMPU_base+1)
     {
         if (value == 0x3f)
@@ -176,7 +192,6 @@ static void VMPU_Write(uint16_t port, uint8_t value)
             midi_ptr = 0;
             midi_available_ptr = 0;
             midi_message_cntr = 0;
-            midi_check_status_byte = false;
             midi_mpu_status &= ~0x80;
         }
     }
@@ -195,28 +210,42 @@ static void VMPU_Write(uint16_t port, uint8_t value)
                     {
                         midi_available_ptr = midi_ptr;
                         midi_message_cntr = 0;
-                        midi_check_status_byte = false;
                         midi_in_sysex = false;
                     }
                     return;
                 }
 
-                if ((value & 0xF0) < 0x80 && midi_check_status_byte)
+                //Handling incomplete messages
+                //some game (e.g. PAL) have complete message like (E1, 0), (91,4A,F), where (E1,0) misses one byte data
+                //most MIDI softwares discard incomplete messages
+                unsigned int data_inserted = 0;
+                if ((value & 0xF0) >= 0x80 && midi_message_cntr > 0)
                 {
-                    midi_buffer[midi_ptr++] = midi_status_byte;
-                    midi_check_status_byte = false;
-                }
-
-                if ((value & 0xF0) >= 0x80)
-                {
-                    midi_status_byte = value;
-                    midi_check_status_byte = false;
+                    unsigned int lastptr = midi_ptr-1;
+                    while(lastptr > 0 && (midi_buffer[lastptr] & 0xF0) < 0x80) --lastptr;
+                    unsigned int lastcnt = midi_lengths[(midi_buffer[lastptr] >> 4) - 0x8];
+                    if((midi_buffer[lastptr] & 0xF0) >= 0x80 && midi_ptr-lastptr < lastcnt)
+                    {
+                        #if 0 // 0 insertion
+                        while(midi_ptr-lastptr < lastcnt)
+                        {
+                            _LOG("insert: p=%d,%d b=%x s=%d, c=%d\n", lastptr, midi_ptr, midi_buffer[lastptr], midi_lengths[(midi_buffer[lastptr] >> 4) - 0x8], midi_ptr-lastptr);
+                            midi_buffer[midi_ptr++] = 0;
+                            ++midi_message_cntr;
+                            ++data_inserted;
+                        }
+                        #else // discard
+                        midi_ptr = lastptr;
+                        midi_message_cntr = 0;
+                        #endif
+                    }
                 }
 
                 midi_buffer[midi_ptr++] = value;
                 midi_message_cntr++;
 
-                if (midi_message_cntr >= midi_lengths[(midi_buffer[midi_available_ptr] >> 4) - 0x8])
+                unsigned int cnt = midi_lengths[(midi_buffer[midi_available_ptr] >> 4) - 0x8];
+                if (midi_message_cntr >= cnt)
                 {
                     if (value == 0xF0)
                     {
@@ -224,9 +253,9 @@ static void VMPU_Write(uint16_t port, uint8_t value)
                         midi_in_sysex = true;
                         return;
                     }
-                    midi_available_ptr = midi_ptr;
-                    midi_message_cntr = 0;
-                    midi_check_status_byte = true;
+                    midi_available_ptr = midi_ptr - data_inserted;
+                    //_LOG("a=%d b=%x, m=%d\n", midi_available_ptr, midi_buffer[midi_available_ptr], midi_message_cntr);
+                    midi_message_cntr -= cnt;
                 }
             }
         }
@@ -280,6 +309,7 @@ BOOL VMPU_Init(int baseaddr, int* voices, int freq, const char* sf2)
     if (tsfrenderer)
     {
         int channel = 0;
+        tsf_set_max_voices(tsfrenderer, 256); //pre-alloc
         tsf_set_max_voices(tsfrenderer, *voices);
         tsf_set_output(tsfrenderer, TSF_STEREO_INTERLEAVED, freq, 0);
         for (channel = 15; channel >= 0; --channel)
@@ -319,6 +349,7 @@ BOOL VMPU_Reset(int baseaddr, int* voices, int freq, const char* sf2, uint32_t s
     if (tsfrenderer)
     {
         int channel = 0;
+        tsf_set_max_voices(tsfrenderer, 256); //pre-alloc
         tsf_set_max_voices(tsfrenderer, *voices);
         tsf_set_output(tsfrenderer, TSF_STEREO_INTERLEAVED, freq, 0);
         for (channel = 15; channel >= 0; --channel)

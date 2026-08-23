@@ -1329,7 +1329,10 @@ static void MAIN_Interrupt()
     if(samples == 0)
         return;
 
+    RESETIF();
     BOOL vmpu_active = VMPU_IsActive();
+    SETIF();
+    
     BOOL opl_active = MAIN_Options[OPT_OPL].value && OPL3EMU_IsActive();
     BOOL digital = SBEMU_HasStarted();
     int dma = (SBEMU_GetBits() <= 8 /*|| MAIN_Options[OPT_TYPE].value < 6*/) ? SBEMU_GetDMA() : SBEMU_GetHDMA();
@@ -1552,7 +1555,11 @@ static void MAIN_Interrupt()
 
 #if SBEMU_VMPU
     if(vmpu_active)
+    {
+        RESETIF();
         VMPU_GenSamples(MAIN_PCM, samples, aui.freq_card, digital);
+        SETIF();
+    }
 #endif
 
     samples *= 2; //to stereo
