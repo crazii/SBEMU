@@ -1,6 +1,13 @@
+#include <malloc.h> //alloca
+#include "platform.h"
+#include "../utility.h"
 #include "opl3emu.h"
 #include "dbopl.h"
 
+//configs
+#define OPL3EMU_ACTIVE_DELAY 0 //temoprary. should be removed after more tests.
+
+//constants
 #define OPL3EMU_PRIMARY 0
 #define OPL3EMU_SECONDARY 1
 //primary index read
@@ -24,8 +31,11 @@ static uint32_t OPL3EMU_ADLG_CtrlEnable = 0;    //seems not working for Miles So
 static uint32_t OPL3EMU_ADLG_Volume[2] = {0x08,0x08};
 
 static DBOPL::Chip* OPL3EMU_Chip;
+#if OPL3EMU_ACTIVE_DELAY
+static int OPL_Inactive;
+#endif
 
-void OPL3EMU_Init(int samplerate)
+void OPL3EMU_Init(uint32_t samplerate)
 {
     if(OPL3EMU_Chip)
         delete OPL3EMU_Chip;
@@ -35,7 +45,15 @@ void OPL3EMU_Init(int samplerate)
 
 int OPL3EMU_IsActive()
 {
+#if OPL3EMU_ACTIVE_DELAY
+    if(!(OPL3EMU_Chip->oplActive&(OPL3EMU_Chip->opl3Active?0xFFFFFFFF:0x8000FFFF)))
+        ++OPL_Inactive;
+    else
+        OPL_Inactive = 0;
+    return OPL_Inactive <= 100; //add some delays & accumulations
+#else
     return (OPL3EMU_Chip->oplActive&(OPL3EMU_Chip->opl3Active?0xFFFFFFFF:0x8000FFFF));
+#endif
 }
 
 int OPL3EMU_GetMode()

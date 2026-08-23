@@ -7,7 +7,7 @@ extern "C"
 {
 #endif
 
-void OPL3EMU_Init(int samplerate);
+void OPL3EMU_Init(uint32_t samplerate);
 int OPL3EMU_IsActive();
 //get mode set by client. 0: OPL2, other:OPL3
 int OPL3EMU_GetMode();
