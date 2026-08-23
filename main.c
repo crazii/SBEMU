@@ -1031,7 +1031,9 @@ static void MAIN_Interrupt()
 
     //_LOG("samples:%d\n",samples);
 
+    RESETIF();
     BOOL vmpu_active = VMPU_IsActive();
+    SETIF();
     BOOL opl_active = MAIN_Options[OPT_OPL].value && !fm_aui.fm && OPL3EMU_IsActive();
     BOOL digital = SBEMU_HasStarted();
     BOOL paused = SBEMU_IsPaused(); //need raise interrupt after pause, still need do the timing
@@ -1275,7 +1277,11 @@ static void MAIN_Interrupt()
 
 #if SBEMU_VMPU
     if(vmpu_active)
+    {
+        RESETIF();
         VMPU_GenSamples(MAIN_PCM, samples, aui.freq_card, digital);
+        SETIF();
+    }
 #endif
 
     samples *= 2; //to stereo
