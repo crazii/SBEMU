@@ -93,6 +93,9 @@ SBEMU_SRC := sbemu/dbopl.cpp \
 	     sbemu/iotrap.c \
 	     sbemu/vdma.c \
 	     sbemu/serial.c \
+	     sbemu/vgus.c \
+	     sbemu/vdisney.c \
+	     sbemu/vpcspeaker.c \
 	     sbemu/dpmi/xms.c \
 	     sbemu/dpmi/dpmi.c \
 	     sbemu/dpmi/dbgutil.c \

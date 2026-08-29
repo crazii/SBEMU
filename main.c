@@ -13,6 +13,9 @@
 #include <vdma.h>
 #include <sbemu.h>
 #include <vmpu.h>
+#include <vgus.h>
+#include <vdisney.h>
+#include <vpcspeaker.h>
 #include "vdpmi.h"
 #include "serial.h"
 #include "utility.h"
@@ -381,6 +384,83 @@ SBEMU_IOPT MPUIOPT;
 SBEMU_IOPT MAIN_VDMA_IOPT;
 SBEMU_IOPT MAIN_SB_IOPT;
 
+#if SBEMU_GUS
+// GUS IO handler — single entry point dispatching all GUS ports
+static uint32_t MAIN_GUS_IO(uint32_t port, uint32_t val, uint32_t out)
+{
+    return VGUS_IOHandler(port, val, out);
+}
+
+// GUS IO descriptor table: 2X0..2XF + 3X0..3X7 (24 ports total, base filled at runtime)
+#define MAIN_GUS_IODT_COUNT 24
+static SBEMU_IODT MAIN_GUS_IODT[MAIN_GUS_IODT_COUNT];
+static SBEMU_IOPT MAIN_GUS_IOPT;
+static BOOL GUSInstalled = FALSE;
+
+static void MAIN_GUS_FillIODT(int base)
+{
+    int idx = 0;
+    // Map all 16 ports in 2X0..2XF group
+    for(int i = 0; i < 16; i++) {
+        MAIN_GUS_IODT[idx].port = base + i;
+        MAIN_GUS_IODT[idx].handler = &MAIN_GUS_IO;
+        idx++;
+    }
+    // Map all 8 ports in 3X0..3X7 group
+    for(int i = 0; i < 8; i++) {
+        MAIN_GUS_IODT[idx].port = base + 0x100 + i;
+        MAIN_GUS_IODT[idx].handler = &MAIN_GUS_IO;
+        idx++;
+    }
+}
+#endif // SBEMU_GUS
+
+#if SBEMU_GUS
+// Forward declaration — full definition is later in this file.
+static void MAIN_InvokeIRQ(uint8_t irq);
+// ---------------------------------------------------------------------------
+// MAIN_GUS_ProcessDMA — service a pending GUS DMA transfer immediately.
+// Called both as an on-demand callback (triggered from the I/O trap when
+// register 0x41 is written) AND as a backup path inside the audio interrupt.
+// Extracting it here avoids duplicating the mapping / transfer logic.
+// ---------------------------------------------------------------------------
+static void MAIN_GUS_ProcessDMA(void)
+{
+    VGUS_State* gstate = VGUS_GetState();
+    if(!gstate) return;
+    if(!(gstate->dma_ctrl & VGUS_DMA_ENABLE)) return;
+    if(gstate->dma_ctrl  & VGUS_DMA_DONE)     return; // already complete
+
+    int      gus_dma = gstate->dma;
+    int32_t  count   = VDMA_GetCounter(gus_dma);
+    uint32_t addr    = VDMA_GetAddress(gus_dma);
+
+    if(count <= 0 || count > 65536) return; // sanity: max ISA DMA burst
+
+    uint32_t mapped   = 0;
+    BOOL     is_mapped = FALSE;
+    if(addr < 0x100000)
+        mapped = addr;            // conventional memory — no mapping needed
+    else
+    {
+        mapped    = DPMI_MapMemory(addr, count);
+        is_mapped = TRUE;
+    }
+
+    if(mapped)
+    {
+        VGUS_DMATransfer((uint8_t*)mapped, count);
+        if(is_mapped)
+            DPMI_UnmappMemory(mapped);
+
+        if (gstate->dma_irq_pending) {
+            gstate->dma_irq_pending = 0;
+            MAIN_InvokeIRQ(gstate->irq);
+        }
+    }
+}
+#endif // SBEMU_GUS (ProcessDMA)
+
 #define MAIN_SETCMD_INTRL 0x80000000L //hack: internal. used by TSR communication
 #define MAIN_SETCMD_CHGD 0x40000000L //value changed (extra states)
 #define OPT_CHANGED(i) (MAIN_Options[i].setcmd&MAIN_SETCMD_CHGD)
@@ -424,6 +504,12 @@ struct MAIN_OPT
     "/P", "UART mode MPU-401 IO address [*]", 0x330, 0,
     "/MCOM", "UART mode MPU-401 COM port (1=COM1, 2=COM2, 3=COM3, 4=COM4, 9:HW MPU only, otherwise base address)", 9, 0,
     "/COML", "List installed COM ports", 0, MAIN_SETCMD_HIDDEN,
+#if SBEMU_GUS
+    "/GUS",  "Enable Gravis UltraSound emulation (0=disabled)", 0, MAIN_SETCMD_BASE10,
+    "/GA",   "GUS I/O base address (220 or 240)", 0x240, 0,
+    "/GI",   "GUS IRQ number (3,5,7,11,12,15)", 5, MAIN_SETCMD_BASE10,
+    "/GD",   "GUS DMA channel (1,3,5,6,7)", 1, MAIN_SETCMD_BASE10,
+#endif
 #if MPU_DEBUG
     "/MDBG", "Enable MPU-401 debugging (0 to disable, 1 or 2 to enable)", 0, 0,
 #endif
@@ -457,6 +543,12 @@ enum EOption
     OPT_MPUADDR,
     OPT_MPUCOMPORT,
     OPT_COMPORTLIST,
+#if SBEMU_GUS
+    OPT_GUS,
+    OPT_GUS_ADDR,
+    OPT_GUS_IRQ,
+    OPT_GUS_DMA,
+#endif
 #if MPU_DEBUG
     OPT_MDBG,
 #endif
@@ -506,6 +598,24 @@ static void MAIN_SetBlasterEnv(struct MAIN_OPT* opt) //alter BLASTER env.
     setenv("BLASTER", buf, TRUE);
     #endif
 }
+
+#if SBEMU_GUS
+static void MAIN_SetUltraSndEnv(struct MAIN_OPT* opt)
+{
+    // ULTRASND format: A<base>,D<dma8>,D<dma16>,I<irq>,I<irq>
+    // e.g.: "240,1,1,5,5"
+    char buf[64];
+    sprintf(buf, "%x,%d,%d,%d,%d",
+        opt[OPT_GUS_ADDR].value,
+        opt[OPT_GUS_DMA].value,
+        opt[OPT_GUS_DMA].value,
+        opt[OPT_GUS_IRQ].value,
+        opt[OPT_GUS_IRQ].value);
+    #ifdef DJGPP
+    setenv("ULTRASND", buf, TRUE);
+    #endif
+}
+#endif // SBEMU_GUS
 
 static void MAIN_CPrintf(int color, const char* fmt, ...)
 {
@@ -572,6 +682,13 @@ static void MAIN_Cleanup()
         VDPMI_Uninstall_IOPortTrap(&OPL3IOPT);
     if(MPUInstalled)
         VDPMI_Uninstall_IOPortTrap(&MPUIOPT);
+#if SBEMU_GUS
+    if(GUSInstalled)
+    {
+        VDPMI_Uninstall_IOPortTrap(&MAIN_GUS_IOPT);
+        VGUS_Shutdown();
+    }
+#endif
 }
 
 int main(int argc, char* argv[])
@@ -898,6 +1015,77 @@ int main(int argc, char* argv[])
 
     BOOL InstalledVDMA = VDPMI_Install_IOPortTrap(MAIN_VDMA_IODT, countof(MAIN_VDMA_IODT), &MAIN_VDMA_IOPT);
     BOOL InstalledSB = VDPMI_Install_IOPortTrap(SB_Iodt, SB_IodtCount, &MAIN_SB_IOPT);
+
+#if SBEMU_GUS
+    if(MAIN_Options[OPT_GUS].value)
+    {
+        int gus_base = MAIN_Options[OPT_GUS_ADDR].value;
+        int gus_irq  = MAIN_Options[OPT_GUS_IRQ].value;
+        int gus_dma  = MAIN_Options[OPT_GUS_DMA].value;
+        if(VGUS_Init(gus_base, gus_irq, gus_dma, aui.freq_card))
+        {
+            MAIN_GUS_FillIODT(gus_base);
+            GUSInstalled = VDPMI_Install_IOPortTrap(MAIN_GUS_IODT, MAIN_GUS_IODT_COUNT, &MAIN_GUS_IOPT);
+            if(!GUSInstalled)
+                MAIN_CPrintf(RED, "Warning: Failed to install GUS IO trap.\n");
+            else
+            {
+                VDMA_Virtualize(gus_dma, TRUE); // Capture ISA DMA writes for GUS
+                // Register the immediate-DMA callback so that games that poll the
+                // DMA DONE bit right after writing register 0x41 do not time out.
+                VGUS_SetDMACallback(&MAIN_GUS_ProcessDMA);
+            }
+        }
+        else
+        {
+            MAIN_CPrintf(RED, "Warning: GUS DRAM allocation failed (need 1MB free memory).\n");
+            MAIN_Options[OPT_GUS].value = 0;
+        }
+        printf("GUS emulation at address %x, IRQ %d, DMA %d: ",
+               gus_base, gus_irq, gus_dma);
+        MAIN_Print_Enabled_Newline(GUSInstalled);
+        if(GUSInstalled)
+            MAIN_SetUltraSndEnv(MAIN_Options);
+    }
+#endif // SBEMU_GUS
+
+#if SBEMU_DISNEY
+    // Disney Sound Source / Covox emulation (LPT1 parallel port DAC)
+    {
+        static SBEMU_IODT MAIN_DISNEY_IODT[3];
+        static SBEMU_IOPT MAIN_DISNEY_IOPT;
+        static BOOL DisneyInstalled = FALSE;
+        // Ports 0x378 (Data), 0x379 (Status), 0x37A (Control)
+        MAIN_DISNEY_IODT[0].port = VDISNEY_BASE + 0;
+        MAIN_DISNEY_IODT[1].port = VDISNEY_BASE + 1;
+        MAIN_DISNEY_IODT[2].port = VDISNEY_BASE + 2;
+        for(int i = 0; i < 3; i++) {
+            MAIN_DISNEY_IODT[i].handler = (void*)VDISNEY_IOHandler;
+        }
+        VDISNEY_Init(aui.freq_card);
+        DisneyInstalled = VDPMI_Install_IOPortTrap(MAIN_DISNEY_IODT, 3, &MAIN_DISNEY_IOPT);
+        printf("Disney Sound Source emulation (LPT1 0x378): ");
+        MAIN_Print_Enabled_Newline(DisneyInstalled);
+    }
+#endif // SBEMU_DISNEY
+
+#if SBEMU_PCSPEAKER
+    {
+        static SBEMU_IODT MAIN_PCSPEAKER_IODT[3];
+        static SBEMU_IOPT MAIN_PCSPEAKER_IOPT;
+        static BOOL PCSpeakerInstalled = FALSE;
+        MAIN_PCSPEAKER_IODT[0].port = 0x42; // PIT Channel 2
+        MAIN_PCSPEAKER_IODT[1].port = 0x43; // PIT Command
+        MAIN_PCSPEAKER_IODT[2].port = 0x61; // System Control
+        for(int i = 0; i < 3; i++) {
+            MAIN_PCSPEAKER_IODT[i].handler = (void*)VPCSPEAKER_IOHandler;
+        }
+        VPCSPEAKER_Init(aui.freq_card);
+        PCSpeakerInstalled = VDPMI_Install_IOPortTrap(MAIN_PCSPEAKER_IODT, 3, &MAIN_PCSPEAKER_IOPT);
+        printf("PC Speaker emulation (Ports 42,43,61): ");
+        MAIN_Print_Enabled_Newline(PCSpeakerInstalled);
+    }
+#endif // SBEMU_PCSPEAKER
 
     BOOL TSR_ISR = FALSE;
     for(int i = MAIN_TSR_INTSTART_ID; i <= 0xFF; ++i)
@@ -1281,6 +1469,36 @@ static void MAIN_Interrupt()
         RESETIF();
         VMPU_GenSamples(MAIN_PCM, samples, aui.freq_card, digital);
         SETIF();
+    }
+#endif
+
+#if SBEMU_GUS
+    if(VGUS_IsActive())
+    {
+        // Service any pending GUS DMA first.  The immediate callback already
+        // handled the common case; this is a safety net for any transfer that
+        // may have been queued while the callback was not yet reachable.
+        MAIN_GUS_ProcessDMA();
+
+        // Tick GUS timers (delta = samples produced at the card's PCM rate)
+        VGUS_TickTimers((uint32_t)samples, aui.freq_card, &MAIN_InvokeIRQ);
+
+        // Mix all active GUS voices additively into the existing PCM buffer
+        VGUS_GenSamples(MAIN_PCM, samples, aui.freq_card, /*domix=*/1);
+    }
+#endif
+
+#if SBEMU_DISNEY
+    if(VDISNEY_IsActive())
+    {
+        VDISNEY_GenSamples(MAIN_PCM, samples, aui.freq_card, /*domix=*/1);
+    }
+#endif
+
+#if SBEMU_PCSPEAKER
+    if(VPCSPEAKER_IsActive())
+    {
+        VPCSPEAKER_GenSamples(MAIN_PCM, samples, aui.freq_card, /*domix=*/1);
     }
 #endif
 

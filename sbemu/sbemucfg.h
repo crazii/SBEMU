@@ -11,6 +11,9 @@
 //enable Virtual MPU by using TinySoundFont
 #define SBEMU_VMPU 1
 
+//enable Gravis UltraSound (GUS) emulation
+#define SBEMU_GUS 1
+
 //amplify OPL volume by 1.5. should be 0 or 1
 //NOTE: the DBOPL emulation has lower volume, and DOSBox will set the volume to 1.5x too
 //reference: https://github.com/dosbox-staging/dosbox-staging/issues/278 : OPL audio 1.5x scaling

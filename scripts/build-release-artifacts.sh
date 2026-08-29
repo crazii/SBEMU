@@ -35,6 +35,8 @@ cp "$FULL_PATH_TO_SBEMU_EXE" /tmp/mnt/sbemu
 cp "$FULL_PATH_TO_RELEASE_NOTES" /tmp/mnt/sbemu
 cp "$FULL_PATH_TO_SBEMU_EXE" /tmp/SBEMU
 cp "$FULL_PATH_TO_RELEASE_NOTES" /tmp/SBEMU
+cp "$FULL_PATH_TO_OUTPUT_ARTIFACTS/src/README.txt" /tmp/SBEMU #hack end user readme. don't want to touch the yml
+cp "$FULL_PATH_TO_OUTPUT_ARTIFACTS/src/README.txt" /tmp/mnt/sbemu
 pushd /tmp/mnt
 mkdir jemm
 cd jemm
