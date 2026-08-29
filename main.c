@@ -1219,7 +1219,9 @@ static void MAIN_Interrupt()
 
     //_LOG("samples:%d\n",samples);
 
+    RESETIF();
     BOOL vmpu_active = VMPU_IsActive();
+    SETIF();
     BOOL opl_active = MAIN_Options[OPT_OPL].value && !fm_aui.fm && OPL3EMU_IsActive();
     BOOL digital = SBEMU_HasStarted();
     BOOL paused = SBEMU_IsPaused(); //need raise interrupt after pause, still need do the timing
@@ -1396,7 +1398,7 @@ static void MAIN_Interrupt()
         {
             for(int i = 0; i < samples*2; i+=2)
             {
-                #if !SBEMU_LINEAR_MIX
+                #if SBEMU_MIX == SBEMU_MIX_MUL
                 // https://stackoverflow.com/questions/12089662/mixing-16-bit-linear-pcm-streams-and-avoiding-clipping-overflow
                 int la = (int)(MAIN_PCM[i] * voicevol/256) + 32768;
                 int ra = (int)(MAIN_PCM[i+1] * voicevol/256) + 32768;
@@ -1411,8 +1413,25 @@ static void MAIN_Interrupt()
                 if(r == 65536) r = 65535;
                 MAIN_PCM[i] = (l - 32768) * vol/256;
                 MAIN_PCM[i+1] = (r - 32768) * vol/256;
+
+                #elif SBEMU_MIX == SBEMU_MIX_CLIP
                 
-                #else //simple average: sounds the same as DOSBox
+                int la = (int)(MAIN_PCM[i] * voicevol/256);
+                int ra = (int)(MAIN_PCM[i+1] * voicevol/256);
+                #if SBEMU_SWAP_STEREO
+                {int x = la; la = ra; ra = x;}
+                #endif
+                int lb = (int)((MAIN_OPLPCM[i]+MAIN_OPLPCM[i]*SBEMU_OPL_VOLUME_AMPLICATION/2) * midivol/256);
+                int rb = (int)((MAIN_OPLPCM[i+1]+MAIN_OPLPCM[i+1]*SBEMU_OPL_VOLUME_AMPLICATION/2) * midivol/256);
+                int l = la+lb;
+                l = (l > 23767 ? 23767 : (l < -32768 ? -32768 : l));
+                int r = ra + rb;
+                r = (r > 23767 ? 23767 : (r < -32768 ? -32768 : r));
+
+                MAIN_PCM[i] = l * vol/256;
+                MAIN_PCM[i+1] = r * vol/256;
+
+                #else //SBEMU_MIX_LINEAR
 
                 int la = (int)(MAIN_PCM[i] * voicevol/256); //SFX PCM
                 int ra = (int)(MAIN_PCM[i+1] * voicevol/256);
@@ -1446,7 +1465,11 @@ static void MAIN_Interrupt()
 
 #if SBEMU_VMPU
     if(vmpu_active)
+    {
+        RESETIF();
         VMPU_GenSamples(MAIN_PCM, samples, aui.freq_card, digital);
+        SETIF();
+    }
 #endif
 
 #if SBEMU_GUS

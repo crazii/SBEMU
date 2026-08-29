@@ -172,7 +172,7 @@ unsigned long pds_dpmi_map_physical_memory(unsigned long phys_addr,unsigned long
 
  if(i < PHYSICAL_MAP_COUNT && __dpmi_physical_address_mapping(&info) == 0)
  {
-    if(info.address < base && 0) //not needed, limit will be expanded for the overflow
+    if(info.address < base) //not needed, limit will be expanded for the overflow
     {
         __dpmi_free_physical_address_mapping(&info);
         info.address = base + limit + 1;
@@ -1061,7 +1061,7 @@ unsigned int cv_channels_1_to_n(PCM_CV_TYPE_S *pcm_sample,unsigned int samplenum
 //sample rates
 unsigned int mixer_speed_lq(PCM_CV_TYPE_S* dest, unsigned int destsample, const PCM_CV_TYPE_S* source, unsigned int sourcesample, unsigned int channels, unsigned int samplerate, unsigned int newrate)
 {
-if(!sourcesample)
+ if(!sourcesample)
   return 0;
 
  const unsigned int instep=((samplerate/newrate)<<12) | (((4096*(samplerate%newrate)-1)/(newrate-1))&0xFFF);
@@ -1239,6 +1239,11 @@ void pds_delay_10us(unsigned int ticks) //each tick is 10us
    else
     tscdif=divisor+oldtsc-tsctemp;
   }while(tscdif<12); //wait for 10us  (12/(65536*18) sec)
+  unsigned int n = i+tscdif/12-1;
+  if(n<i)
+    break;
+  else
+    i = n; //neglate i++
  }
 #else
  pds_mdelay((ticks+99)/100);
@@ -1271,6 +1276,11 @@ void pds_delay_1695ns (unsigned int ticks) //each tick is approximately 1695ns
    else
     tscdif=divisor+oldtsc-tsctemp;
   }while(tscdif<2); //wait for 1695.421ns  (2/(65536*18) sec) // XXX
+  unsigned int n = i+tscdif/2-1;
+  if(n<i)
+    break;
+  else
+    i = n; //neglate i++
  }
 #else
  pds_mdelay((ticks+99)/100);

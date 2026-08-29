@@ -6,16 +6,15 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include <dpmi/dbgutil.h>
+#include "dpmi/dbgutil.h"
 #include "vmpu.h"
+#include "../utility.h"
 
 #if SBEMU_VMPU
 
 #define TSF_IMPLEMENTATION
 #define TSF_FLOAT_LUT
 #include "tsf.h"
-
-static unsigned char fpu_buffer[512] __attribute__((aligned(16)));
 
 /* 0x330: data port
  * 0x331: read: status port
@@ -185,9 +184,9 @@ static void VMPU_Write(uint16_t port, uint8_t value)
         }
         if (value == 0xff)
         {
-            fpu_save(fpu_buffer);
+            FPUSS();
             VMPU_Process_Messages();
-            fpu_restore(fpu_buffer);
+            FPUSR();
             bReset = true;
             midi_ptr = 0;
             midi_available_ptr = 0;
@@ -372,9 +371,9 @@ BOOL VMPU_Reset(int baseaddr, int* voices, int freq, const char* sf2, uint32_t s
 BOOL VMPU_IsActive()
 {
     if(!tsfrenderer) return FALSE;
-    fpu_save(fpu_buffer);
+    FPUSS();
     VMPU_Process_Messages();
-    fpu_restore(fpu_buffer);
+    FPUSR();
     return !!tsf_active_voice_count(tsfrenderer);
 }
 
@@ -382,11 +381,11 @@ void VMPU_GenSamples(int16_t* pcm16, int samples, int freq, BOOL domix)
 {
     if (tsfrenderer)
     {
-        fpu_save(fpu_buffer);
+        FPUSS();
         VMPU_Process_Messages();
         tsf_set_samplerate_output(tsfrenderer, freq);
         tsf_render_short(tsfrenderer, pcm16, samples, domix);
-        fpu_restore(fpu_buffer);
+        FPUSR();
     }
 }
 
