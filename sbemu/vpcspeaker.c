@@ -178,7 +178,6 @@ uint32_t VPCSPEAKER_IOHandler(uint32_t port, uint32_t val, uint32_t out)
                         spc.pit_count = (spc.pit_count & 0x00FF) | ((val & 0xFF) << 8);
                         spc.pit_state = 0;
                         vpcspeaker_update_pit();
-                        spc.pit_index = 0; // Reset phase on reload
                     }
                 }
                 break;
