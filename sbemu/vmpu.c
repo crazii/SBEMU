@@ -194,6 +194,20 @@ static void VMPU_Write(uint16_t port, uint8_t value)
             midi_message_cntr = 0;
             midi_mpu_status &= ~0x80;
         }
+        if (value == 0x05) {
+            /* MPU-401 "Stop" (all channels clear): re-purpose as CC#121
+             * Reset All Controllers on all 16 channels, so channel pressure
+             * (aftertouch) does not bleed into the next track. */
+            if (!midi_in_sysex) {
+                //need handle incomplete event too? consider later
+                for (uint8_t ch = 0; ch < 16 && midi_ptr + 3 <= 4092; ch++) {
+                    midi_buffer[midi_ptr++] = 0xB0 | ch;
+                    midi_buffer[midi_ptr++] = 0x79;
+                    midi_buffer[midi_ptr++] = 0x00;
+                }
+                midi_available_ptr = midi_ptr;
+            }
+        }
     }
     else
     {
