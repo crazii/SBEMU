@@ -15,6 +15,7 @@
 #include <sbemu.h>
 #include <untrapio.h>
 #include <vmpu.h>
+#include <vpcspeaker.h>
 #include "qemm.h"
 #include "hdpmipt.h"
 #include "serial.h"
@@ -413,6 +414,16 @@ QEMM_IOPT MAIN_VIRQ_IOPT_PM1;
 QEMM_IOPT MAIN_VIRQ_IOPT_PM2;
 QEMM_IOPT MAIN_SB_IOPT_PM;
 
+// PC Speaker emulation IO trap handles.
+// Note: QEMM accepts the whole 3-port table in a single call, but HDPMI requires
+// contiguous ranges, so 0x42-0x43 and 0x61 need separate HDPMI trap handles.
+#if SBEMU_PCSPEAKER
+static QEMM_IODT MAIN_PCSPEAKER_IODT[3];
+static QEMM_IOPT MAIN_PCSPEAKER_IOPT;
+static QEMM_IOPT MAIN_PCSPEAKER_IOPT_61;
+static BOOL     MAIN_PCSPEAKER_Installed = FALSE;
+#endif
+
 #define MAIN_SETCMD_INTRL 0x80000000L //hack: internal. used by TSR communication
 #define MAIN_SETCMD_CHGD 0x40000000L //value changed (extra states)
 #define OPT_CHANGED(i) (MAIN_Options[i].setcmd&MAIN_SETCMD_CHGD)
@@ -654,6 +665,20 @@ static void MAIN_Cleanup()
         QEMM_Uninstall_IOPortTrap(&MPUIOPT);
     if(MPUPMInstalled)
         HDPMIPT_Uninstall_IOPortTrap(&MPUIOPT_PM);
+
+#if SBEMU_PCSPEAKER
+    // Uninstall PC Speaker IO traps (mirror the install order in main()).
+    if(MAIN_PCSPEAKER_Installed)
+    {
+        if(MAIN_QEMM_Present)
+            QEMM_Uninstall_IOPortTrap(&MAIN_PCSPEAKER_IOPT);
+        if(MAIN_HDPMI_Present)
+        {
+            HDPMIPT_Uninstall_IOPortTrap(&MAIN_PCSPEAKER_IOPT);
+            HDPMIPT_Uninstall_IOPortTrap(&MAIN_PCSPEAKER_IOPT_61);
+        }
+    }
+#endif
 
     IRQGUARD_Uninstall();
 }
@@ -1066,6 +1091,22 @@ int main(int argc, char* argv[])
     #endif
     BOOL HDPMIInstalledSB = !enablePM || HDPMIPT_Install_IOPortTrap(MAIN_Options[OPT_ADDR].value, MAIN_Options[OPT_ADDR].value+0x0F, SB_Iodt, SB_IodtCount, &MAIN_SB_IOPT_PM);
 
+#if SBEMU_PCSPEAKER
+    //* --- PC Speaker init (andersrodrig) ---
+    // Populate PC Speaker IO trap table.
+    // 0x42/0x43 = PIT Channel 2 data/command, 0x61 = System Control Port B (speaker gate).
+    // The traps are actually installed later, after AU_start() so aui.freq_card is valid
+    // for VPCSPEAKER_Init().
+    {
+        MAIN_PCSPEAKER_IODT[0].port = 0x42; // PIT Channel 2 Data
+        MAIN_PCSPEAKER_IODT[1].port = 0x43; // PIT Command
+        MAIN_PCSPEAKER_IODT[2].port = 0x61; // System Control Port B
+        for(int i = 0; i < 3; i++) {
+            MAIN_PCSPEAKER_IODT[i].handler = (void*)VPCSPEAKER_IOHandler;
+        }
+    }
+#endif // SBEMU_PCSPEAKER
+
     BOOL TSR_ISR = FALSE;
     for(int i = MAIN_TSR_INTSTART_ID; i <= 0xFF; ++i)
     {
@@ -1144,6 +1185,28 @@ int main(int argc, char* argv[])
 
     AU_prestart(&aui);
     AU_start(&aui);
+
+#if SBEMU_PCSPEAKER
+    // Now that the audio device is running, aui.freq_card is valid for PC Speaker setup.
+    // QEMM accepts the whole 3-port table in one call.
+    // HDPMI needs two calls because 0x42-0x43 and 0x61 are not contiguous.
+    VPCSPEAKER_Init(aui.freq_card);
+
+    if(enableRM)
+    {
+        MAIN_PCSPEAKER_Installed = QEMM_Install_IOPortTrap(MAIN_PCSPEAKER_IODT, 3, &MAIN_PCSPEAKER_IOPT);
+    }
+
+    if(enablePM)
+    {
+        HDPMIPT_Install_IOPortTrap(0x42, 0x43, MAIN_PCSPEAKER_IODT,     2, &MAIN_PCSPEAKER_IOPT);
+        HDPMIPT_Install_IOPortTrap(0x61, 0x61, MAIN_PCSPEAKER_IODT + 2, 1, &MAIN_PCSPEAKER_IOPT_61);
+        MAIN_PCSPEAKER_Installed = TRUE;
+    }
+
+    printf("PC Speaker emulation (Ports 42,43,61): ");
+    MAIN_Print_Enabled_Newline(MAIN_PCSPEAKER_Installed);
+#endif // SBEMU_PCSPEAKER
 
     MAIN_TSRed = TRUE;
     if(!PM_ISR || !RM_ISR || !TSR_ISR
@@ -1559,6 +1622,16 @@ static void MAIN_Interrupt()
         RESETIF();
         VMPU_GenSamples(MAIN_PCM, samples, aui.freq_card, digital);
         SETIF();
+    }
+#endif
+
+#if SBEMU_PCSPEAKER
+    // Mix PC Speaker output on top of whatever is already in MAIN_PCM.
+    // VPCSPEAKER_GenSamples() uses additive saturating mix (domix=1), so it is
+    // safe even when the SB/OPL stream is currently silent.
+    if(VPCSPEAKER_IsActive())
+    {
+        VPCSPEAKER_GenSamples(MAIN_PCM, samples, aui.freq_card, /*domix=*/1);
     }
 #endif
 

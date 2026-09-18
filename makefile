@@ -94,6 +94,7 @@ SBEMU_SRC := sbemu/dbopl.cpp \
 	     sbemu/vdma.c \
 	     sbemu/virq.c \
 	     sbemu/serial.c \
+             sbemu/vpcspeaker.c \
 	     sbemu/dpmi/xms.c \
 	     sbemu/dpmi/dpmi.c \
 	     sbemu/dpmi/dbgutil.c \
