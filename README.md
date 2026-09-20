@@ -206,6 +206,7 @@ Enabled and working:
  * `sc_sbl24`: SB Audigy LS (CA0106)
  * `sc_es1371`: Ensoniq ES1371/1373
  * `sc_cmi`: C-Media CMI8338/8738
+ * `sc_cs5535`: AMD CS5535/CS5536 (found in Wyse SX0 thin clients and other Geode-based systems)
 
 Support compiled-in, but untested:
 

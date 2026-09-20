@@ -51,6 +51,7 @@ static void aucards_interrupt_decoder(void);
 static void aucards_get_cpuusage_int08(void);
 
 #ifdef __DOS__
+extern one_sndcard_info CS5535_sndcard_info;
 extern one_sndcard_info ES1371_sndcard_info;
 extern one_sndcard_info ICH_sndcard_info;
 extern one_sndcard_info IHD_sndcard_info;
@@ -143,6 +144,9 @@ static one_sndcard_info *all_sndcard_info[]={
 #endif
 #ifdef AU_CARDS_LINK_ICH
  &ICH_sndcard_info,
+#endif
+#ifdef AU_CARDS_LINK_CS5535
+ &CS5535_sndcard_info,
 #endif
 #ifdef AU_CARDS_LINK_IHD
  &IHD_sndcard_info,
