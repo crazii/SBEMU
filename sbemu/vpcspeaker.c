@@ -54,6 +54,9 @@ static struct {
     double   pit_new_max;
     double   pit_new_half;
 
+    // Beep latch: catches short beeps that start and end between GenSamples calls
+    int      beep_latch;    // 1 = a beep occurred but wasn't rendered yet
+
     // Global state
     int      initialized;
     int      output_freq;
@@ -91,12 +94,18 @@ static void vpcspeaker_update_pit(void)
 // Set Port 61h value
 static void vpcspeaker_set_port61(uint8_t val)
 {
+    int old_bits = spc.port61 & 0x03;
+    int new_bits = val & 0x03;
+
     spc.port61 = val;
     int gate = (val & 0x01); // Timer 2 gate
     int data = (val & 0x02); // Speaker data
 
     if(gate && data) {
         spc.spkr_mode = SPKR_PIT_ON;
+        // Just turned on? Latch it for GenSamples.
+        if(old_bits != 0x03)
+            spc.beep_latch = 1;
     } else if(!gate && data) {
         spc.spkr_mode = SPKR_ON;
     } else if(gate && !data) {
@@ -104,6 +113,8 @@ static void vpcspeaker_set_port61(uint8_t val)
     } else {
         spc.spkr_mode = SPKR_OFF;
     }
+
+    (void)new_bits; // unused, kept for clarity
 }
 
 // ---------------------------------------------------------------------------
@@ -183,7 +194,6 @@ uint32_t VPCSPEAKER_IOHandler(uint32_t port, uint32_t val, uint32_t out)
                         spc.pit_count = (spc.pit_count & 0x00FF) | ((val & 0xFF) << 8);
                         spc.pit_state = 0;
                         vpcspeaker_update_pit();
-                        spc.pit_index = 0;
                     }
                 }
                 break;
@@ -225,6 +235,17 @@ void VPCSPEAKER_GenSamples(int16_t *pcm16, int samples, int freq, int domix)
 {
     if(!spc.initialized) return;
 
+    // If a short beep was latched between GenSamples calls and the speaker
+    // already turned off, force a minimum audible beep now.
+    int force_samples = 0;
+    if(spc.beep_latch) {
+        spc.beep_latch = 0;
+        if(spc.spkr_mode != SPKR_PIT_ON) {
+            force_samples = 150;   // ~7 ms at 22050 Hz
+            if(force_samples > samples) force_samples = samples;
+        }
+    }
+
     // How many PIT ticks happen per audio sample?
     double ticks_per_sample = (double)PIT_FREQ / freq;
 
@@ -232,7 +253,10 @@ void VPCSPEAKER_GenSamples(int16_t *pcm16, int samples, int freq, int domix)
     {
         int16_t sample_val = 0;
 
-        switch(spc.spkr_mode)
+        // If we're inside the forced-beep window, pretend SPKR_PIT_ON
+        int effective_mode = (i < force_samples) ? SPKR_PIT_ON : spc.spkr_mode;
+
+        switch(effective_mode)
         {
             case SPKR_OFF:
                 sample_val = 0;
