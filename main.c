@@ -1592,8 +1592,13 @@ static void MAIN_Interrupt()
                 /*if(channels == 2)*/ {int x = la; la = ra; ra = x;}
                 #endif
 
-                int lb = (int)((MAIN_OPLPCM[i]+MAIN_PCM[i]*SBEMU_OPL_VOLUME_AMPLICATION/2) * midivol/256); //OPL PCM
-                int rb = (int)((MAIN_OPLPCM[i+1]+MAIN_PCM[i+1]*SBEMU_OPL_VOLUME_AMPLICATION/2) * midivol/256);
+                // Fix (85fc657 regression): use MAIN_OPLPCM for both terms.
+                // Previously the linear mix used MAIN_PCM in the second term, which double-counted
+                // the SFX signal (once as SFX via la/ra, again inside the OPL term via lb/rb),
+                // causing audible artifacts (choppy SFX at medium volumes).
+                // The non-linear path above already uses MAIN_OPLPCM in both terms; this aligns them.
+                int lb = (int)((MAIN_OPLPCM[i]+MAIN_OPLPCM[i]*SBEMU_OPL_VOLUME_AMPLICATION/2) * midivol/256); //OPL PCM
+                int rb = (int)((MAIN_OPLPCM[i+1]+MAIN_OPLPCM[i+1]*SBEMU_OPL_VOLUME_AMPLICATION/2) * midivol/256);
                 int l = (la*SBEMU_SFX_RATIO + lb*SBEMU_OPL_RATIO) * vol/256;
                 int r = (ra*SBEMU_SFX_RATIO + rb*SBEMU_OPL_RATIO) * vol/256;
                 MAIN_PCM[i] = l;

@@ -42,7 +42,7 @@ Source code exists, but "doesn't work yet":
  * OPL3 passthrough to Hardware FM if it's present on the PCI sound card.
  * MPU401 UART emulation, or passthrough to PCI sound card if supported.
  * MPU401 Soundfont2 emulation, original code by [Cacodemon345](https://github.com/Cacodemon345/VSBHDASF)
- * PC Speaker emulation via [pc-speaker](https://github.com/andersrodrig/pc-speaker) by [andersrodrig](https://github.com/andersrodrig)
+ * PC Speaker emulation via [pc-speaker](https://github.com/andersrodrig/sbemu) by [andersrodrig](https://github.com/andersrodrig)
 
 
 ## Requirements
