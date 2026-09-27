@@ -169,6 +169,7 @@ typedef struct au_cardconfig_v0154_s{
   #define AU_CARDS_LINK_OXYGEN 1
   #define AU_CARDS_LINK_ALLEGRO 1
   #define AU_CARDS_LINK_ES1371  1
+  #define AU_CARDS_LINK_ES1370  1
   #define AU_CARDS_LINK_ICH     1
   #define AU_CARDS_LINK_IHD     1
   #define AU_CARDS_LINK_SBLIVE  1
@@ -192,6 +193,7 @@ typedef struct au_cardconfig_v0154_s{
   #define AU_CARDS_LINK_CS5535  1
   #define AU_CARDS_LINK_EMU20KX 1
   #define AU_CARDS_LINK_ES1371  1
+  #define AU_CARDS_LINK_ES1370  1
   #define AU_CARDS_LINK_ICH     1
   #define AU_CARDS_LINK_IHD     1
   #define AU_CARDS_LINK_SBLIVE  1
