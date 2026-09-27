@@ -21,7 +21,7 @@
 #if SBEMU_PCSPEAKER
 
 #define PIT_FREQ 1193182 // 1.193182 MHz
-#define SPKR_VOLUME 4000 // Master volume for PC Speaker (0-32767 range)
+#define SPKR_VOLUME 2000 // Master volume for PC Speaker (0-32767 range)
 
 // State definitions
 enum SPKR_MODES {

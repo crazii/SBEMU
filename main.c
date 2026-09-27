@@ -1601,6 +1601,21 @@ static void MAIN_Interrupt()
                 int rb = (int)((MAIN_OPLPCM[i+1]+MAIN_OPLPCM[i+1]*SBEMU_OPL_VOLUME_AMPLICATION/2) * midivol/256);
                 int l = (la*SBEMU_SFX_RATIO + lb*SBEMU_OPL_RATIO) * vol/256;
                 int r = (ra*SBEMU_SFX_RATIO + rb*SBEMU_OPL_RATIO) * vol/256;
+
+                //FIX (hard clipping / crackle):
+                //  The linear mix path is the only one without any kind of limiter. Whenever
+                //  SFX + OPL + master volume pushed the result outside [-32768, 32767], the
+                //  implicit int16_t truncation at assignment produced a hard wrap-around
+                //  (audible as periodic clicks/crackle, worst on tracks with strong FM + PCM).
+                //  The non-linear path above avoids this via its soft-limiter formula; this
+                //  path now mirrors that safety with an explicit clamp after the master volume
+                //  stage (so user-requested volume reduction still recovers headroom, but no
+                //  sample can ever wrap).
+                if (l >  32767) l =  32767;
+                if (l < -32768) l = -32768;
+                if (r >  32767) r =  32767;
+                if (r < -32768) r = -32768;
+
                 MAIN_PCM[i] = l;
                 MAIN_PCM[i+1] = r;
                 #endif
