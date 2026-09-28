@@ -284,7 +284,19 @@ static unsigned int cs4281_rate_to_rv(unsigned int rate)
 static unsigned int cs4281_buffer_init(struct cs4281_card_s *card,struct mpxplay_audioout_info_s *aui)
 {
  unsigned int bytes_per_sample=2; // 16 bit
- card->pcmout_bufsize=MDma_get_max_pcmoutbufsize(aui,0,CS4281_DMABUF_ALIGN,bytes_per_sample,0);
+ /* Unlike sc_e1370.c/sc_e1371.c, this chip has no per-period reload
+  * register - it only ever raises two interrupts per DMA buffer cycle
+  * (BA0_HDSR_DHTC at the halfway point, BA0_HDSR_DTC at the end), no
+  * matter how large that buffer is. Those drivers get their fine
+  * interrupt granularity (~256 bytes/period) by reloading the whole
+  * buffer as many small periods; requesting the default (large, ~4KB)
+  * buffer here instead would leave 8-16x fewer, much coarser refill
+  * points, which is audibly different (worse real-time responsiveness)
+  * even though nothing is wrong at the register level. Requesting a
+  * small buffer up front (max_bufsize=2*ALIGN) keeps the half/full
+  * interrupt cadence close to what sc_e1370.c/sc_e1371.c provide.
+  */
+ card->pcmout_bufsize=MDma_get_max_pcmoutbufsize(aui,2*CS4281_DMABUF_ALIGN,CS4281_DMABUF_ALIGN,bytes_per_sample,0);
  card->dm=MDma_alloc_cardmem(card->pcmout_bufsize);
  if(!card->dm)
   return 0;
@@ -600,6 +612,17 @@ static void CS4281_setrate(struct mpxplay_audioout_info_s *aui)
   aui->freq_card=48000;
 
  MDma_init_pcmoutbuf(aui,card->pcmout_bufsize,CS4281_DMABUF_ALIGN,0);
+
+ /* frames between interrupts = half of the actual DMA buffer (see
+  * BA0_HDSR_DHTC/DTC - this chip always interrupts at the half and
+  * full points of whatever buffer size ended up allocated). Computed
+  * from the real aui->card_dmasize rather than hardcoded, since
+  * MDma_init_pcmoutbuf() may round it. Every other card driver in
+  * this codebase sets this field (sc_e1371.c, sc_ich.c, sc_inthd.c,
+  * ...) - leaving it unset here left it at its pds_calloc()-zeroed
+  * default, and it is used as a divisor in main.c's direct-out
+  * resample-ratio calculation. */
+ aui->card_samples_per_int = (aui->card_dmasize/2) >> 2;
 
  cs4281_prepare_playback(card,aui);
 }
