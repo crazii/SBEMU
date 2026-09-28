@@ -54,6 +54,7 @@ static void aucards_get_cpuusage_int08(void);
 extern one_sndcard_info CS5535_sndcard_info;
 extern one_sndcard_info ES1371_sndcard_info;
 extern one_sndcard_info ES1370_sndcard_info;
+extern one_sndcard_info CS4281_sndcard_info;
 extern one_sndcard_info ICH_sndcard_info;
 extern one_sndcard_info IHD_sndcard_info;
 extern one_sndcard_info VIA82XX_sndcard_info;
@@ -133,6 +134,9 @@ static one_sndcard_info *all_sndcard_info[]={
 #endif
 #ifdef AU_CARDS_LINK_ES1370
  &ES1370_sndcard_info,
+#endif
+#ifdef AU_CARDS_LINK_CS4281
+ &CS4281_sndcard_info,
 #endif
 #ifdef AU_CARDS_LINK_CTXFI
  &CTXFI_sndcard_info,
