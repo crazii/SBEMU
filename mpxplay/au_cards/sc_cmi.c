@@ -387,20 +387,12 @@ extern unsigned int intsoundconfig,intsoundcontrol;
 //-------------------------------------------------------------------------
 // low level write & read
 
-// Maximum number of retries for the read-back verification / polling loops
-// below. On some CM8338 boards a bit occasionally fails to read back exactly
-// as written (timing/PCI quirks), and without a bound these loops used to
-// spin forever, freezing the whole system. Bounding them keeps the intended
-// "retry until confirmed" behaviour for the normal case while guaranteeing
-// forward progress if the hardware never confirms.
-#define CMI_REG_RETRY_MAX 20000
-
-#define snd_cmipci_write_8(cm,reg,data)  do { unsigned int __cmi_retry=0; outb(cm->iobase+reg,data); _LOG("%x: %x %x\n",reg,data,inb(cm->iobase+reg)); while(cm->chip_version<=37 && inb(cm->iobase+reg) != (data) && ++__cmi_retry<CMI_REG_RETRY_MAX){ outb(cm->iobase+reg,data); _LOG("%x: %x %x\n",reg,data,inb(cm->iobase+reg)); } if(__cmi_retry>=CMI_REG_RETRY_MAX) mpxplay_debugf(CMI_DEBUG_OUTPUT,"write_8 reg %x timeout",reg); } while(0)
+#define snd_cmipci_write_8(cm,reg,data)  do { outb(cm->iobase+reg,data); _LOG("%x: %x %x\n",reg,data,inb(cm->iobase+reg)); } while(cm->chip_version<=37 && inb(cm->iobase+reg) != (data))
 #define snd_cmipci_write_8nv(cm,reg,data)  do { outb(cm->iobase+reg,data); _LOG("%x: %x %x\n",reg,data,inb(cm->iobase+reg)); } while(0)
-#define snd_cmipci_write_16(cm,reg,data) do { unsigned int __cmi_retry=0; outw(cm->iobase+reg,data); _LOG("%x: %x %x\n",reg,data,inw(cm->iobase+reg)); while(cm->chip_version<=37 && inw(cm->iobase+reg) != (data) && ++__cmi_retry<CMI_REG_RETRY_MAX){ outw(cm->iobase+reg,data); _LOG("%x: %x %x\n",reg,data,inw(cm->iobase+reg)); } if(__cmi_retry>=CMI_REG_RETRY_MAX) mpxplay_debugf(CMI_DEBUG_OUTPUT,"write_16 reg %x timeout",reg); } while(0)
+#define snd_cmipci_write_16(cm,reg,data) do { outw(cm->iobase+reg,data); _LOG("%x: %x %x\n",reg,data,inw(cm->iobase+reg)); } while(cm->chip_version<=37 && inw(cm->iobase+reg) != (data))
 #define snd_cmipci_write_16nv(cm,reg,data) do { outw(cm->iobase+reg,data); _LOG("%x: %x %x\n",reg,data,inw(cm->iobase+reg)); } while(0)
-#define snd_cmipci_write_32(cm,reg,data) do { unsigned int __cmi_retry=0; outl(cm->iobase+reg,data); _LOG("%x: %x %x\n",reg,data,inl(cm->iobase+reg)); while(cm->chip_version<=37 && inl(cm->iobase+reg) != (data) && ++__cmi_retry<CMI_REG_RETRY_MAX){ outl(cm->iobase+reg,data); _LOG("%x: %x %x\n",reg,data,inl(cm->iobase+reg)); } if(__cmi_retry>=CMI_REG_RETRY_MAX) mpxplay_debugf(CMI_DEBUG_OUTPUT,"write_32 reg %x timeout",reg); } while(0)
-#define snd_cmipci_write_32m(cm,reg,data,mask) do { unsigned int __cmi_retry=0; outl(cm->iobase+reg,data); _LOG("%x: %x %x\n",reg,data,inl(cm->iobase+reg)); while(cm->chip_version<=37 && (inl(cm->iobase+reg)&(mask)) != ((data)&mask) && ++__cmi_retry<CMI_REG_RETRY_MAX){ outl(cm->iobase+reg,data); _LOG("%x: %x %x\n",reg,data,inl(cm->iobase+reg)); } if(__cmi_retry>=CMI_REG_RETRY_MAX) mpxplay_debugf(CMI_DEBUG_OUTPUT,"write_32m reg %x timeout",reg); } while(0)
+#define snd_cmipci_write_32(cm,reg,data) do { outl(cm->iobase+reg,data); _LOG("%x: %x %x\n",reg,data,inl(cm->iobase+reg)); } while(cm->chip_version<=37 && inl(cm->iobase+reg) != (data))
+#define snd_cmipci_write_32m(cm,reg,data,mask) do { outl(cm->iobase+reg,data); _LOG("%x: %x %x\n",reg,data,inl(cm->iobase+reg)); } while(cm->chip_version<=37 && (inl(cm->iobase+reg)&(mask)) != ((data)&mask))
 #define snd_cmipci_read_8(cm,reg)  inb(cm->iobase+reg)
 #define snd_cmipci_read_16(cm,reg) inw(cm->iobase+reg)
 #define snd_cmipci_read_32(cm,reg) inl(cm->iobase+reg)
@@ -408,11 +400,10 @@ extern unsigned int intsoundconfig,intsoundcontrol;
 static void snd_cmipci_set_bit(cmi8x38_card *cm, unsigned int cmd, unsigned int flag)
 {
  unsigned int val;
- unsigned int retry = 0;
  do {
  val = snd_cmipci_read_32(cm, cmd);
  _LOG("%x %x\n",cmd, val);
- } while(val == -1 && cm->chip_version <= 37 && ++retry < CMI_REG_RETRY_MAX);
+ } while(val == -1 && cm->chip_version <= 37);
  val|= flag;
  snd_cmipci_write_32(cm, cmd, val);
 }
@@ -420,11 +411,10 @@ static void snd_cmipci_set_bit(cmi8x38_card *cm, unsigned int cmd, unsigned int 
 static void snd_cmipci_clear_bit(cmi8x38_card *cm, unsigned int cmd, unsigned int flag)
 {
  unsigned int val;
- unsigned int retry = 0;
  do {
  val = snd_cmipci_read_32(cm, cmd);
  _LOG("%x %x\n",cmd, val);
- } while(val == -1 && cm->chip_version <= 37 && ++retry < CMI_REG_RETRY_MAX);
+ } while(val == -1 && cm->chip_version <= 37);
  val&= ~flag;
  snd_cmipci_write_32(cm, cmd, val);
 }
@@ -459,20 +449,10 @@ static void snd_cmipci_ch_reset(cmi8x38_card *cm, int ch) //reset channel ch
 {
  int reset = CM_RST_CH0 << ch;
  int adcch = CM_CHADC0 << ch;
- unsigned int retry;
-
  snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, adcch|reset);
- retry = 0;
- do {pds_delay_10us(10);} while(!(snd_cmipci_read_32(cm,CM_REG_FUNCTRL0)&reset) && ++retry < CMI_REG_RETRY_MAX);
- if(retry >= CMI_REG_RETRY_MAX)
-  mpxplay_debugf(CMI_DEBUG_OUTPUT, "ch_reset: timeout waiting for reset set (ch %d)", ch);
-
+ do {pds_delay_10us(10); uint32_t x = snd_cmipci_read_32(cm,CM_REG_FUNCTRL0);} while(!(snd_cmipci_read_32(cm,CM_REG_FUNCTRL0)&reset));
  snd_cmipci_write_32(cm, CM_REG_FUNCTRL0, adcch&(~reset));
- retry = 0;
- do {pds_delay_10us(10);} while((snd_cmipci_read_32(cm,CM_REG_FUNCTRL0)&reset) && ++retry < CMI_REG_RETRY_MAX);
- if(retry >= CMI_REG_RETRY_MAX)
-  mpxplay_debugf(CMI_DEBUG_OUTPUT, "ch_reset: timeout waiting for reset clear (ch %d)", ch);
-
+ do {pds_delay_10us(10);} while((snd_cmipci_read_32(cm,CM_REG_FUNCTRL0)&reset));
  pds_mdelay(5);
 }
 
@@ -571,19 +551,10 @@ static void cmi8x38_chip_init(struct cmi8x38_card *cm)
  mpxplay_debugf(CMI_DEBUG_OUTPUT, "chip version: %d, multi_chan: %d", cm->chip_version, cm->can_multi_ch);
 
  /* initialize codec registers */
- {
-  unsigned int retry;
-  snd_cmipci_set_bit(cm, CM_REG_MISC_CTRL, CM_RESET); //reset DSP/Bus master
-  retry = 0;
-  do {pds_delay_10us(10);} while(!(snd_cmipci_read_32(cm, CM_REG_MISC_CTRL)&CM_RESET) && ++retry < CMI_REG_RETRY_MAX);
-  if(retry >= CMI_REG_RETRY_MAX)
-   mpxplay_debugf(CMI_DEBUG_OUTPUT, "chip_init: timeout waiting for RESET set");
-  snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_RESET); //release reset
-  retry = 0;
-  do {pds_delay_10us(10);} while((snd_cmipci_read_32(cm, CM_REG_MISC_CTRL)&CM_RESET) && ++retry < CMI_REG_RETRY_MAX);
-  if(retry >= CMI_REG_RETRY_MAX)
-   mpxplay_debugf(CMI_DEBUG_OUTPUT, "chip_init: timeout waiting for RESET clear");
- }
+ snd_cmipci_set_bit(cm, CM_REG_MISC_CTRL, CM_RESET); //reset DSP/Bus master
+ do {pds_delay_10us(10);} while(!(snd_cmipci_read_32(cm, CM_REG_MISC_CTRL)&CM_RESET));
+ snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_RESET); //release reset
+ do {pds_delay_10us(10);} while((snd_cmipci_read_32(cm, CM_REG_MISC_CTRL)&CM_RESET));
  pds_mdelay(10);
 
  mpxplay_debugf(CMI_DEBUG_OUTPUT, "FUNCTRL0: %x",  snd_cmipci_read_32(cm, CM_REG_FUNCTRL0));
@@ -606,7 +577,7 @@ static void cmi8x38_chip_init(struct cmi8x38_card *cm)
  mpxplay_debugf(CMI_DEBUG_OUTPUT, "MISCCTRL: %x",  snd_cmipci_read_32(cm, CM_REG_MISC_CTRL));
 
  snd_cmipci_write_32m(cm, CM_REG_CHFORMAT, 0, 0xFFFFFF);
- snd_cmipci_set_bit(cm, CM_REG_MISC_CTRL, CM_ENDBDAC|CM_N4SPK3D);
+ snd_cmipci_set_bit(cm, CM_REG_MISC_CTRL, CM_ENDBDAC | (cm->chip_version ? CM_N4SPK3D : 0)); // CM8338 (chip_version==0) doesn't confirm this bit; skip it there (fix by drivelling-spinel)
  snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_XCHGDAC);
 
  snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_SPD32SEL|CM_AC3EN2); //disable 32bit PCM/AC3
@@ -859,12 +830,9 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
  aui->freq_card=cmi_rates[freqnum]; // if the freq-config is not standard at CMI
 
  // DAC
- {
-  unsigned int retry = 0;
-  do {
-   val = snd_cmipci_read_32(card, CM_REG_FUNCTRL1);
-  }while(card->chip_version <= 37 && val == -1 && ++retry < CMI_REG_RETRY_MAX);
- }
+ do {
+  val = snd_cmipci_read_32(card, CM_REG_FUNCTRL1);
+ }while(card->chip_version <= 37 && val == -1);
  val &= ~CM_DSFC_MASK;
  val |= (freqnum << CM_DSFC_SHIFT) & CM_DSFC_MASK;
  snd_cmipci_write_32(card, CM_REG_FUNCTRL1, val);
@@ -876,12 +844,9 @@ static void CMI8X38_setrate(struct mpxplay_audioout_info_s *aui)
 
 
  // set format
- {
-  unsigned int retry = 0;
-  do {
-   val = snd_cmipci_read_32(card, CM_REG_CHFORMAT);
-  }while(card->chip_version <= 37 && val == -1 && ++retry < CMI_REG_RETRY_MAX);
- }
+ do {
+  val = snd_cmipci_read_32(card, CM_REG_CHFORMAT);
+ }while(card->chip_version <= 37 && val == -1);
 
  //val &= CM_ADCDACLEN_MASK;
  //val |= CM_ADCDACLEN_130; //adc sample resolution, also 00 will work (highest)
@@ -947,12 +912,14 @@ static long CMI8X38_getbufpos(struct mpxplay_audioout_info_s *aui)
  }
 #else
  // From the Linux driver
+ // Loop bound fixed (upstream fix by drivelling-spinel): a single read per
+ // attempt, bounded by the outer 3-try loop, instead of an unbounded
+ // do-while that could spin forever if the register kept returning 0xFFFF.
  unsigned int reg = CM_REG_CH0_FRAME2;
- unsigned int rem, tries, retry;
+ unsigned int rem, tries;
  for (tries = 0; tries < 3; tries++) {
-   retry = 0;
-   do {rem = snd_cmipci_read_16(card, reg); //note: current sample count can be 0
-   }while(rem == 0xFFFF && card->dma_size-1 != 0xFFFF && ++retry < CMI_REG_RETRY_MAX);
+   rem = snd_cmipci_read_16(card, reg); //note: current sample count can be 0
+   if(rem == 0xFFFF && card->dma_size-1 != 0xFFFF) continue;
    //mpxplay_debugf(CMI_DEBUG_OUTPUT, "PCM ptr: %u, card->dma_size: %d  aui->card_dmasize: %d", rem, card->dma_size, aui->card_dmasize);
    if (rem < card->dma_size)
      goto ok;
