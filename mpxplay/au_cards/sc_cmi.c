@@ -577,7 +577,7 @@ static void cmi8x38_chip_init(struct cmi8x38_card *cm)
  mpxplay_debugf(CMI_DEBUG_OUTPUT, "MISCCTRL: %x",  snd_cmipci_read_32(cm, CM_REG_MISC_CTRL));
 
  snd_cmipci_write_32m(cm, CM_REG_CHFORMAT, 0, 0xFFFFFF);
- snd_cmipci_set_bit(cm, CM_REG_MISC_CTRL, CM_ENDBDAC|CM_N4SPK3D);
+ snd_cmipci_set_bit(cm, CM_REG_MISC_CTRL, CM_ENDBDAC | (cm->chip_version ? CM_N4SPK3D : 0)); // CM8338 (chip_version==0) doesn't confirm this bit; skip it there (fix by drivelling-spinel)
  snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_XCHGDAC);
 
  snd_cmipci_clear_bit(cm, CM_REG_MISC_CTRL, CM_SPD32SEL|CM_AC3EN2); //disable 32bit PCM/AC3
@@ -912,11 +912,14 @@ static long CMI8X38_getbufpos(struct mpxplay_audioout_info_s *aui)
  }
 #else
  // From the Linux driver
+ // Loop bound fixed (upstream fix by drivelling-spinel): a single read per
+ // attempt, bounded by the outer 3-try loop, instead of an unbounded
+ // do-while that could spin forever if the register kept returning 0xFFFF.
  unsigned int reg = CM_REG_CH0_FRAME2;
  unsigned int rem, tries;
  for (tries = 0; tries < 3; tries++) {
-   do {rem = snd_cmipci_read_16(card, reg); //note: current sample count can be 0
-   }while(rem == 0xFFFF && card->dma_size-1 != 0xFFFF);
+   rem = snd_cmipci_read_16(card, reg); //note: current sample count can be 0
+   if(rem == 0xFFFF && card->dma_size-1 != 0xFFFF) continue;
    //mpxplay_debugf(CMI_DEBUG_OUTPUT, "PCM ptr: %u, card->dma_size: %d  aui->card_dmasize: %d", rem, card->dma_size, aui->card_dmasize);
    if (rem < card->dma_size)
      goto ok;
