@@ -256,9 +256,26 @@ static void es1370_ak4531_init(struct es1370_card_s *card)
  es1370_codec_write(card, AK4531_LVOICE,  0x00);
  es1370_codec_write(card, AK4531_RVOICE,  0x00);
 
- /* route the PCM(voice/DAC) channel into the output mix - without
-  * this, DAC audio stays silent no matter what the volumes are.
+ /* CD-IN: unmute at 0dB too. This channel carries the ANALOG audio
+  * signal coming in on the card's 4-pin CD-audio header (from a
+  * CD-ROM drive's own analog output), entirely independent of any
+  * digital playback this driver does - it's a pure hardware
+  * passthrough through the codec's own mixer. Without this, CD
+  * audio stays silent regardless of the physical cable being
+  * correctly connected, because the AK4531 powers up with EVERY
+  * channel muted (see es1370_ak4531_initial_map[]) and nothing
+  * other than Master/Voice was ever being unmuted.
   */
+ es1370_codec_write(card, AK4531_LCD, 0x00);
+ es1370_codec_write(card, AK4531_RCD, 0x00);
+
+ /* route the PCM(voice/DAC) channel AND the CD-IN channel into the
+  * output mix - without this, both stay silent no matter what the
+  * volumes are. PCM routing is OUT_SW2 bits 3/2; CD routing is
+  * OUT_SW1 bits 2/1 (different register - confirmed against ALSA's
+  * ak4531_codec.c control list, not guessed).
+  */
+ es1370_codec_write(card, AK4531_OUT_SW1, AK4531_OUTSW1_CD_L | AK4531_OUTSW1_CD_R);
  es1370_codec_write(card, AK4531_OUT_SW2, AK4531_OUTSW2_PCM_L | AK4531_OUTSW2_PCM_R);
  mpxplay_debugf(ENS_DEBUG_OUTPUT,"es1370_ak4531_init: exit");
 }

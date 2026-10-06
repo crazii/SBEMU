@@ -56,6 +56,14 @@
 #define AK4531_OUTSW2_PCM_L (1<<3)
 #define AK4531_OUTSW2_PCM_R (1<<2)
 
+/* OUT_SW1 bits that route CD-IN (the analog signal from the 4-pin CD
+ * audio header) into the output mix - confirmed against ALSA's
+ * ak4531_codec.c control list ("CD Playback Switch"), not guessed.
+ * Note this is a DIFFERENT register from the PCM routing bits above.
+ */
+#define AK4531_OUTSW1_CD_L  (1<<2)
+#define AK4531_OUTSW1_CD_R  (1<<1)
+
 /* AK4531_RESET (reg 0x16) bit meaning:
  * bit0 = /RST (1 = not in reset, 0 = reset asserted)
  * bit1 = /PD  (1 = powered on,   0 = powered down)

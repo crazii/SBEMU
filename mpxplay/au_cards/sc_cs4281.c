@@ -453,6 +453,15 @@ isv_ok:
  cs4281_ac97_write(card, AC97_PCMOUT_VOL,        0x0C0C);
  cs4281_ac97_write(card, AC97_HEADPHONE_VOL,     0x0C0C);
 
+ /* CD-IN: unmute too - carries the ANALOG signal from the card's 4-pin
+  * CD-audio header, independent of any digital playback this driver
+  * does. Unlike the AK4531 (ES1370), a standard AC'97 codec doesn't
+  * need a separate output-routing switch bit for this - unmuting the
+  * volume register alone is enough, it feeds the output mix directly
+  * once unmuted.
+  */
+ cs4281_ac97_write(card, AC97_CD_VOL, 0x0C0C);
+
  /* EAPD ("External Amplifier Power Down", reg 0x26 bit15) - on the
   * CS4297A/compatible codec family used on this card, this bit
   * disables an off-chip amplifier feeding the physical output jack.
