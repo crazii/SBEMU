@@ -226,9 +226,11 @@ static int CTXFI_IRQRoutine (struct mpxplay_audioout_info_s *aui)
     handled = ct_20k1_interrupt(card->card.irq, atc->hw);
   else
     handled = ct_20k2_interrupt(card->card.irq, atc->hw);
+#if CTXFI_DEBUG
   if ((ctxfi_int_cnt % (2000)) == 0) DBG_Logi("ctxfiirq %u\n", ctxfi_int_cnt);
   if (handled)
     ctxfi_int_cnt++;
+#endif
   return handled;
 }
 
