@@ -13,7 +13,7 @@ Enabled and working:
  * `sc_ich`: Intel ICH / nForce / SIS 7012
  * `sc_inthd`: Intel High Definition Audio (HDA)
  * `sc_via82`: VIA VT82C686, VT8233/37
- * `sc_sbliv`: SB Live! / Audigy
+ * `sc_sbliv`: SB Live! / Audigy (SB Live!: MPU-401 passthrough to the gameport MIDI out)
  * `sc_sbl24`: SB Audigy LS (CA0106)
  * `sc_es1371`: Ensoniq ES1371/1373
  * `sc_cmi`: C-Media CMI8338/8738
@@ -202,7 +202,7 @@ Enabled and working:
  * `sc_ich`: Intel ICH / nForce / SIS 7012
  * `sc_inthd`: Intel High Definition Audio (HDA)
  * `sc_via82`: VIA VT82C686, VT8233/37
- * `sc_sbliv`: SB Live! / Audigy
+ * `sc_sbliv`: SB Live! / Audigy (SB Live!: MPU-401 passthrough to the gameport MIDI out)
  * `sc_sbl24`: SB Audigy LS (CA0106)
  * `sc_es1371`: Ensoniq ES1371/1373
  * `sc_cmi`: C-Media CMI8338/8738
