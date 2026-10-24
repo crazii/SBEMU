@@ -1310,6 +1310,12 @@ static int SBLIVE_adetect(struct mpxplay_audioout_info_s *aui)
 
  sblive_select_mixer(card);
 
+ // EMU10K1 has its own MPU-401 UART (MUDATA/MUCMD) wired to the gameport MIDI pins
+ if((card->chips&EMU_CHIPS_10K1) && (!aui->card_select_index_mpu401 || aui->card_select_index_mpu401 == aui->card_test_index)){
+  aui->mpu401_port = card->iobase + MUDATA;
+  aui->mpu401 = 1;
+ }
+
  return 1;
 
 err_adetect:
@@ -1434,7 +1440,12 @@ one_sndcard_info SBLIVE_sndcard_info={
 #endif
  &SBLIVE_writeMIXER,
  &SBLIVE_readMIXER,
- NULL
+ NULL,
+
+ NULL,
+ NULL,
+ &ioport_mpu401_write,
+ &ioport_mpu401_read,
 };
 
 static void sblive_select_mixer(struct emu10k1_card *card)
