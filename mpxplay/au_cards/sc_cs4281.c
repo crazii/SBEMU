@@ -92,6 +92,7 @@
 #define  BA0_DCR_MSK     (1<<0)  /* DMA mask (1 = channel masked/stopped) */
 
 #define BA0_FCR0        0x0180  /* FIFO Control 0 (playback FIFO) */
+#define BA0_FCR_N(n)    (0x0180 + (n)*4) /* FIFO Control, engines 0-3 (ALSA: regFCR = BA0_FCR0 + n*4) */
 #define  BA0_FCR_FEN     (1UL<<31) /* FIFO enable */
 #define  BA0_FCR_RS(x)   (((x)&0x1f)<<24) /* right slot mapping */
 #define  BA0_FCR_LS(x)   (((x)&0x1f)<<16) /* left slot mapping */
@@ -249,7 +250,7 @@ static unsigned long cs4281_ac97_read(struct cs4281_card_s *card, unsigned long 
   pds_delay_10us(1);
  }
  mpxplay_debugf(CS4281_DEBUG_OUTPUT,"cs4281_ac97_read: DCV timeout, reg=%2.2X",reg);
- return 0xffff;
+ return 0; /* see comment at the VSTS timeout below */
 
 dcv_ok:
  for (t = 0; t < 100; t++) {
@@ -258,13 +259,27 @@ dcv_ok:
   pds_delay_10us(1);
  }
  mpxplay_debugf(CS4281_DEBUG_OUTPUT,"cs4281_ac97_read: VSTS timeout, reg=%2.2X",reg);
- return 0xffff;
+ /* ALSA returns 0xffff on a failed read, but AU_setmixer_one() does read-
+  * modify-write on the mixer registers: 0xffff would come back as "muted"
+  * (bit 15 set) and silence the channel. Return 0 instead, like
+  * sc_e1371.c's codec read does - the mute bit then stays clear.
+  */
+ return 0;
 }
 
 //-------------------------------------------------------------------------
 
-static unsigned int cs4281_rate_to_rv(unsigned int rate)
+/* real_rate (optional): rate the hardware will really produce. Exact for the
+ * fixed table rates; for all others the divisor is truncated, so the real
+ * rate can differ (e.g. 36000 -> 36571 Hz) - see ALSA's snd_cs4281_rate().
+ * rate must be >0 (CS4281_setrate() clamps it to 4000-48000).
+ */
+static unsigned int cs4281_rate_to_rv(unsigned int rate, unsigned int *real_rate)
 {
+ unsigned int val;
+
+ if (real_rate)
+  *real_rate = rate;
  /* a handful of rates map to fixed hardware indices; anything else uses
   * the direct divisor formula. Both forms are accepted by BA0_DACSR -
   * see ALSA's snd_cs4281_rate(). */
@@ -276,7 +291,10 @@ static unsigned int cs4281_rate_to_rv(unsigned int rate)
   case 44100: return 1;
   case 48000: return 0;
  }
- return 1536000UL / rate;
+ val = 1536000UL / rate;
+ if (real_rate)
+  *real_rate = 1536000UL / val;
+ return val;
 }
 
 //-------------------------------------------------------------------------
@@ -314,6 +332,7 @@ static int cs4281_chip_init(struct cs4281_card_s *card)
 {
  unsigned long tmp;
  unsigned int t,n;
+ int retry_count = 2; /* as ALSA: one retry if the AC-link doesn't come up */
 
  mpxplay_debugf(CS4281_DEBUG_OUTPUT,"cs4281_chip_init: enter");
 
@@ -342,6 +361,10 @@ static int cs4281_chip_init(struct cs4281_card_s *card)
  if (tmp & BA0_EPPMC_FPDN)
   cs4281_poke(card, BA0_EPPMC, tmp & ~BA0_EPPMC_FPDN);
 
+/* ALSA's snd_cs4281_chip_init() jumps back to here (CFLR check, then the whole
+ * reset/clock/AC-link bring-up) once if input slots 3+4 never become valid.
+ */
+retry:
  tmp = cs4281_peek(card, BA0_CFLR);
  if (tmp != BA0_CFLR_DEFAULT) {
   cs4281_poke(card, BA0_CFLR, BA0_CFLR_DEFAULT);
@@ -419,12 +442,24 @@ crdy_ok:
    goto isv_ok;
   pds_delay_10us(10);
  }
+ if (--retry_count > 0) {
+  mpxplay_debugf(CS4281_DEBUG_OUTPUT,"cs4281_chip_init: ISV3/4 not seen, retrying");
+  goto retry;
+ }
  mpxplay_debugf(CS4281_DEBUG_OUTPUT,"cs4281_chip_init: ISV3/4 not seen");
  return 0;
 
 isv_ok:
  /* commence digital audio transfer to the codec (slots 3+4 = PCM L/R) */
  cs4281_poke(card, BA0_ACOSV, BA0_ACOSV_SLV(3) | BA0_ACOSV_SLV(4));
+
+ /* all four FIFOs start out unassigned (slot 31 = none), like ALSA does;
+  * each engine gets its own FIFO_SIZE-sample window. Engine 0 is then
+  * re-mapped to the PCM playback slots right below.
+  */
+ for (n = 0; n < 4; n++)
+  cs4281_poke(card, BA0_FCR_N(n), BA0_FCR_LS(31) | BA0_FCR_RS(31) |
+                                  BA0_FCR_SZ(CS4281_FIFO_SIZE) | BA0_FCR_OF(n * CS4281_FIFO_SIZE));
 
  /* playback FIFO (DMA engine/FIFO index 0): left=slot0, right=slot1 */
  cs4281_poke(card, BA0_FCR0, BA0_FCR_FEN | BA0_FCR_LS(0) | BA0_FCR_RS(1) |
@@ -507,7 +542,7 @@ static void cs4281_prepare_playback(struct cs4281_card_s *card,struct mpxplay_au
 
  cs4281_poke(card, BA0_SRCSA, (0<<0) | (1<<8) | (10<<16) | (11<<24));
 
- rv = cs4281_rate_to_rv(aui->freq_card);
+ rv = cs4281_rate_to_rv(aui->freq_card, NULL);
  cs4281_poke(card, BA0_DACSR, rv);
 
  /* re-assert the playback FIFO's slot mapping */
@@ -539,6 +574,7 @@ static int CS4281_adetect(struct mpxplay_audioout_info_s *aui)
 {
  struct cs4281_card_s *card;
  unsigned long physaddr;
+ uint32_t bar0_before;
 
  card=(struct cs4281_card_s *)pds_calloc(1,sizeof(struct cs4281_card_s));
  if(!card)
@@ -553,8 +589,27 @@ static int CS4281_adetect(struct mpxplay_audioout_info_s *aui)
   goto err_adetect;
 
  mpxplay_debugf(CS4281_DEBUG_OUTPUT,"CS4281_adetect: known card found, enable PCI io and busmaster");
- pcibios_set_master(card->pci_dev);
+ /* ORDER MATTERS: go to D0 FIRST, enable decoding/bus-mastering AFTER.
+  * A D3hot->D0 transition may soft-reset the function (unless its
+  * No_Soft_Reset PM bit is set), which would wipe the command register
+  * (bus master, memory/IO enable) and possibly BAR0 - which is why Linux's
+  * pci_enable_device() powers the device up to D0 first (restoring the BARs
+  * if needed) and only then sets the enable bits. Previously the enable
+  * (pcibios_set_master) came first and could be lost.
+  */
+ bar0_before = pcibios_ReadConfig_Dword(card->pci_dev, PCIR_NAMBAR);
  cs4281_set_power_d0(card->pci_dev); /* required - see comment above */
+ /* BAR0 lost in the transition? (only restore a plausible memory BAR) */
+ if( bar0_before != 0 && bar0_before != 0xffffffffUL && !(bar0_before & 1) &&
+     pcibios_ReadConfig_Dword(card->pci_dev, PCIR_NAMBAR) != bar0_before ) {
+  mpxplay_debugf(CS4281_DEBUG_OUTPUT,"CS4281_adetect: BA0 changed across D0 transition, restoring %8.8X",bar0_before);
+  pcibios_WriteConfig_Dword(card->pci_dev, PCIR_NAMBAR, bar0_before);
+ }
+ /* I/O + memory space + bus master, WITHOUT clearing I/O space enable (unlike
+  * pcibios_enable_memmap_set_master()). BA0 is a memory BAR, so Memory Space
+  * Enable is required; pcibios_set_master() alone left it to the BIOS.
+  */
+ pcibios_enable_memmap_set_master_all(card->pci_dev);
 
  physaddr = pcibios_ReadConfig_Dword(card->pci_dev, PCIR_NAMBAR);
  aui->card_irq = card->irq = pcibios_ReadConfig_Byte(card->pci_dev, PCIR_INTR_LN);
@@ -610,6 +665,7 @@ static void CS4281_close(struct mpxplay_audioout_info_s *aui)
 static void CS4281_setrate(struct mpxplay_audioout_info_s *aui)
 {
  struct cs4281_card_s *card=aui->card_private_data;
+ unsigned int real_rate;
 
  aui->card_wave_id=MPXPLAY_WAVEID_PCM_SLE;
  aui->chan_card=2;
@@ -619,6 +675,11 @@ static void CS4281_setrate(struct mpxplay_audioout_info_s *aui)
   aui->freq_card=4000;
  else if(aui->freq_card>48000)
   aui->freq_card=48000;
+
+ /* update freq_card with the rate the divider really produces, so the SB
+  * resampler in main.c matches the hardware clock */
+ cs4281_rate_to_rv(aui->freq_card, &real_rate);
+ aui->freq_card=real_rate;
 
  MDma_init_pcmoutbuf(aui,card->pcmout_bufsize,CS4281_DMABUF_ALIGN,0);
 
@@ -676,6 +737,16 @@ static long CS4281_getbufpos(struct mpxplay_audioout_info_s *aui)
   return aui->card_dma_lastgoodpos;
 
  dcc = cs4281_peek(card, BA0_DCC0) & 0xffffff;
+
+ /* DCC0 counts down from dmasize_frames-1 (the value written to DBC0) to 0,
+  * then the autoinit reload starts over. Anything >= dmasize_frames is not a
+  * position (e.g. read at the instant of the reload): the subtraction below
+  * would wrap around to a huge unsigned value. Keep the last good position
+  * instead (same idea as sc_e1370.c's getbufpos).
+  */
+ if (dcc >= dmasize_frames)
+  return aui->card_dma_lastgoodpos;
+
  bufpos_frames = dmasize_frames - (dcc + 1);
  aui->card_dma_lastgoodpos = bufpos_frames << 2;
 
