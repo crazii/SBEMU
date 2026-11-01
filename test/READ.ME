@@ -1,0 +1,224 @@
+ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+IBM Audio Interface Library for 32-bit DOS (AIL/32)
+Release 1.05 of 19-Oct-93
+ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+
+                             ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+                             ³ List of files ³
+                             ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+SAMPLE   AD  ........... Sample YM3812 (Ad Lib etc.) Global Timbre Library
+SAMPLE   OPL ........... Sample OPL-3 (Ad Lib Gold etc.) Global Timbre Library
+AIL32    ASM ........... Application Program Interface source file
+DMASND32 ASM ........... Digital (sampled) sound driver source
+XMIDI32  ASM ........... Extended MIDI (XMIDI) sequence interpreter source
+DLLLOAD  C   ........... DLL loader for OS/2 32-bit Linear Executable modules
+MIX32    C   ........... Sample program source
+STP32    C   ........... Sample program source
+VP32     C   ........... Sample program source
+XP32     C   ........... Sample program source
+AIL32    H   ........... C header file containing all function prototypes
+DLL      H   ........... C header file for DLLLOAD.C functions
+AIL32    INC ........... Miscellaneous assembly equates
+MPU40132 INC ........... Roland MPU-401-compatible I/O primitives
+MT3232   INC ........... Roland MT-32 synthesizer driver source
+SBMIDI32 INC ........... Sound Blaster MIDI port I/O primitives
+SPKR32   INC ........... Tandy/IBM internal speaker synthesizer driver source
+YAMAHA32 INC ........... Yamaha YM3812 & YMF262/OPL3 synthesizer driver source
+386      MAC ........... 32-bit DOS assembly macros
+A32MP    MAK ........... Sample Microsoft makefile for MetaWare/Phar Lap build
+A32WR    MAK ........... Sample Microsoft makefile for Watcom/Rational build
+A32ZF    MAK ........... Sample Microsoft makefile for Zortech/Flashtek build
+VPRICE   VOC ........... Sample Creative Labs .VOC (PCM digitized sound) file
+DEMO     XMI ........... XMIDI file containing BACKGND, SHANTY, CHORAL.MID
+SPKRDEMO XMI ........... XMIDI file for PC/Tandy internal speaker playback
+DOS4GW   EXE ........... Rational Systems 32-bit DOS extender for Watcom C
+MSMAKE   EXE ........... Microsoft MAKE program to process sample makefiles
+READ     ME  ........... This file
+
+Versions of the following files are present in the subdirectories
+\WR, \MP, and \ZF.  These filesets are compiled for use with the 
+Watcom/Rational, MetaWare/Phar Lap, and Zortech/Flashtek 
+development environments, respectively.
+
+A32ADLIB DLL ........... Standard Ad Lib XMIDI sound driver DLL
+A32ALGDG DLL ........... Ad Lib Gold PCM sound driver DLL
+A32ALGFM DLL ........... Ad Lib Gold XMIDI sound driver DLL
+A32MT32  DLL ........... Roland MT-32 XMIDI sound driver DLL (MPU401 MIDI)
+A32MT32S DLL ........... Roland MT-32 XMIDI sound driver DLL (SBlaster MIDI)
+A32PASDG DLL ........... Pro Audio Spectrum PCM sound driver DLL
+A32PASFM DLL ........... Pro Audio Spectrum XMIDI sound driver DLL
+A32PASOP DLL ........... Pro Audio Spectrum Plus/16 XMIDI sound driver DLL
+A32SBDG  DLL ........... Sound Blaster PCM sound driver DLL
+A32SBFM  DLL ........... Sound Blaster XMIDI sound driver DLL
+A32SBPDG DLL ........... Sound Blaster Pro PCM sound driver DLL
+A32SP1FM DLL ........... Sound Blaster Pro (YM3812) XMIDI sound driver DLL
+A32SP2FM DLL ........... Sound Blaster Pro (OPL-3) XMIDI sound driver DLL
+A32SPKR  DLL ........... IBM PC internal speaker XMIDI sound driver DLL
+A32TANDY DLL ........... Tandy 3-voice internal speaker XMIDI sound driver DLL
+MIX32    EXE ........... Sample program: plays simultaneous XMIDI sequences 
+STP32    EXE ........... Sample program: plays raw 22 kHz. stereo samples
+VP32     EXE ........... Sample program: plays Creative Labs .VOC files
+XP32     EXE ........... Sample program: plays XMIDI sequences
+AIL32    OBJ ........... Linkable API (Process Services) object module
+
+                         ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+                         ³ Addenda to documentation ³
+                         ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+V1.00 of 29-Nov-93
+------------------
+
+Documentation for the 32-bit functions may be found in V2.14 and later 
+editions of the AIL manual.  If you have not yet upgraded to V2.14, contact
+Miles Design for information on downloading the current base DOS version from
+the BBS.
+
+V1.01 of 1-May-93
+-----------------
+
+The new driver A32MT32S.DLL may be used to support Roland MIDI synthesizers
+connected to the Sound Blaster's built-in MIDI port.  We do not recommend 
+this capability be used during PCM speech/sound effects playback, as the
+Sound Blaster exhibits severe noise artifacts when MIDI data is transmitted
+during PCM playback.
+
+Due to user demand, AIL/32 has been made fully compatible with the following 
+development environments:
+
+  * Watcom C/C++ with Rational Systems DOS/4GW
+  * Watcom C/C++ with Flashtek X32
+  * Zortech C++ with Zortech DOSX
+  * Zortech C++ with Flashtek X32
+
+The old makefile AIL32.MAK has been replaced with the following three files:
+
+A32WF    MAK ........... Sample Microsoft makefile for Watcom/Flashtek build
+A32WR    MAK ........... Sample Microsoft makefile for Watcom/Rational build
+A32ZF    MAK ........... Sample Microsoft makefile for Zortech/Flashtek build
+
+Please note that the Watcom linker must be used to rebuild the driver DLLs, 
+even if you are building the Zortech-compatible version.  For the convenience
+of Zortech-only users, the drivers and programs on this disk are pre-built
+for Zortech/Flashtek compatibility.
+
+                                *** WARNING ***
+
+Watcom/Rational and Watcom/Flashtek users MUST execute a MSMAKE A32WR.MAK
+or MSMAKE A32WF.MAK command to rebuild the programs before attempting to
+link with any code in this release!  This requires the Watcom V9.X linker and
+MASM v6.X.  Be sure to force a complete rebuild by deleting all .OBJ, .DLL,
+and .EXE files before starting the make process.
+
+For now, users of Watcom C++ 9.5 (Limited Distribution version) must change
+the references to 'format os2 dll' in their makefiles to 'format os2 lx'
+before attempting to build the drivers.  Ignore any warning messages during
+the link process.
+
+Regardless of which compiler is in use, be sure to disable stack checking for
+all modules which contain either XMIDI or timer callback functions.  AIL/32
+now switches to its own stack at interrupt time, which will cause stack
+overflow errors if stack checking is not turned off.
+
+V1.02 of 17-Jun-93
+------------------
+
+In the process of adding Flashtek compatibility to the V1.01 release, 
+Pro Audio Spectrum support was inadvertently disabled.  This maintenance
+release restores Pro Audio Spectrum compatibility.
+
+The makefiles have been modified to build the driver DLLs correctly under
+Watcom C++/32 V9.5.
+
+V1.03 of 3-Aug-93
+-----------------
+
+For the convenience of Watcom users, separate directories now contain versions
+of the drivers, examples, and linkable API module for each of the compiler/
+DOS extender combinations supported by AIL/32.  These are:
+
+\WR: Watcom/Rational DOS/4GW
+\WF: Watcom/Flashtek
+\ZF: Zortech/Flashtek
+
+It is no longer necessary to rebuild the drivers prior to use, as was the case
+in earlier versions.
+
+MASM version 6.1 and 6.1a cannot be used to assemble previous versions of the
+AIL/32 API or driver set, due to their inability to correctly assemble code 
+containing some varieties of the LEA instruction.  This release of AIL/32
+has been modified to avoid the use of the LEA instruction, and should assemble
+correctly under MASM 6.1 as well as 6.0.  As MASM 6.1 appears to have many 
+other problems, we recommend the use of MASM 6.00B for 32-bit assembly 
+language development with AIL/32.
+
+AIL/32's timer server now enables interrupts immediately upon gaining control
+during a timer-tick interrupt, to improve reliability in environments where
+lower-priority interrupts (serial, etc.) must be serviced frequently.  Set
+AIL32.ASM's EARLY_EOI option to FALSE if this causes problems for your
+application.
+
+Interrupts from sound cards with IRQ settings greater than 8 are not passed 
+from real to protected mode by the DOS/4GW DOS extender.  Therefore,
+"dropouts" may be noticed when playing .VOC files with the \WR\VP32 program 
+on Pro Audio Spectrum (and other) cards, because launching a DOS shell places
+the system in real mode.  This behavior is normal and will not affect your
+application unless digitized sound effects are played while performing
+frequent real-mode DOS or BIOS accesses.  Note that this is a limitation of
+the DOS/4GW product; the FlashTek versions of AIL/32 are not susceptible to 
+this problem.
+
+V1.04 of 24-Sep-93
+------------------
+
+DMASND32.ASM now contains two new options, CHECK_ISR and ALWAYS_ACK_IRQ.
+CHECK_ISR, when TRUE, implements an alternate method for rejecting spurious
+"noise" IRQ 7 interrupts.  The new technique may prove more reliable on many
+systems than the old method of reading the DMA controller word count register.
+
+Frequently, stopping Sound Blaster digitized sound playback before the 
+sample finishes playing will result in unexpected end-of-DMA interrupts 
+after sound output is halted.  This can cause long delays when starting
+future sound effects, due to I/O port timeouts.  ALWAYS_ACK_IRQ, when TRUE,
+causes AIL/32 to send an "interrupt acknowledged" signal to the Sound Blaster
+prior to every I/O port write operation.  This modification has been tested
+thoroughly as part of Origin's Privateer(TM) beta test effort, but since it
+is an empirical workaround for undocumented hardware behavior, we still 
+consider it safer to refrain from stopping PCM sound effects in progress
+whenever possible.
+
+Please note that AIL/32 does not support the Rational Systems DOS/4GW DOS
+extender's V1.9 release, as shipped with Watcom's C++/386 9.5 product.  This
+release of DOS/4GW contains serious initialization and interrupt-handling
+bugs, and will not work reliably on many systems, with or without AIL/32.
+Rational's DOS/4GW Professional (V1.93) has been tested with AIL/32 with no
+problems, as has the older V1.8 release.
+
+V1.05 of 19-Nov-93
+------------------
+
+AIL/32 now supports the MetaWare High C/C++ / Phar Lap 386|DOS Extender
+development environment.  A new subdirectory, \MP, has been added for the
+benefit of MetaWare/Phar Lap users.  Please note that it is still necessary
+to use the Watcom WLINK linker in the event the driver .DLL files need to be
+modified or rebuilt.
+
+The Watcom/Flashtek assembly option has been temporarily dropped from the
+library, due to incompatibilities between the Watcom 9.5 tools and the
+current FlashTek X32 DOS extender.  FlashTek is expected to release a new
+version of their extender and debugger package in the near future, which
+should enable us to restore support for this combination.
+
+The option DETECT_SBPRO has been added to DMASND32.ASM, with a default value
+of FALSE.  This addresses occasional problems reported during detection of
+Sound Blaster Pro cards.  When FALSE, DMASND32 does not attempt to read 
+values from the SBPro's "mixer" chip.
+
+ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+Copyright (C) 1991-1993 Miles Design, Inc.                All rights reserved
+6702 Cat Creek Trail 
+Austin, TX 78731
+
+(512) 345-2642               FAX (512) 346-9596            BBS (512) 454-9990
+ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+
+

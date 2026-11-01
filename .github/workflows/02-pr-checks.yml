@@ -4,21 +4,96 @@ on:
     branches:
       - main
 jobs:
-  build:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+      - name: shellcheck shell scripts
+        run: |
+          shellcheck scripts/build-in-container.sh
+          shellcheck scripts/build-release-artifacts.sh
+          shellcheck test/run_cicd_dos.sh
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/volkertb/debian-djgpp:v0.2
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
       - name: Enforce Conventional Commits
         uses: webiny/action-conventional-commits@v1.3.0
-      - name: Install DJGPP
-        run: |
-          wget -P /tmp https://github.com/andrewwutw/build-djgpp/releases/download/v3.4/djgpp-linux64-gcc1220.tar.bz2
-          echo "8464f17017d6ab1b2bb2df4ed82357b5bf692e6e2b7fee37e315638f3d505f00  /tmp/djgpp-linux64-gcc1220.tar.bz2" | shasum -a 256 --check
-          tar -xf /tmp/djgpp-linux64-gcc1220.tar.bz2 -C /opt
-          rm /tmp/djgpp-linux64-gcc1220.tar.bz2
       - name: Build project
         run: |
-          . /opt/djgpp/setenv
-          make
-          i586-pc-msdosdjgpp-objdump -x output/sbemu.exe
+          make CC=gcc CXX=g++
+          objdump -x output/sbemu.exe
+      - name: 'Upload test files'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbemu-test-files
+          path: |
+            output/sbemu.exe
+            test/*
+          retention-days: 1
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/volkertb/cicd-qemu-dos-docker:v1.8
+      options: --device=/dev/kvm --cpus 1
+    steps:
+      - name: 'Download test files'
+        uses: actions/download-artifact@v4
+        with:
+          name: sbemu-test-files
+      - name: 'Download dependencies'
+        run: |
+          # HDPMI32i is needed for emulation to work with Protected Mode games
+          wget https://github.com/crazii/HX/releases/download/v0.1-beta3/HDPMI32i.zip
+          echo "4b7fc576d6c5dfd3fe7290fd1d0c0229118d01a55c8325d487452c2d6e0c3bbd  HDPMI32i.zip" | sha256sum -c
+          unzip HDPMI32i.zip
+          # Jemm is needed for emulation to work with Real Mode games
+          wget https://github.com/Baron-von-Riedesel/Jemm/releases/download/v5.85pre1/JemmB_v585.zip
+          echo "8edc9653e58ae172584f5065b0d6111f1df75998008e46170d2767bfda8236b3  JemmB_v585.zip" | sha256sum -c
+          unzip JemmB_v585.zip
+      - name: Test executable
+        run: |
+          ls -lh /dev/kvm
+          ls -lh .
+          touch CICD_DOS.BAT
+          echo "JEMM386.EXE LOAD" >> CICD_DOS.BAT
+          echo "JLOAD QPIEMU.DLL" >> CICD_DOS.BAT
+          echo "HDPMI32i.EXE" >> CICD_DOS.BAT
+          echo "output\\sbemu" >> CICD_DOS.BAT
+          echo "cd test" >> CICD_DOS.BAT
+          #echo "ren dos32a.exe dos4gw.exe" >> CICD_DOS.BAT
+          echo "ECHO Current BLASTER variable: %BLASTER%" >> CICD_DOS.BAT
+          #echo "stp32 dtmf_src.wav a32sbdg.dll" >> CICD_DOS.BAT
+          echo "vocplay dtmf_src.voc sbdig.adv" >> CICD_DOS.BAT
+          echo "ECHO %ERRORLEVEL% > exitcode.txt" >> CICD_DOS.BAT
+          echo "ECHO Result exit code of test command:" >> CICD_DOS.BAT
+          echo "type exitcode.txt" >> CICD_DOS.BAT
+          cp -f test/run_cicd_dos.sh /usr/local/bin/
+          chmod +x /usr/local/bin/run_cicd_dos.sh
+          /usr/local/bin/run_cicd_dos.sh
+          # Propagate error code from DOS test or exit with error code 254 if the exit code file is missing
+          dos_exit_code=$(cat test/exitcode.txt || echo 254)
+          if [ "$dos_exit_code" -ne "0" ]; then exit $dos_exit_code; fi
+          wget -P /tmp https://aluigi.altervista.org/mytoolz/dtmf2num.zip
+          echo "187d43e4d57535da3386eee3accdbcd09526378e3258db7f1bd5afccd0c64360  /tmp/dtmf2num.zip" | sha256sum -c
+          mkdir /tmp/dtmf2num
+          unzip /tmp/dtmf2num.zip -d /tmp/dtmf2num
+          apk --no-cache add build-base
+          make -C /tmp/dtmf2num
+          install /tmp/dtmf2num/dtmf2num /usr/local/bin
+          # First decode DTMF tones from the source file that was played back, for verification:
+          dtmf2num test/dtmf_src.wav
+          # Now decode DTMF tones from the output dump file from the emulated sound device in QEMU VM:
+          dtmf2num ac97_out.wav
+      - name: Upload WAV dumps from QEMU as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wav-dump-artifacts
+          path: ./*_out.wav
+          if-no-files-found: error # 'warn' or 'ignore' are also available, defaults to `warn`
+          retention-days: 3
