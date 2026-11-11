@@ -756,7 +756,7 @@ static struct ac97_initial_values ac97_initial_values[] = {
     { AC97_MASTER_VOL_MONO,   0x0000 }, // 0x0000
     { AC97_PCBEEP_VOL,        0x0000 }, // 0x0000
     { AC97_PHONE_VOL,         0x0008 }, // 0x0008
-    { AC97_MIC_VOL,           0x0505 }, // 0x8000
+    { AC97_MIC_VOL,           0x8000 }, // 0x8000
     { AC97_LINEIN_VOL,        0x0505 }, // 0x8808
     { AC97_CD_VOL,            0x0505 }, // 0x8808
     { AC97_VIDEO_VOL,         0x0000 }, // 0x8808
@@ -1259,7 +1259,7 @@ try_724:
   ac97_reset(card);
   //YMF_printf("reset AC97\n");
 
-#if 1
+#if 0
   // Line-in -> ADC -> SPDIF-out ???
   snd_ymfpci_writel(card, YDSXGR_SPDIFLOOPVOL, 0x3fff3fff);
   snd_ymfpci_writel(card, YDSXGR_NATIVEADCINVOL, 0x3fff3fff);
