@@ -1450,7 +1450,7 @@ static void MAIN_Interrupt()
             count = min(count, max(1,(DMA_Count)/samplesize/channels)); //max for stereo initial 1 byte
             count = min(count, max(1,(SB_Bytes-SB_Pos)/samplesize/channels)); //max for stereo initial 1 byte. 1/2channel = 0, make it 1
             if(SBEMU_GetBits()<8) //ADPCM 8bit
-                count = max(1, count / (9 / SBEMU_GetBits()));
+                count = max(2, count / (9 / SBEMU_GetBits())); //beginning of ADPCM consume 1B. 1 will cause in cv_bits_n_to_m.
             _LOG("samples:%d %d %d, %d %d, %d %d\n", samples, pos+count, count, DMA_Count, DMA_Index, SB_Bytes, SB_Pos);
             int bytes = count * samplesize * channels;
 
