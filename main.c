@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <dpmi.h>
 #include <ctype.h>
 #include <conio.h>
 #include <stdbool.h>
@@ -683,6 +684,28 @@ static void MAIN_Cleanup()
     IRQGUARD_Uninstall();
 }
 
+//Everything SBEMU leaves in conventional memory is allocated at the TOP (DOS "last
+//fit" strategy during start-up), so the free memory below stays in one piece for
+//games. The previous strategy is restored before going resident or on exit.
+static int MAIN_OldStrat = -1;
+static void MAIN_RestoreStrategy(void)
+{
+    if(MAIN_OldStrat >= 0)
+    {
+        __dpmi_regs r; memset(&r, 0, sizeof r);
+        r.x.ax = 0x5801; r.x.bx = (unsigned short)MAIN_OldStrat; __dpmi_int(0x21, &r);
+        MAIN_OldStrat = -1;
+    }
+}
+static void MAIN_LastFitStrategy(void)
+{
+    __dpmi_regs r; memset(&r, 0, sizeof r);
+    r.x.ax = 0x5800; __dpmi_int(0x21, &r);
+    if(r.x.flags & 1) return;
+    MAIN_OldStrat = r.x.ax;
+    memset(&r, 0, sizeof r); r.x.ax = 0x5801; r.x.bx = 0x0002; __dpmi_int(0x21, &r);
+    atexit(MAIN_RestoreStrategy);
+}
 int main(int argc, char* argv[])
 {
     MAIN_CPrintf(CYAN, "\r\n%s ", PROGNAME);
@@ -866,6 +889,7 @@ int main(int argc, char* argv[])
         MAIN_HDPMI_Present = hasHDPMI;
     }
     MAIN_Options[OPT_OPL].value = !!MAIN_Options[OPT_OPL].value;
+    MAIN_LastFitStrategy();
     if(!_8087) //no FPU (e.g. DM&P Vortex86SX): OPL3, soundfont and PC speaker emulation use floating point
     {
         if(MAIN_Options[OPT_OPL].value)
@@ -1217,6 +1241,7 @@ int main(int argc, char* argv[])
     MAIN_Print_Enabled_Newline(MAIN_PCSPEAKER_Installed);
 #endif // SBEMU_PCSPEAKER
 
+    MAIN_RestoreStrategy();
     MAIN_TSRed = TRUE;
     if(!PM_ISR || !RM_ISR || !TSR_ISR
     || !QEMMInstalledVDMA || !QEMMInstalledVIRQ || !QEMMInstalledSB
