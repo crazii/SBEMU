@@ -694,6 +694,20 @@ static void MAIN_Cleanup()
     #endif
 }
 
+//Left/right swap of the digital sound. SBEMU swaps by default (SBEMU_SWAP_STEREO).
+//With the USB Audio driver a left-channel test tone came out on the right with the
+//swap, so the swap is off for that card; SET USBPCM=W turns it on again.
+static int MAIN_SwapLR = SBEMU_SWAP_STEREO;
+static void MAIN_InitSwap(const char* cardname)
+{
+    const char *e = getenv("USBPCM");
+    MAIN_SwapLR = SBEMU_SWAP_STEREO;
+    if(cardname && strncmp(cardname, "USB Audio", 9) == 0)
+    {
+        MAIN_SwapLR = 0;
+        if(e) for(; *e; e++) if(*e == 'W' || *e == 'w') MAIN_SwapLR = 1;
+    }
+}
 int main(int argc, char* argv[])
 {
     MAIN_CPrintf(CYAN, "\r\n%s ", PROGNAME);
@@ -1078,6 +1092,7 @@ int main(int argc, char* argv[])
     {
       char hwdesc[64];
       hwdesc[0] = '\0';
+      MAIN_InitSwap(aui.pcm ? aui.card_handler->shortname : NULL);
       if (aui.pcm)
         sprintf(hwdesc, "(%d:%s)", aui.card_test_index, aui.card_handler->shortname);
       printf("SB %s%s emulation at address %x, IRQ %x, DMA %x: ",
@@ -1593,9 +1608,7 @@ static void MAIN_Interrupt()
                 // https://stackoverflow.com/questions/12089662/mixing-16-bit-linear-pcm-streams-and-avoiding-clipping-overflow
                 int la = (int)(MAIN_PCM[i] * voicevol/256) + 32768;
                 int ra = (int)(MAIN_PCM[i+1] * voicevol/256) + 32768;
-                #if SBEMU_SWAP_STEREO
-                {int x = la; la = ra; ra = x;}
-                #endif
+                if(MAIN_SwapLR) {int x = la; la = ra; ra = x;}
                 int lb = (int)((MAIN_OPLPCM[i]+MAIN_OPLPCM[i]*SBEMU_OPL_VOLUME_AMPLICATION/2) * midivol/256) + 32768;
                 int rb = (int)((MAIN_OPLPCM[i+1]+MAIN_OPLPCM[i+1]*SBEMU_OPL_VOLUME_AMPLICATION/2) * midivol/256) + 32768;
                 int l = (la < 32768 || lb < 32768) ? (la*lb/32768) : ((la+lb)*2 - la*lb/32768 - 65536);
@@ -1609,9 +1622,7 @@ static void MAIN_Interrupt()
 
                 int la = (int)(MAIN_PCM[i] * voicevol/256); //SFX PCM
                 int ra = (int)(MAIN_PCM[i+1] * voicevol/256);
-                #if SBEMU_SWAP_STEREO
-                /*if(channels == 2)*/ {int x = la; la = ra; ra = x;}
-                #endif
+                if(MAIN_SwapLR) {int x = la; la = ra; ra = x;}
 
                 // Fix (85fc657 regression): use MAIN_OPLPCM for both terms.
                 // Previously the linear mix used MAIN_PCM in the second term, which double-counted
@@ -1650,9 +1661,7 @@ static void MAIN_Interrupt()
         {
             int16_t l = MAIN_PCM[i] * voicevol/256 * vol/256;
             int16_t r = MAIN_PCM[i+1] * voicevol/256 * vol/256;
-            #if SBEMU_SWAP_STEREO
-            {int x = l; l = r; r = x;}
-            #endif
+            if(MAIN_SwapLR) {int x = l; l = r; r = x;}
             MAIN_PCM[i] = l*SBEMU_SFX_RATIO;
             MAIN_PCM[i+1] = r*SBEMU_SFX_RATIO;
         }
