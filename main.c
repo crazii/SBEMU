@@ -878,6 +878,15 @@ int main(int argc, char* argv[])
         MAIN_HDPMI_Present = hasHDPMI;
     }
     MAIN_Options[OPT_OPL].value = !!MAIN_Options[OPT_OPL].value;
+    if(!_8087) //no FPU (e.g. DM&P Vortex86SX): OPL3, soundfont and PC speaker emulation use floating point
+    {
+        if(MAIN_Options[OPT_OPL].value)
+            MAIN_CPrintf(YELLOW, "No FPU: OPL3 (FM) emulation disabled.\n");
+        MAIN_Options[OPT_OPL].value = 0;
+#if SBEMU_VMPU
+        MAIN_Options[OPT_VMPU_VOICES].value = 0;
+#endif
+    }
 
 #if SBEMU_VMPU
 
@@ -1206,14 +1215,14 @@ int main(int argc, char* argv[])
     // Now that the audio device is running, aui.freq_card is valid for PC Speaker setup.
     // QEMM accepts the whole 3-port table in one call.
     // HDPMI needs two calls because 0x42-0x43 and 0x61 are not contiguous.
-    VPCSPEAKER_Init(aui.freq_card);
+    if(_8087) VPCSPEAKER_Init(aui.freq_card); //uses floating point
 
-    if(enableRM)
+    if(enableRM && _8087)
     {
         MAIN_PCSPEAKER_Installed = QEMM_Install_IOPortTrap(MAIN_PCSPEAKER_IODT, 3, &MAIN_PCSPEAKER_IOPTRM);
     }
 
-    if(enablePM)
+    if(enablePM && _8087)
     {
         HDPMIPT_Install_IOPortTrap(0x42, 0x43, MAIN_PCSPEAKER_IODT,     2, &MAIN_PCSPEAKER_IOPTPM);
         HDPMIPT_Install_IOPortTrap(0x61, 0x61, MAIN_PCSPEAKER_IODT + 2, 1, &MAIN_PCSPEAKER_IOPT_61);
@@ -1982,7 +1991,7 @@ static void MAIN_TSR_Interrupt()
             CLIS();
             char* fpustate = (char*)alloca(108);
             #ifdef DJGPP //make vscode happy
-            asm("fsave %0\n\t finit":"=m"(*fpustate));
+            if(_8087) asm("fsave %0\n\t finit":"=m"(*fpustate));
             #endif
             int irq = aui.card_irq;
             PIC_MaskIRQ(irq);
@@ -2037,7 +2046,7 @@ static void MAIN_TSR_Interrupt()
                 AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, MAIN_Options[OPT_VOL].value);
             }
             #ifdef DJGPP //make vscode happy
-            asm("frstor %0" ::"m"(*fpustate));
+            if(_8087) asm("frstor %0" ::"m"(*fpustate));
             #endif
             PIC_UnmaskIRQ(irq);
 
