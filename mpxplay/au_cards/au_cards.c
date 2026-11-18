@@ -51,6 +51,7 @@ static void aucards_interrupt_decoder(void);
 static void aucards_get_cpuusage_int08(void);
 
 #ifdef __DOS__
+extern one_sndcard_info USBPCM_sndcard_info;
 extern one_sndcard_info CS5535_sndcard_info;
 extern one_sndcard_info ES1371_sndcard_info;
 extern one_sndcard_info ES1370_sndcard_info;
@@ -99,6 +100,9 @@ extern one_sndcard_info NUL_sndcard_info;
 #endif
 
 static one_sndcard_info *all_sndcard_info[]={
+#ifdef AU_CARDS_LINK_USBPCM
+ &USBPCM_sndcard_info,   // only active when the USBPCM environment variable is set
+#endif
 #ifdef AU_CARDS_LINK_YMF
  &YMFSB_sndcard_info,
 #endif
