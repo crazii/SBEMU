@@ -934,7 +934,7 @@ void AU_setmixer_one(struct mpxplay_audioout_info_s *aui,unsigned int mixchannum
   if((subchi->submixch_register>AU_MIXERCHAN_MAX_REGISTER) || !subchi->submixch_max || (subchi->submixch_shift>AU_MIXERCHAN_MAX_BITS)) // invalid subchannel infos
    continue;
 
-  newchval=(long)(((float)newpercentval*(float)subchi->submixch_max+((float)((maxpercentval >> 1) - 1)))/(float)maxpercentval);   // percent to chval (rounding up)
+  newchval=(long)(((long)newpercentval*(long)subchi->submixch_max+((maxpercentval >> 1) - 1))/maxpercentval);   // percent to chval (rounding up), integer only (works without an FPU)
   if(newchval>subchi->submixch_max)
    newchval=subchi->submixch_max;
   if(subchi->submixch_infobits&SUBMIXCH_INFOBIT_REVERSEDVALUE)   // reverse value if required
