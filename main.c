@@ -1374,6 +1374,11 @@ static void MAIN_InterruptRM()
     MAIN_InINT &= ~MAIN_ININT_RM;
 }
 
+//SB16 mixer volume as on the real card: 5-bit register, 2 dB per step, 31 = 0 dB,
+//0 = mute. Q12 gains (4096 = 1.0), integer only.
+static const uint16_t MAIN_SB16Gain[32] = {0,4,5,6,8,10,13,16,21,26,33,41,52,65,82,103,130,163,205,258,325,410,516,649,817,1029,1295,1631,2053,2584,3254,4096};
+static int32_t MAIN_Gain5(int reg) { return MAIN_SB16Gain[(SBEMU_GetMixerReg(reg) >> 3) & 31]; }
+
 static void MAIN_Interrupt()
 {
     if(!(aui.card_infobits&AUINFOS_CARDINFOBIT_PLAYING))
@@ -1657,14 +1662,33 @@ static void MAIN_Interrupt()
             MAIN_PCM[i] = (MAIN_PCM[i] + MAIN_PCM[i]*SBEMU_OPL_VOLUME_AMPLICATION/2) * SBEMU_OPL_RATIO * midivol/256 * vol/256;
     }
     else if(digital)
+    {
+        //Per-channel volume; SB16 uses the 5-bit registers with 2 dB steps like the
+        //real CT1745 mixer. Without OPL emulation there is nothing to mix with, so the
+        //SFX/OPL headroom ratio is not applied.
+        int32_t gl, gr, vl, vr;
+        int full = !MAIN_Options[OPT_OPL].value;
+        if(MAIN_Options[OPT_TYPE].value == 6)
+        {
+            gl = MAIN_Gain5(SBEMU_MIXRREG_MASTERL); gr = MAIN_Gain5(SBEMU_MIXRREG_MASTERR);
+            vl = MAIN_Gain5(SBEMU_MIXRREG_VOICEL); vr = MAIN_Gain5(SBEMU_MIXRREG_VOICER);
+        }
+        else
+        {
+            gl = gr = vol * 16; vl = vr = voicevol * 16;
+        }
         for(int i = 0; i < samples*2; i+=2)
         {
-            int16_t l = MAIN_PCM[i] * voicevol/256 * vol/256;
-            int16_t r = MAIN_PCM[i+1] * voicevol/256 * vol/256;
-            if(MAIN_SwapLR) {int x = l; l = r; r = x;}
-            MAIN_PCM[i] = l*SBEMU_SFX_RATIO;
-            MAIN_PCM[i+1] = r*SBEMU_SFX_RATIO;
+            int32_t l = ((int32_t)MAIN_PCM[i] * vl >> 12) * gl >> 12;
+            int32_t r = ((int32_t)MAIN_PCM[i+1] * vr >> 12) * gr >> 12;
+            if(MAIN_SwapLR) {int32_t x = l; l = r; r = x;}
+            if(!full) { l = l*SBEMU_SFX_RATIO; r = r*SBEMU_SFX_RATIO; }
+            if(l > 32767) l = 32767; else if(l < -32768) l = -32768;
+            if(r > 32767) r = 32767; else if(r < -32768) r = -32768;
+            MAIN_PCM[i] = (int16_t)l;
+            MAIN_PCM[i+1] = (int16_t)r;
         }
+    }
 
 #if SBEMU_VMPU
     if(vmpu_active)
