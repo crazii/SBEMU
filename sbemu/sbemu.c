@@ -184,23 +184,6 @@ void SBEMU_Mixer_Write(uint16_t port, uint8_t value)
     }
     if(SBEMU_DSPVER >= 0x0400) //SB16
     {
-        //like the real CT1745, writes to the SB Pro compatible registers also set
-        //the 5-bit SB16 registers (4-bit value n -> 5-bit (n<<1)|1, stored in bits 7..3)
-        {
-            int base5 = -1;
-            switch(SBEMU_MixerRegIndex)
-            {
-                case SBEMU_MIXERREG_MASTERSTEREO: base5 = SBEMU_MIXRREG_MASTERL; break;
-                case SBEMU_MIXERREG_VOICESTEREO: base5 = SBEMU_MIXRREG_VOICEL; break;
-                case SBEMU_MIXERREG_MIDISTEREO: base5 = SBEMU_MIXRREG_MIDIL; break;
-                case SBEMU_MIXERREG_CDSTEREO: base5 = SBEMU_MIXRREG_CDL; break;
-            }
-            if(base5 >= 0)
-            {
-                SBEMU_MixerRegs[base5] = (uint8_t)(((((value >> 4) & 0xF) << 1) | 1) << 3);
-                SBEMU_MixerRegs[base5+1] = (uint8_t)((((value & 0xF) << 1) | 1) << 3);
-            }
-        }
         if(SBEMU_MixerRegIndex >= SBEMU_MIXRREG_MASTERL && SBEMU_MixerRegIndex <= SBEMU_MIXRREG_CDR)
         {
             //5bits, drop 1 bit
