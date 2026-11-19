@@ -1684,13 +1684,15 @@ void __NAKED MAIN_UinstallTSR_RM()
         _ASM(mov es, bx)
         _ASM(mov ah, 0x50)
         _ASM(int 0x21) //set psp, bx
+
         _ASM(pushf)
         _ASM(pop cx)
-        _ASM(cli)
+        _ASM(cli) //cli for changing stack
         _ASM(mov ss, ax)
         _ASM(mov sp, [256+0])
         _ASM(push cx)
         _ASM(popf)
+
         _ASM(mov ax, [256+2])
         _ASM(mov bx, 256)
         _ASM(int 0x2D) //MAIN_TSR_INT
@@ -1707,7 +1709,10 @@ void MAIN_UninstallTSR(uint32_t intid)
     uint32_t code_size = (uintptr_t)&MAIN_UinstallTSR_RM_End - (uintptr_t)&MAIN_UinstallTSR_RM;
     uint32_t data_size = 4;
     uint32_t stack_size = 512;
-    uint32_t total_size = max(1024, psp_size + code_size + data_size + stack_size); //min 1k needed for djgpp termination
+    //on exit, djgpp will use _stubinfo->ds_selector as stack with sp=0x400 (1K), see ___exit in crt0.S in djggpp source.
+    //_stubinfo->ds_selector's base will be changed to dosmem+256 in int 2D handler function 04 (skipped psp, code discarded after calling int2D)
+    //so the min safe size is 1K+256
+    uint32_t total_size = max(1024+256, psp_size + code_size + data_size + stack_size);
 
     uint32_t seg = DPMI_DOSMalloc(total_size>>4);
     if(!seg)
@@ -1972,8 +1977,9 @@ static void MAIN_TSR_Interrupt()
                     free((void*)MAIN_Options[i].value);
                 MAIN_Options[i].value = (uintptr_t)str;
                 MAIN_Options[i].setcmd |= MAIN_SETCMD_STRCPY|MAIN_SETCMD_CHGD;
-            }
+            }//for
 
+            CLIS();
             char* fpustate = (char*)alloca(108);
             #ifdef DJGPP //make vscode happy
             asm("fsave %0\n\t finit":"=m"(*fpustate));
@@ -2200,6 +2206,7 @@ static void MAIN_TSR_Interrupt()
             //cleanup changed states for all
             for(int i = 0; i < countof(MAIN_Options); ++i)
                 MAIN_Options[i].setcmd &= ~MAIN_SETCMD_CHGD;
+            STIL();
         }//case 2
         break;
         case 0x3: //unload check
@@ -2279,13 +2286,14 @@ static void MAIN_TSR_Interrupt()
             __dpmi_set_segment_base_address(_stubinfo->cs_selector, (MAIN_TSRREG.w.ds<<4) + MAIN_TSRREG.w.bx);
             
             //we are now on a int stack allcoated by go32, using __djgpp_ds_alias.
-            //in exit __djgpp_ds_alias will be freed. store to original ds.
+            //in exit __djgpp_ds_alias will be freed. restore to original ds.
             __asm__ __volatile__(
                 "movzx %0, %%eax \n\t"
                 "mov %%eax, %%ds \n\t"
                 "mov %%eax, %%es \n\t"
                 "mov %%eax, %%ss"
                 ::"m"(__djgpp_ds)
+                :"eax"
             );
 
             STIL();
