@@ -34,6 +34,13 @@ Source code exists, but "doesn't work yet":
  * ESS Allegro-1 (ES1988S/ES1989S)
  * Trident 4D Wave
 
+USB Audio (experimental), by Lukasz Bolesta with the help of Claude:
+ * `sc_usbpcm`: USB Audio Class 1.0 devices (48 kHz 16-bit stereo output) on an
+   OHCI USB controller, e.g. Behringer UCA202 (TI PCM2902) and cheap USB dongles.
+   Tested on the eBOX-2300SX (DM&P Vortex86SX). The driver is used only when the
+   `USBPCM` environment variable is set (e.g. `SET USBPCM=L32`), because it takes
+   over a USB controller from the BIOS. UHCI/EHCI/xHCI are not supported.
+
 ## Emulated modes
 
  * 8-bit and 16-bit DMA (mono, stereo, high-speed)
@@ -223,6 +230,13 @@ Source code exists, but "doesn't work yet":
  * OXYGEN(CMI8788)
  * ESS Allegro-1 (ES1988S/ES1989S)
  * Trident 4D Wave
+
+USB Audio (experimental), by Lukasz Bolesta with the help of Claude:
+ * `sc_usbpcm`: USB Audio Class 1.0 devices (48 kHz 16-bit stereo output) on an
+   OHCI USB controller, e.g. Behringer UCA202 (TI PCM2902) and cheap USB dongles.
+   Tested on the eBOX-2300SX (DM&P Vortex86SX). The driver is used only when the
+   `USBPCM` environment variable is set (e.g. `SET USBPCM=L32`), because it takes
+   over a USB controller from the BIOS. UHCI/EHCI/xHCI are not supported.
 
 ## Emulated modes
 
