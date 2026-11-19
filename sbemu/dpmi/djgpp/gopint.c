@@ -24,7 +24,73 @@
 /**
  * Return wrapper cs/offset for _go32_dpmi_chain_protected_mode_interrupt_vector,
  * new line 194. by Crazii 02/04/2024
+ * 
  */
+
+ /*
+ * gopint always restore context which is only for hwint but not suitable for swint,
+ * add _go32_get_context/_go32_set_context to change context for swints.
+ * by Crazii 11/18/2026
+ * the two function have no type info, because I don't want to change the public header <dpmi.h>, a _go32_context is defined as follows:
+typedef struct __go32_context
+{
+    union
+    {
+        struct
+        {
+            uint16_t di, hdi;
+            uint16_t si, hsi;
+            uint16_t bp, hbp;
+            uint16_t _reservedl, _reservedh;
+            uint16_t bx, hbx;
+            uint16_t dx, hdx;
+            uint16_t cx, hcx;
+            uint16_t ax, hax;
+        }w;
+
+        struct
+        {
+            uint32_t edi;
+            uint32_t esi;
+            uint32_t ebp;
+            uint32_t _reserved;
+            uint32_t ebx;
+            uint32_t edx;
+            uint32_t ecx;
+            uint32_t eax;
+        }d;
+
+        struct
+        {
+            uint8_t edi4b[4];
+            uint8_t esi4b[4];
+            uint8_t ebp4b[4];
+            uint8_t _reserved4b[4];
+            uint8_t bl, bh, eb2, eb3;
+            uint8_t dl, dh, ed2, ed3;
+            uint8_t cl, ch, ec2, ec3;
+            uint8_t al, ah, ea2, ea3;
+        }h;
+    };
+
+    uint32_t gs;
+    uint32_t fs;
+    uint32_t es;
+    uint32_t ds;
+    //iret
+    uint32_t eip;
+    uint32_t cs;
+    uint32_t eflags;
+}_go32_context;
+
+which matches the stack of wrapper_intcommon with iret frame.
+
+also, the wrapped function can be declared as (__cdecl call):
+void int_handler(unsigned long esp, usnsigned long ss);
+where esp & ss is the pushed ss,esp in warpper_intcommon:
+/* 37 */ //0x52,				/*     push edx             	*/
+/* 38 */ //0x51,				/*     push ecx             	*/
+/*with the ss, and esp, the _go32context can be access via _go32_get_context/_go32_set_context */
 
 #define	STACK_WAS_MALLOCED	(1 << 0)
 
@@ -248,4 +314,35 @@ int _go32_dpmi_free_iret_wrapper(_go32_dpmi_seginfo *info)
       free(stack);
   free(wrapper);
   return 0;
+}
+
+void _farsetsel(unsigned short selector);
+unsigned short _fargetsel(void);
+void _farnspokeb(unsigned long offset, unsigned char value);
+void _farnspokew(unsigned long offset, unsigned short value);
+void _farnspokel(unsigned long offset, unsigned long value);
+unsigned char _farnspeekb(unsigned long offset);
+unsigned short _farnspeekw(unsigned long offset);
+unsigned long _farnspeekl(unsigned long offset);
+
+void _go32_get_context(unsigned long ss, unsigned long esp, unsigned long* buff, unsigned long longs)
+{
+  unsigned short old_sel = _fargetsel();
+  _farsetsel(ss);
+
+  for(int i = 0; i < longs;  ++i)
+    buff[i] = _farnspeekl(esp + i*4);
+
+  _farsetsel(old_sel);
+}
+
+void _go32_set_context(unsigned long ss, unsigned long esp, unsigned long* buff, unsigned long longs)
+{
+  unsigned short old_sel = _fargetsel();
+  _farsetsel(ss);
+
+  for(int i = 0; i < longs;  ++i)
+    _farnspokel(esp + i*4, buff[i]);
+
+  _farsetsel(old_sel);
 }

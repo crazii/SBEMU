@@ -4,6 +4,7 @@
 
 //configs
 #define DPMI_USE_XMS_HEAP 0
+#define DPMI_FULLPM 1 //use int21h 4ch to terminate RM, only keeps PM.
 
 //a DPMI wrapper for different compilers. Borland C++, DJGPP, WatCom etc.
 //the porpose of this file is to hide all __dpmi* or int 31h calls from outside
@@ -78,8 +79,8 @@ typedef struct //old interrupt handler info returned by install isr.
     uint16_t old_cs;
     uint16_t old_rm_offset;
     uint16_t old_rm_cs;
-    uint32_t wrapper_offset;
     uint16_t wrapper_cs;
+    uint32_t wrapper_offset;
     uint8_t n; //INTn
     uint8_t chained;
     uint32_t chainedDOSMem;
@@ -88,6 +89,9 @@ typedef struct //old interrupt handler info returned by install isr.
     uint32_t internal1[8];
     uint32_t internal2[8];
 }DPMI_ISR_HANDLE;
+
+extern uint16_t __djgpp_ds_alias;
+extern uint16_t __djgpp_ds;
 
 #ifdef __cplusplus
 extern "C"
@@ -129,23 +133,88 @@ void* DPMI_L2PTR(uint32_t addr);
 
 //restore interrupt context (all registers except ss:esp and cs:eip), and call int
 #define DPMI_CallProtectedModeINT(n, regs) do {\
-        DPMI_REG r = regs; /*make sure regs on the stack, accessed with ebp, not esi/edi/ebx */\
+        DPMI_REG __r = regs; /*make sure regs on the stack, accessed with ebp, not esi/edi/ebx */\
         asm( \
         "pushal \n\t pushfl \n\t" \
         "push %%ds \n\t push %%es \n\t push %%fs \n\t push %%gs \n\t" \
         \
-        "mov %0, %%eax \n\t mov %1, %%ecx \n\t mov %2, %%edx \n\t mov %3, %%ebx \n\t mov %4, %%esi \n\t mov %5, %%edi \n\t" \
-        "push %6 \n\t pop %%ds \n\t push %7 \n\t pop %%es \n\t push %8 \n\t pop %%fs \n\t push %9 \n\t pop %%gs \n\t" \
+        "mov %12, %%eax \n\t mov %13, %%ecx \n\t mov %14, %%edx \n\t mov %15, %%ebx \n\t mov %16, %%esi \n\t mov %17, %%edi \n\t" \
+        "push %18 \n\t pop %%ds \n\t push %19 \n\t pop %%es \n\t push %20 \n\t pop %%fs \n\t push %21 \n\t pop %%gs \n\t" \
+        "push %%ebp \n\t"\
+        "push %22 \n\t andw $0xFCFF, (%%esp) \n\t popf \n\t push %23 \n\t pop %%ebp \n\t int $"STR(n)" \n\t" /*ebp must be the last since we need read r using ebp*/ \
         \
-        "push %10 \n\t andw $0xFCFF, (%%esp) \n\t popf \n\t push %11 \n\t pop %%ebp \n\t int $"#n" \n\t" /*ebp must be the last since we need read r using ebp*/ \
+        "xchgl %%ebp, (%%esp) \n\t"\
+        \
+        "mov %%eax, %0 \n\t mov %%ecx, %1 \n\t mov %%edx, %2 \n\t mov %%ebx, %3 \n\t mov %%esi, %4 \n\t mov %%edi, %5 \n\t popl %6\n\t"\
+        "pushw %%ds \n\t popw %7 \n\t pushw %%es \n\t popw %8 \n\t pushw %%fs \n\t popw %9 \n\t pushw %%gs \n\t popw %10 \n\t pushfw \n\t popw %11\n\t"\
         \
         "pop %%gs \n\t pop %%fs \n\t pop %%es \n\t pop %%ds \n\t" \
         "popfl \n\t popal \n\t" \
-        ::"m"(r.d.eax),"m"(r.d.ecx),"m"(r.d.edx),"m"(r.d.ebx),"m"(r.d.esi),"m"(r.d.edi), \
-        "m"(r.w.ds),"m"(r.w.es),"m"(r.w.fs),"m"(r.w.gs), \
-        "m"(r.w.flags), "m"(r.d.ebp) \
+        \
+        :"=m"(__r.d.eax),"=m"(__r.d.ecx),"=m"(__r.d.edx),"=m"(__r.d.ebx),"=m"(__r.d.esi),"=m"(__r.d.edi),"=m"(__r.d.ebx), \
+        "=m"(__r.w.ds),"=m"(__r.w.es),"=m"(__r.w.fs),"=m"(__r.w.gs),"=m"(__r.w.flags) \
+        \
+        :"m"(__r.d.eax),"m"(__r.d.ecx),"m"(__r.d.edx),"m"(__r.d.ebx),"m"(__r.d.esi),"m"(__r.d.edi), \
+        "m"(__r.w.ds),"m"(__r.w.es),"m"(__r.w.fs),"m"(__r.w.gs), \
+        "m"(__r.w.flags), "m"(__r.d.ebp) \
+        :"memory"\
         ); \
+        regs = __r; \
 }while(0)
+
+typedef struct __go32_context
+{
+    union
+    {
+        struct
+        {
+            uint16_t di, hdi;
+            uint16_t si, hsi;
+            uint16_t bp, hbp;
+            uint16_t _reservedl, _reservedh;
+            uint16_t bx, hbx;
+            uint16_t dx, hdx;
+            uint16_t cx, hcx;
+            uint16_t ax, hax;
+        }w;
+
+        struct
+        {
+            uint32_t edi;
+            uint32_t esi;
+            uint32_t ebp;
+            uint32_t _reserved;
+            uint32_t ebx;
+            uint32_t edx;
+            uint32_t ecx;
+            uint32_t eax;
+        }d;
+
+        struct
+        {
+            uint8_t edi4b[4];
+            uint8_t esi4b[4];
+            uint8_t ebp4b[4];
+            uint8_t _reserved4b[4];
+            uint8_t bl, bh, eb2, eb3;
+            uint8_t dl, dh, ed2, ed3;
+            uint8_t cl, ch, ec2, ec3;
+            uint8_t al, ah, ea2, ea3;
+        }h;
+    };
+
+    uint32_t gs;
+    uint32_t fs;
+    uint32_t es;
+    uint32_t ds;
+    //iret
+    uint32_t eip;
+    uint32_t cs;
+    uint32_t eflags;
+}_go32_context;
+
+void _go32_get_context(unsigned long ss, unsigned long esp, unsigned long* buff, unsigned long longs);
+void _go32_set_context(unsigned long ss, unsigned long esp, const unsigned long* buff, unsigned long longs);
 
 
 #elif defined(__WC__)
@@ -215,9 +284,10 @@ uint16_t DPMI_CallRealModeIRET(DPMI_REG* reg);
 uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), DPMI_ISR_HANDLE* outputp handle, BOOL chained);
 uint16_t DPMI_InstallRealModeISR(uint8_t i, void(*ISR_RM)(void), DPMI_REG* RMReg, DPMI_ISR_HANDLE* outputp handle, BOOL chained);
 
+BOOL DPMI_CheckUninstallISR(DPMI_ISR_HANDLE* inputp handle);
 uint16_t DPMI_UninstallISR(DPMI_ISR_HANDLE* inputp handle);
 uint32_t DPMI_CallOldISR(DPMI_ISR_HANDLE* inputp handle);
-uint32_t DPMI_CallOldISRWithContext(DPMI_ISR_HANDLE* inputp handle, const DPMI_REG* regs); //do not call it with VM context (vm context cannot be restored)
+uint32_t DPMI_CallOldISRWithContext(DPMI_ISR_HANDLE* inputp handle, DPMI_REG* regs); //do not call it with VM context (vm context cannot be restored)
 uint32_t DPMI_CallRealModeOldISR(DPMI_ISR_HANDLE* inputp handle, DPMI_REG* regs);
 
 uint16_t DPMI_InstallRealModeISR_Direct(uint8_t i, uint16_t seg, uint16_t off, DPMI_ISR_HANDLE* outputp handle, BOOL rawIVT);
@@ -241,7 +311,7 @@ BOOL DPMI_TSR(void);
 void DPMI_SetAddressing(DPMI_ADDRESSING* inputp newaddr, DPMI_ADDRESSING* outputp oldaddr);
 
 void DPMI_Init(void);
-//void DPMI_Shutdown(void); auto called atexit
+void DPMI_Shutdown(void); //auto called atexit
 
 #if defined(__WC__)
 

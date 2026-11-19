@@ -279,6 +279,15 @@ BOOL DPMI_TSR()
         return FALSE;
 #endif
 
+#if DPMI_FULLPM
+    DPMI_REG r = {0};
+    //bypass dpmi to use int21h directly, so that only rm part is terminated
+    DPMI_StoreD(_go32_info_block.linear_address_of_transfer_buffer, 0x21CD); //int21h
+    r.d.eax = 0x4C00;
+    r.w.cs = (_go32_info_block.linear_address_of_transfer_buffer>>4);
+    r.w.ip = _go32_info_block.linear_address_of_transfer_buffer&0xF;
+    DPMI_CallRealModeRETF(&r);
+#else
     DPMI_REG r = {0};
 
     //free env seg
@@ -301,6 +310,7 @@ BOOL DPMI_TSR()
     _LOG("TSR size: %d\n", r.w.dx<<4);
     r.w.ax = 0x3100;
     return DPMI_CallRealModeINT(0x21, &r) == 0; //won't return on success
+#endif
 }
 
 #endif//__DJ2__

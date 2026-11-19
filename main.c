@@ -6,6 +6,9 @@
 #include <stdbool.h>
 #include <dos.h>
 #include <stdarg.h>
+#include <dpmi.h>
+#include <go32.h>
+#include <stubinfo.h>
 #include <dpmi/dbgutil.h>
 #include <sbemucfg.h>
 #include <pic.h>
@@ -25,18 +28,17 @@
 #include <au_cards/au_cards.h>
 #include <au_cards/pcibios.h>
 
-static const char *
-PROGNAME = "SBEMU";
+#define PROGNAME "SBEMU"
 
 static BOOL MAIN_TSRed;
 
 #ifndef MAIN_SBEMU_VER
-#define MAIN_SBEMU_VER "1.0 beta3"
+#define MAIN_SBEMU_VER "1.0 beta7"
 #endif
 
 #define MAIN_TRAP_PMPIC_ONDEMAND 0 //now we need a Virtual PIC to hide some IRQ for protected mode games (doom especially)
 #define MAIN_TRAP_RMPIC_ONDEMAND 1 //don't hide IRQ for rm, as some driver(i.e.usbuhci) will use it
-#define MAIN_INSTALL_RM_ISR 1 //not needed. but to workaround some rm games' problem. need RAW_HOOk in dpmi_dj2.c - disble for more tests.
+#define MAIN_INSTALL_RM_ISR 0 //not needed. but to workaround some rm games' problem. need RAW_HOOk in dpmi_dj2.c - disble for more tests.
 #define MAIN_ISR_CHAINED 0 //auto calls next handler AFTER current handler exits - cause more mode switches, disable for more tests.
 #define MAIN_VMPU_HDPMI_MEMFIX 1 //workaround hdpmi bug that a TSR allocated memory being treated as primary client's, also better by avoiding DPMI memory fragments
                             //details on '_freeclientmemory' at I31MEM.ASM of HDPMI.
@@ -419,7 +421,8 @@ QEMM_IOPT MAIN_SB_IOPT_PM;
 // contiguous ranges, so 0x42-0x43 and 0x61 need separate HDPMI trap handles.
 #if SBEMU_PCSPEAKER
 static QEMM_IODT MAIN_PCSPEAKER_IODT[3];
-static QEMM_IOPT MAIN_PCSPEAKER_IOPT;
+static QEMM_IOPT MAIN_PCSPEAKER_IOPTRM;
+static QEMM_IOPT MAIN_PCSPEAKER_IOPTPM;
 static QEMM_IOPT MAIN_PCSPEAKER_IOPT_61;
 static BOOL     MAIN_PCSPEAKER_Installed = FALSE;
 #endif
@@ -443,7 +446,7 @@ struct MAIN_OPT
     int setcmd; //set by command line
 }MAIN_Options[] =
 {
-    "/?", "Show this help screen", FALSE, 0,
+    "/?", "Show this help screen", FALSE, MAIN_SETCMD_HIDDEN,
     "/DBG", "Debug output (0=console, 1=COM1, 2=COM2, 3=COM3, 4=COM4, otherwise base address)", 0, 0,
 
     "/A", "IO address (220 or 240) [*]", 0x220, 0,
@@ -477,6 +480,7 @@ struct MAIN_OPT
     "/VMSF", "VMPU Soundfont2 file", (uintptr_t)VMPU_DEF_SF2, MAIN_SETCMD_STR | (MAIN_VMPU_HDPMI_MEMFIX ? 0 : MAIN_SETCMD_HIDDEN), //NOTE: string ptr to int conversion always safe for 32bit code
     "/VMSFBF", "", 0, MAIN_SETCMD_INTRL|MAIN_SETCMD_HIDDEN,
 #endif
+    "/U", "Unload" PROGNAME, 0, MAIN_SETCMD_INTRL|MAIN_SETCMD_HIDDEN,
     NULL, NULL, 0,
 };
 enum EOption
@@ -512,6 +516,7 @@ enum EOption
     OPT_VMPU_SF,
     OPT_VMPU_SFBUF,
 #endif
+    OPT_UNLOAD,
     OPT_COUNT,
 };
 
@@ -551,9 +556,13 @@ static void MAIN_InvokeIRQ(uint8_t irq) //generate virtual IRQ
     #endif
 
     HDPMIPT_DisableIRQRouting(irq); //disable routing
+    #if SBEMU_IRQ_GUARD
     IRQGUARD_Enable();
+    #endif
     VIRQ_Invoke(irq, &MAIN_IntContext.regs, MAIN_IntContext.EFLAGS&CPU_VMFLAG);
+    #if SBEMU_IRQ_GUARD
     IRQGUARD_Disable();
+    #endif
     HDPMIPT_EnableIRQRouting(irq); //restore routing
 
     #if MAIN_TRAP_RMPIC_ONDEMAND
@@ -671,16 +680,18 @@ static void MAIN_Cleanup()
     if(MAIN_PCSPEAKER_Installed)
     {
         if(MAIN_QEMM_Present)
-            QEMM_Uninstall_IOPortTrap(&MAIN_PCSPEAKER_IOPT);
+            QEMM_Uninstall_IOPortTrap(&MAIN_PCSPEAKER_IOPTRM);
         if(MAIN_HDPMI_Present)
         {
-            HDPMIPT_Uninstall_IOPortTrap(&MAIN_PCSPEAKER_IOPT);
+            HDPMIPT_Uninstall_IOPortTrap(&MAIN_PCSPEAKER_IOPTPM);
             HDPMIPT_Uninstall_IOPortTrap(&MAIN_PCSPEAKER_IOPT_61);
         }
     }
 #endif
 
+    #if SBEMU_IRQ_GUARD
     IRQGUARD_Uninstall();
+    #endif
 }
 
 int main(int argc, char* argv[])
@@ -714,6 +725,7 @@ int main(int argc, char* argv[])
             } else {
                 printf(".\n");
             }
+            if(((i+1)%18) == 0) system("pause");
             ++i;
         }
 
@@ -1121,7 +1133,9 @@ int main(int argc, char* argv[])
         if(!TSR_ISR)
             break;
         MAIN_ISR_DOSID = DPMI_HighMalloc((sizeof(MAIN_ISR_DOSID_String)+15)>>4, TRUE);
-        //printf("DOSID:%x\n", DPMI_SEGOFF2L(MAIN_ISR_DOSID,0));
+        //printf("DOSID:%x\n", MAIN_ISR_DOSID);
+        DPMI_StoreW(((MAIN_ISR_DOSID-1)<<4)+1, MAIN_ISR_DOSID); //MCB owner, avoid be freed, because we will use int21h 4ch for TSR
+        DPMI_LMemcpy(((MAIN_ISR_DOSID-1)<<4)+8, DPMI_PTR2L(PROGNAME), min(sizeof(PROGNAME), 8));
         DPMI_LMemcpy(DPMI_SEGOFF2L(MAIN_ISR_DOSID,0), DPMI_PTR2L((char*)MAIN_ISR_DOSID_String), sizeof(MAIN_ISR_DOSID_String));
         break;
     }
@@ -1148,7 +1162,9 @@ int main(int argc, char* argv[])
     MAIN_IntHandleRM.wrapper_cs = MAIN_IntHandleRM.wrapper_offset = -1; //skip for HDPMIPT_InstallIRQRouteHandler
     #endif
     
+    #if SBEMU_IRQ_GUARD
     IRQGUARD_Install(MAIN_Options[OPT_IRQ].value);
+    #endif
     struct
     {
         int irq;
@@ -1194,12 +1210,12 @@ int main(int argc, char* argv[])
 
     if(enableRM)
     {
-        MAIN_PCSPEAKER_Installed = QEMM_Install_IOPortTrap(MAIN_PCSPEAKER_IODT, 3, &MAIN_PCSPEAKER_IOPT);
+        MAIN_PCSPEAKER_Installed = QEMM_Install_IOPortTrap(MAIN_PCSPEAKER_IODT, 3, &MAIN_PCSPEAKER_IOPTRM);
     }
 
     if(enablePM)
     {
-        HDPMIPT_Install_IOPortTrap(0x42, 0x43, MAIN_PCSPEAKER_IODT,     2, &MAIN_PCSPEAKER_IOPT);
+        HDPMIPT_Install_IOPortTrap(0x42, 0x43, MAIN_PCSPEAKER_IODT,     2, &MAIN_PCSPEAKER_IOPTPM);
         HDPMIPT_Install_IOPortTrap(0x61, 0x61, MAIN_PCSPEAKER_IODT + 2, 1, &MAIN_PCSPEAKER_IOPT_61);
         MAIN_PCSPEAKER_Installed = TRUE;
     }
@@ -1264,10 +1280,6 @@ int main(int argc, char* argv[])
 
 static void MAIN_InterruptPM()
 {
-    const uint8_t irq = PIC_GetIRQ();
-    if(irq != aui.card_irq) //shared IRQ handled by other handlers(EOI sent) or new irq arrived after EOI but not for us
-        return;
-
     //if(MAIN_InINT&MAIN_ININT_PM) return; //skip reentrance. go32 will do this so actually we don't need it
     //DBG_Log("INTPM %d\n", MAIN_InINT);
     MAIN_InINT |= MAIN_ININT_PM;
@@ -1291,7 +1303,9 @@ static void MAIN_InterruptPM()
         SETIF();
         MAIN_Interrupt();
         RESETIF();
-        PIC_SendEOIWithIRQ(aui.card_irq); //some BIOS driver doesn't works well if not sending EOI, there's extra check for EOI in DPMI_RMISR_ChainedWrapper
+        //need sending EOI for our irq. if it is shared and also raise by another device at the same time, the irq will be re-issued immediately after IF=1
+        //which goes to the other branch for !MAIN_ISR_CHAINED
+        PIC_SendEOIWithIRQ(aui.card_irq);
     }
     #if !MAIN_ISR_CHAINED
     else
@@ -1309,10 +1323,6 @@ static void MAIN_InterruptPM()
 
 static void MAIN_InterruptRM()
 {
-    const uint8_t irq = PIC_GetIRQ();
-    if(irq != aui.card_irq) //shared IRQ handled by other handlers(EOI sent) or new irq arrived after EOI but not for us
-        return;
-
     //if(MAIN_InINT&MAIN_ININT_RM) return; //skip reentrance. go32 will do this so actually we don't need it
     //DBG_Log("INTRM %d\n", MAIN_InINT);
     MAIN_InINT |= MAIN_ININT_RM;
@@ -1324,7 +1334,9 @@ static void MAIN_InterruptRM()
         SETIF();
         MAIN_Interrupt();
         RESETIF();
-        PIC_SendEOIWithIRQ(aui.card_irq); //some BIOS driver doesn't works well if not sending EOI, there's extra check for EOI in DPMI_RMISR_ChainedWrapper
+        //need sending EOI for our irq. if it is shared and also raise by another device at the same time, the irq will be re-issued immediately after IF=1
+        //which goes to the other branch for !MAIN_ISR_CHAINED
+        PIC_SendEOIWithIRQ(aui.card_irq);
     }
     #if !MAIN_ISR_CHAINED
     else
@@ -1664,125 +1676,226 @@ static void MAIN_Interrupt()
     //_LOG("MAIN INT END\n");
 }
 
+void __NAKED MAIN_UinstallTSR_RM()
+{
+    _ASM_BEGIN16
+        _ASM(mov bx, cs)
+        _ASM(mov ds, bx)
+        _ASM(mov es, bx)
+        _ASM(mov ah, 0x50)
+        _ASM(int 0x21) //set psp, bx
+        _ASM(pushf)
+        _ASM(pop cx)
+        _ASM(cli)
+        _ASM(mov ss, ax)
+        _ASM(mov sp, [256+0])
+        _ASM(push cx)
+        _ASM(popf)
+        _ASM(mov ax, [256+2])
+        _ASM(mov bx, 256)
+        _ASM(int 0x2D) //MAIN_TSR_INT
+        //should not go here! the 0x2D handler will terminate PM with int21 4ch which terminiates this created psp
+        _ASM(mov ax, 0x4C00)
+        _ASM(int 0x21)
+    _ASM_END16
+}
+void __NAKED MAIN_UinstallTSR_RM_End(){}
+
+void MAIN_UninstallTSR(uint32_t intid)
+{
+    uint32_t psp_size = 256;
+    uint32_t code_size = (uintptr_t)&MAIN_UinstallTSR_RM_End - (uintptr_t)&MAIN_UinstallTSR_RM;
+    uint32_t data_size = 4;
+    uint32_t stack_size = 512;
+    uint32_t total_size = max(1024, psp_size + code_size + data_size + stack_size); //min 1k needed for djgpp termination
+
+    uint32_t seg = DPMI_DOSMalloc(total_size>>4);
+    if(!seg)
+    {
+        printf("Failed to unload %s.", PROGNAME);
+        exit(-1);
+    }
+
+    uint32_t dosmem = seg << 4;
+    //psp for tsr termination
+    DPMI_LMemset(dosmem, 0, psp_size);
+    DPMI_StoreW(dosmem, 0x20cd); //int20
+    DPMI_StoreW(dosmem+2, seg + (total_size>>4) - 1); //end seg
+    uint32_t dos_fcall = DPMI_LoadD(_go32_info_block.linear_address_of_original_psp+0x06);
+    DPMI_StoreB(dosmem+0x05, 0x9A);
+    DPMI_StoreD(dosmem+0x06, dos_fcall);
+    uint32_t parent_csip = DPMI_LoadD(_go32_info_block.linear_address_of_original_psp+0x0A);
+    DPMI_StoreD(dosmem+0x0A, parent_csip);
+    uint32_t parent_psp = DPMI_LoadW(_go32_info_block.linear_address_of_original_psp+0x16);
+    DPMI_StoreW(dosmem+0x16, parent_psp);
+    DPMI_StoreW(dosmem+0x2C, 0); //envseg=0
+    DPMI_StoreB(dosmem+0x80, 0); //cmdtail=0
+
+    //mcb owner, avoid it be freed on exit
+    DPMI_StoreW(dosmem-16+1, seg);
+
+    DPMI_LMemcpy(dosmem + psp_size + data_size, DPMI_PTR2L(&MAIN_UinstallTSR_RM), code_size);
+    DPMI_StoreW(dosmem + psp_size + 0, psp_size + data_size + code_size + stack_size); //rm sp
+    DPMI_StoreW(dosmem + psp_size + 2, (intid<<8)|4); //int id + function no.
+    
+    DPMI_StoreD(_go32_info_block.linear_address_of_original_psp+0x0A, ((dosmem>>4)<<16) | (psp_size + data_size) ); //return to alloced mem block
+
+    printf("%s Unloaded.\n", PROGNAME); //pre-print
+    exit(0);
+}
+
 void MAIN_TSR_InstallationCheck()
 {
-    for(int i = MAIN_TSR_INTSTART_ID; i <= 0xFF; ++i)
+    DPMI_REG r = {0};
+    int i = -1;
+    for(int id = MAIN_TSR_INTSTART_ID; id <= 0xFF; ++id)
     { //detect TSR existence
-        DPMI_REG r = {0};
-        r.h.ah = i;
+        r.h.ah = id;
         DPMI_CallRealModeINT(MAIN_TSR_INT, &r);
         if(r.h.al == 0)
             continue;
-        //printf("DOSID:%x\n", DPMI_SEGOFF2L(r.w.dx, r.w.di));
         if(DPMI_LMemcmp(DPMI_SEGOFF2L(r.w.dx, r.w.di), DPMI_PTR2L((char*)MAIN_ISR_DOSID_String), 16) == 0)
         {
-            printf("%s is active.\n", PROGNAME);
-
-            //note: copy array won't copy string pointers in the array, don't reference them, use string in MAIN_Options.
-            //except for MAIN_SETCMD_STR, they are converted to linear addresses.
-            struct MAIN_OPT* opt = (struct MAIN_OPT*)alloca(sizeof(MAIN_Options));
-            r.h.ah = i;
-            r.h.al = 0x01; //get current settings
-            r.d.ebx = DPMI_PTR2L(opt); //dest
-            r.d.ecx = sizeof(MAIN_Options); //size: in case that a different version of SBEMU is installed
-            DPMI_CallRealModeINT(MAIN_TSR_INT, &r);
-            if((r.w.flags&CPU_CFLAG))
-            {
-                MAIN_CPrintf(RED, "Failed to get SBEMU TSR information.\n");
-                exit(-1);
-            }
-
-            for(int j = 0; j < OPT_COUNT; ++j)
-            {
-                if(!(MAIN_Options[j].setcmd&MAIN_SETCMD_SET) || (MAIN_Options[j].setcmd&MAIN_SETCMD_HIDDEN))
-                    continue;
-                if((MAIN_Options[j].setcmd&MAIN_SETCMD_STR) && 
-                    ( (MAIN_Options[j].setcmd&MAIN_SETCMD_STRCS) && DPMI_LStrcmp(opt[j].value, DPMI_PTR2L((char*)MAIN_Options[j].value)) != 0
-                        || DPMI_LStricmp(opt[j].value, DPMI_PTR2L((char*)MAIN_Options[j].value)) != 0 ) )
-                {
-                    uint32_t len = DPMI_LStrlen(opt[j].value);
-                    char* buf = alloca(len+1);
-                    DPMI_LMemcpy(DPMI_PTR2L(buf), opt[j].value, len+1);
-                    MAIN_CPrintf(WHITE, "%8s", MAIN_Options[j].option); MAIN_CPrintf(LIGHTGRAY, " changed from ");
-                    MAIN_CPrintf(RED, "%s", buf); MAIN_CPrintf(LIGHTGRAY, " to "); MAIN_CPrintf(LIGHTGREEN, "%s\n", (const char*)MAIN_Options[j].value);
-                    opt[j].value = DPMI_PTR2L((char*)MAIN_Options[j].value);
-                }
-                else if(!(MAIN_Options[j].setcmd&MAIN_SETCMD_STR) && MAIN_Options[j].value != opt[j].value)
-                {
-                    int radix10 = MAIN_Options[j].setcmd&MAIN_SETCMD_BASE10;
-                    MAIN_CPrintf(WHITE, "%8s", MAIN_Options[j].option); MAIN_CPrintf(LIGHTGRAY, " changed from ");
-                    MAIN_CPrintf(RED, radix10 ? "%d" : "%x", opt[j].value); MAIN_CPrintf(LIGHTGRAY, " to ");
-                    MAIN_CPrintf(LIGHTGREEN, radix10 ? "%d\n" : "%x\n", MAIN_Options[j].value);
-                    opt[j].value = MAIN_Options[j].value;
-                }
-            }
-
-#if SBEMU_VMPU //special handling for VMPU. the TSR has freed its RM translation buffer so it cannot do IO in PM.
-            opt[OPT_VMPU_SFBUF].value = 0;
-            if(MAIN_Options[OPT_VMPU_VOICES].value && MAIN_Options[OPT_MPUADDR].value)
-            {
-                char path[_MAX_PATH];
-                const char* sf = (const char*)MAIN_Options[OPT_VMPU_SF].value;
-                uint32_t len = 0;
-                void* sf_data = load_file(get_abs_path(path, sizeof(path), sf), sizeof(uint32_t), &len); //freed on exit
-                if(!sf_data)
-                {
-                    MAIN_CPrintf(RED, "Failed to load Soundfont file to memory: %s\n", path); //OOM? should be streaming but unable to do that.
-                    exit(-1);
-                }
-                *(uint32_t*)sf_data = len;
-                opt[OPT_VMPU_SFBUF].value = DPMI_PTR2L(sf_data);
-            }
-#endif
-
-            if(MAIN_Options[OPT_RESET].value)
-                printf("Resetting sound card driver...\n");
-            printf("\n");
-
-            if((MAIN_Options[OPT_ADDR].setcmd&MAIN_SETCMD_SET) || (MAIN_Options[OPT_IRQ].setcmd&MAIN_SETCMD_SET) || (MAIN_Options[OPT_DMA].setcmd&MAIN_SETCMD_SET) || (MAIN_Options[OPT_TYPE].setcmd&MAIN_SETCMD_SET) || (MAIN_Options[OPT_HDMA].setcmd&MAIN_SETCMD_SET))
-                MAIN_SetBlasterEnv(opt);
-
-            r.h.ah = i;
-            r.h.al = 0x02; //set new settings
-            r.d.ebx = DPMI_PTR2L(opt);
-            r.d.ecx = sizeof(MAIN_Options);
-            DPMI_CallRealModeINT(MAIN_TSR_INT, &r);
-            if((r.w.flags&CPU_CFLAG))
-            {
-                MAIN_CPrintf(RED, "Failed to update settings to SBEMU TSR.\n");
-                exit(-1);
-            }
-
-            r.h.ah = i;
-            r.h.al = 0x01; //read back to confirm
-            r.d.ebx = DPMI_PTR2L(opt);
-            r.d.ecx = sizeof(MAIN_Options);
-            DPMI_CallRealModeINT(MAIN_TSR_INT, &r);
-            if((r.w.flags&CPU_CFLAG))
-            {
-                MAIN_CPrintf(RED, "Failed to get SBEMU TSR information.\n");
-                exit(-1);
-            }
-
-            printf("Current settings:\n");
-            for(int i = OPT_Help+1; i < OPT_COUNT; ++i)
-            {
-                if(!(MAIN_Options[i].setcmd&MAIN_SETCMD_HIDDEN))
-                {
-                    if((MAIN_Options[i].setcmd&MAIN_SETCMD_STR))
-                    {
-                        uint32_t len = DPMI_LStrlen(opt[i].value);
-                        char* buf = alloca(len+1);
-                        DPMI_LMemcpy(DPMI_PTR2L(buf), opt[i].value, len+1);
-                        printf("%-8s: %s\n", MAIN_Options[i].option, buf);
-                    }
-                    else
-                        printf( (MAIN_Options[i].setcmd&MAIN_SETCMD_BASE10) ? "%-8s: %d\n":"%-8s: %x\n", MAIN_Options[i].option, opt[i].value);
-                }
-            }
-            exit(0);
+            i = id;
+            break;
         }
     }
+
+    if(i == -1) //not installed
+    {
+        if(MAIN_Options[OPT_UNLOAD].value)
+        {
+            printf("Cannot uninstall %s, not installed.\n", PROGNAME);
+            exit(0);
+        }
+        return;
+    }
+
+    if(MAIN_Options[OPT_UNLOAD].value)
+    {
+        r.h.ah = i;
+        r.h.al = 0x03; //check
+        DPMI_CallRealModeINT(MAIN_TSR_INT, &r);
+        if(!r.d.eax)
+        {
+            printf("Failed to unload %s, %s interrupt %x chained by other programs\n", PROGNAME, (r.d.ebx&0x80000000) ? "PM" : "RM", r.w.bx);
+            exit(-1);
+        }
+        else
+        {
+            //exit, and switch to rm to uninstall, to avoid HDPMI restore IDT for current instance, because IDT's gonna change
+            MAIN_UninstallTSR(i);
+        }
+    }
+
+
+    printf("%s is active.\n", PROGNAME);
+
+    //note: copy array won't copy string pointers in the array, don't reference them, use string in MAIN_Options.
+    //except for MAIN_SETCMD_STR, they are converted to linear addresses.
+    struct MAIN_OPT* opt = (struct MAIN_OPT*)alloca(sizeof(MAIN_Options));
+    r.h.ah = i;
+    r.h.al = 0x01; //get current settings
+    r.d.ebx = DPMI_PTR2L(opt); //dest
+    r.d.ecx = sizeof(MAIN_Options); //size: in case that a different version of SBEMU is installed
+    DPMI_CallRealModeINT(MAIN_TSR_INT, &r);
+    if((r.w.flags&CPU_CFLAG))
+    {
+        MAIN_CPrintf(RED, "Failed to get SBEMU TSR information.\n");
+        exit(-1);
+    }
+
+    for(int j = 0; j < OPT_COUNT; ++j)
+    {
+        if(!(MAIN_Options[j].setcmd&MAIN_SETCMD_SET) || (MAIN_Options[j].setcmd&MAIN_SETCMD_HIDDEN))
+            continue;
+        if((MAIN_Options[j].setcmd&MAIN_SETCMD_STR) && 
+            ( (MAIN_Options[j].setcmd&MAIN_SETCMD_STRCS) && DPMI_LStrcmp(opt[j].value, DPMI_PTR2L((char*)MAIN_Options[j].value)) != 0
+                || DPMI_LStricmp(opt[j].value, DPMI_PTR2L((char*)MAIN_Options[j].value)) != 0 ) )
+        {
+            uint32_t len = DPMI_LStrlen(opt[j].value);
+            char* buf = alloca(len+1);
+            DPMI_LMemcpy(DPMI_PTR2L(buf), opt[j].value, len+1);
+            MAIN_CPrintf(WHITE, "%8s", MAIN_Options[j].option); MAIN_CPrintf(LIGHTGRAY, " changed from ");
+            MAIN_CPrintf(RED, "%s", buf); MAIN_CPrintf(LIGHTGRAY, " to "); MAIN_CPrintf(LIGHTGREEN, "%s\n", (const char*)MAIN_Options[j].value);
+            opt[j].value = DPMI_PTR2L((char*)MAIN_Options[j].value);
+        }
+        else if(!(MAIN_Options[j].setcmd&MAIN_SETCMD_STR) && MAIN_Options[j].value != opt[j].value)
+        {
+            int radix10 = MAIN_Options[j].setcmd&MAIN_SETCMD_BASE10;
+            MAIN_CPrintf(WHITE, "%8s", MAIN_Options[j].option); MAIN_CPrintf(LIGHTGRAY, " changed from ");
+            MAIN_CPrintf(RED, radix10 ? "%d" : "%x", opt[j].value); MAIN_CPrintf(LIGHTGRAY, " to ");
+            MAIN_CPrintf(LIGHTGREEN, radix10 ? "%d\n" : "%x\n", MAIN_Options[j].value);
+            opt[j].value = MAIN_Options[j].value;
+        }
+    }
+
+#if SBEMU_VMPU //special handling for VMPU. the TSR has freed its RM translation buffer so it cannot do IO in PM.
+    opt[OPT_VMPU_SFBUF].value = 0;
+    if(MAIN_Options[OPT_VMPU_VOICES].value && MAIN_Options[OPT_MPUADDR].value)
+    {
+        char path[_MAX_PATH];
+        const char* sf = (const char*)MAIN_Options[OPT_VMPU_SF].value;
+        uint32_t len = 0;
+        void* sf_data = load_file(get_abs_path(path, sizeof(path), sf), sizeof(uint32_t), &len); //freed on exit
+        if(!sf_data)
+        {
+            MAIN_CPrintf(RED, "Failed to load Soundfont file to memory: %s\n", path); //OOM? should be streaming but unable to do that.
+            exit(-1);
+        }
+        *(uint32_t*)sf_data = len;
+        opt[OPT_VMPU_SFBUF].value = DPMI_PTR2L(sf_data);
+    }
+#endif
+
+    if(MAIN_Options[OPT_RESET].value)
+        printf("Resetting sound card driver...\n");
+    printf("\n");
+
+    if((MAIN_Options[OPT_ADDR].setcmd&MAIN_SETCMD_SET) || (MAIN_Options[OPT_IRQ].setcmd&MAIN_SETCMD_SET) || (MAIN_Options[OPT_DMA].setcmd&MAIN_SETCMD_SET) || (MAIN_Options[OPT_TYPE].setcmd&MAIN_SETCMD_SET) || (MAIN_Options[OPT_HDMA].setcmd&MAIN_SETCMD_SET))
+        MAIN_SetBlasterEnv(opt);
+
+    r.h.ah = i;
+    r.h.al = 0x02; //set new settings
+    r.d.ebx = DPMI_PTR2L(opt);
+    r.d.ecx = sizeof(MAIN_Options);
+
+    DPMI_CallRealModeINT(MAIN_TSR_INT, &r);
+
+    if((r.w.flags&CPU_CFLAG))
+    {
+        MAIN_CPrintf(RED, "Failed to update settings to SBEMU TSR.\n");
+        exit(-1);
+    }
+
+    r.h.ah = i;
+    r.h.al = 0x01; //read back to confirm
+    r.d.ebx = DPMI_PTR2L(opt);
+    r.d.ecx = sizeof(MAIN_Options);
+    DPMI_CallRealModeINT(MAIN_TSR_INT, &r);
+    if((r.w.flags&CPU_CFLAG))
+    {
+        MAIN_CPrintf(RED, "Failed to get SBEMU TSR information.\n");
+        exit(-1);
+    }
+
+    printf("Current settings:\n");
+    for(int i = OPT_Help+1; i < OPT_COUNT; ++i)
+    {
+        if(!(MAIN_Options[i].setcmd&MAIN_SETCMD_HIDDEN))
+        {
+            if((MAIN_Options[i].setcmd&MAIN_SETCMD_STR))
+            {
+                uint32_t len = DPMI_LStrlen(opt[i].value);
+                char* buf = alloca(len+1);
+                DPMI_LMemcpy(DPMI_PTR2L(buf), opt[i].value, len+1);
+                printf("%-8s: %s\n", MAIN_Options[i].option, buf);
+            }
+            else
+                printf( (MAIN_Options[i].setcmd&MAIN_SETCMD_BASE10) ? "%-8s: %d\n":"%-8s: %x\n", MAIN_Options[i].option, opt[i].value);
+        }
+    }
+    exit(0);
 }
 
 static void MAIN_TSR_Interrupt()
@@ -1808,7 +1921,7 @@ static void MAIN_TSR_Interrupt()
             if(MAIN_TSRREG.d.ecx != sizeof(MAIN_Options)) //different version of SBEMU?
             {
                 MAIN_TSRREG.w.flags |= CPU_CFLAG;
-                return;
+                break;
             }
             MAIN_TSRREG.w.flags &= ~CPU_CFLAG;
             //convert string to linear addr, for the SBEMU client to access
@@ -1825,13 +1938,13 @@ static void MAIN_TSR_Interrupt()
                     MAIN_Options[i].value = (uintptr_t)DPMI_L2PTR(MAIN_Options[i].value);
             }
         }
-        return;
+        break;
         case 0x02: //set
         {
             if(MAIN_TSRREG.d.ecx != sizeof(MAIN_Options)) //different version of SBEMU?
             {
                 MAIN_TSRREG.w.flags |= CPU_CFLAG;
-                return;
+                break;
             }
             MAIN_TSRREG.w.flags &= ~CPU_CFLAG;
 
@@ -1938,7 +2051,9 @@ static void MAIN_TSR_Interrupt()
             {
                 _LOG("Reinit SBEMU\n");
                 HDPMIPT_LockIRQRouting(FALSE);
+                #if SBEMU_IRQ_GUARD
                 IRQGUARD_Install(MAIN_Options[OPT_IRQ].value);
+                #endif
                 HDPMIPT_LockIRQRouting(TRUE);
                 SBEMU_Init(
                     MAIN_Options[OPT_IRQ].value,
@@ -2085,7 +2200,97 @@ static void MAIN_TSR_Interrupt()
             //cleanup changed states for all
             for(int i = 0; i < countof(MAIN_Options); ++i)
                 MAIN_Options[i].setcmd &= ~MAIN_SETCMD_CHGD;
+        }//case 2
+        break;
+        case 0x3: //unload check
+        {
+            BOOL ok = TRUE;
+            MAIN_TSRREG.d.ebx = 0;
+            #if MAIN_INSTALL_RM_ISR
+            ok = ok && DPMI_CheckUninstallISR(&MAIN_IntHandleRM);
+            if(!ok && !MAIN_TSRREG.d.ebx)
+                MAIN_TSRREG.d.ebx = MAIN_IntHandleRM.n;
+            #endif
+            ok = ok && DPMI_CheckUninstallISR(&MAIN_TSRIntHandle);
+            if(!ok && !MAIN_TSRREG.d.ebx)
+                MAIN_TSRREG.d.ebx = MAIN_TSRIntHandle.n;
+            ok = ok && DPMI_CheckUninstallISR(&MAIN_IntHandlePM);
+            if(!ok && !MAIN_TSRREG.d.ebx)
+                MAIN_TSRREG.d.ebx = MAIN_IntHandlePM.n | 0x80000000;
+            MAIN_TSRREG.d.eax = ok;
         }
-        return;
-    }
+        break;
+        case 0x4: //unload
+        {
+            CLIS();
+
+            //uninstall pm vec not work because IDT will be restored by HDPMI on foreground instance exit.
+            //need hacks in rm (DPMI_Exit), still won't work if any PM TSR installed after SBEMU: IDT restored to the hooked value again.
+            BOOL isr_uninst = TRUE; 
+            _LOG("uninstall tsr int %d\n", isr_uninst);
+            #if MAIN_INSTALL_RM_ISR
+            isr_unist = isr_unist && DPMI_UninstallISR(&MAIN_IntHandleRM) == 0;
+            #endif
+            isr_uninst = isr_uninst && DPMI_UninstallISR(&MAIN_TSRIntHandle) == 0;
+            _LOG("uninstall tsr int %d\n", isr_uninst);
+            isr_uninst = isr_uninst && DPMI_UninstallISR(&MAIN_IntHandlePM) == 0;
+            _LOG("uninstall pm isr %d\n", isr_uninst);
+            if(!isr_uninst) //IVT hooked/chains by other programs, don't bother.
+            {
+                MAIN_TSRREG.w.flags |= CPU_CFLAG;
+                break;
+            }
+
+            if(MAIN_Options[OPT_RM].value)
+            {
+                _LOG("uninstall qemm\n");
+                //if(MAIN_Options[OPT_OPL].value && OPLRMInstalled) QEMM_Uninstall_IOPortTrap(&OPL3IOPT); //done in cleanup
+                //if(MAIN_Options[OPT_MPUADDR].value && MAIN_Options[OPT_MPUCOMPORT].value) QEMM_Uninstall_IOPortTrap(&MPUIOPT); //done in cleanup
+                QEMM_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT);
+                #if !MAIN_TRAP_RMPIC_ONDEMAND
+                QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
+                #endif
+                QEMM_Uninstall_IOPortTrap(&MAIN_SB_IOPT);
+                OPLRMInstalled = FALSE;
+            }
+            if(MAIN_Options[OPT_PM].value)
+            {
+                _LOG("uninstall hdpmi\n");
+                //if(MAIN_Options[OPT_OPL].value && OPLPMInstalled) HDPMIPT_Uninstall_IOPortTrap(&OPL3IOPT_PM); //done in cleanup
+                //if(MAIN_Options[OPT_MPUADDR].value && MAIN_Options[OPT_MPUCOMPORT].value) HDPMIPT_Uninstall_IOPortTrap(&MPUIOPT_PM); //done in cleanup
+                HDPMIPT_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT_PM1);
+                HDPMIPT_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT_PM2);
+                HDPMIPT_Uninstall_IOPortTrap(&MAIN_VDMA_IOPT_PM3);
+                HDPMIPT_Uninstall_IOPortTrap(&MAIN_VHDMA_IOPT_PM1);
+                HDPMIPT_Uninstall_IOPortTrap(&MAIN_VHDMA_IOPT_PM2);
+                HDPMIPT_Uninstall_IOPortTrap(&MAIN_VHDMA_IOPT_PM3);
+                #if !MAIN_TRAP_PMPIC_ONDEMAND
+                HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM1);
+                HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM2);
+                #endif
+                HDPMIPT_Uninstall_IOPortTrap(&MAIN_SB_IOPT_PM);
+                OPLPMInstalled = FALSE;
+            }
+            MAIN_TSRREG.w.flags &= ~CPU_CFLAG;
+            DPMI_HighFree(MAIN_ISR_DOSID);
+
+            //use rm passed memory as stub memory for termination
+            __dpmi_set_segment_base_address(_stubinfo->ds_selector, (MAIN_TSRREG.w.ds<<4) + MAIN_TSRREG.w.bx);
+            __dpmi_set_segment_base_address(_stubinfo->cs_selector, (MAIN_TSRREG.w.ds<<4) + MAIN_TSRREG.w.bx);
+            
+            //we are now on a int stack allcoated by go32, using __djgpp_ds_alias.
+            //in exit __djgpp_ds_alias will be freed. store to original ds.
+            __asm__ __volatile__(
+                "movzx %0, %%eax \n\t"
+                "mov %%eax, %%ds \n\t"
+                "mov %%eax, %%es \n\t"
+                "mov %%eax, %%ss"
+                ::"m"(__djgpp_ds)
+            );
+
+            STIL();
+            exit(0); //ONLY works if SBEMU is on top of TSR stack!
+        }
+        break;
+    }//switch
 }

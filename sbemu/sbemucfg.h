@@ -4,6 +4,9 @@
 #define SBEMU_SAMPLERATE    22050 //not used anymore.
 //#define SBEMU_SAMPLERATE    44100 //not used anymore.
 
+//disable for now, not needed as tested
+#define SBEMU_IRQ_GUARD 0
+
 #define SBEMU_CHANNELS 2
 
 #define SBEMU_BITS 16

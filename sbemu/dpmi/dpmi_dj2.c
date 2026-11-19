@@ -63,8 +63,6 @@ static int FindAddressMap(uint32_t linearaddr)
     return -1;
 }
 
-static void DPMI_Shutdown(void);
-
 #define NEW_IMPL 1
 #if NEW_IMPL
 extern uint32_t DPMI_InitTSR(uint32_t base, uint32_t newbase, uint32_t* poffset, uint32_t* psize);
@@ -94,6 +92,7 @@ static uint32_t XMS_Physical;
 static uint32_t XMS_Allocated;
 #endif
 static uint16_t XMS_Handle; //handle to XMS API
+uint16_t __djgpp_ds;
 
 //http://www.delorie.com/djgpp/v2faq/faq18_13.html choice 3
 //choice 1 (DOS alloc) is not suitable here since we need near ptr but DJGPP's DS base is larger than that, (we may need __djgpp_nearptr_enable)
@@ -196,6 +195,7 @@ static void DPMI_InitFlat()
 
 void DPMI_Init(void)
 {
+    __djgpp_ds = _my_ds();
     atexit(&DPMI_Shutdown);
     //signal(SIGINT, sig_handler);
     signal(SIGABRT, sig_handler);
@@ -224,7 +224,7 @@ void DPMI_Init(void)
     */
 }
 
-static void DPMI_Shutdown(void)
+void DPMI_Shutdown(void)
 {
 #if DPMI_USE_XMS_HEAP
     #if NEW_IMPL
@@ -274,7 +274,9 @@ static void DPMI_Shutdown(void)
         info.size = map->Size;
         __dpmi_free_physical_address_mapping(&info);
     }
-    _LOG("DPMI_Shutdown done.\n");
+    _LOG("free flat sel %x.\n", DPMI_Selector4G);
+    __dpmi_free_ldt_descriptor(DPMI_Selector4G);
+    //_LOG("DPMI_Shutdown done.\n"); //log uses DPMI_Selector4G indirectly
 }
 
 uint32_t DPMI_L2P(uint32_t vaddr)
@@ -395,17 +397,20 @@ void DPMI_DMAFree(void* ptr)
 
 uint32_t DPMI_DOSMalloc(uint16_t size)
 {
-    int selector = 0;
-    uint16_t segment = (uint16_t)__dpmi_allocate_dos_memory(size, &selector);
-    if(segment != -1)
-        return (selector << 16) | segment;
-    else
-        return 0;
+    DPMI_REG r = {0};
+    r.d.eax = 0x4800;
+    r.d.ebx = size;
+    r.w.flags |= CPU_CFLAG;
+    DPMI_CallRealModeINT(0x21, &r);
+    return (r.w.flags&CPU_CFLAG) ? 0 : r.w.ax;
 }
 
 void DPMI_DOSFree(uint32_t segment)
 {
-    __dpmi_free_dos_memory((uint16_t)(segment>>16));
+    DPMI_REG r = {0};
+    r.d.eax = 0x4900;
+    r.w.es = segment;
+    DPMI_CallRealModeINT(0x21, &r);
 }
 
 uint16_t DPMI_CallRealModeRETF(DPMI_REG* reg)
@@ -443,17 +448,11 @@ uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), DPMI_ISR_HANDLE* outputp h
     }
 
     _go32_dpmi_seginfo go32pa_rm = {0};
-    __dpmi_raddr ra;
-#if RAW_HOOK
-    CLIS();
-    ra.offset16 = DPMI_LoadW(i*4);
-    ra.segment = DPMI_LoadW(i*4+2);
-    STIL();
-#else
-    __dpmi_get_real_mode_interrupt_vector(i, &ra);
-#endif
+    __dpmi_raddr ra = {0};
     __dpmi_paddr pa;
-    __dpmi_get_protected_mode_interrupt_vector(i, &pa);
+    int result = __dpmi_get_protected_mode_interrupt_vector(i, &pa);
+    if(result)
+        return result;
 
     handle->old_offset = pa.offset32;
     handle->old_cs = pa.selector;
@@ -468,7 +467,6 @@ uint16_t DPMI_InstallISR(uint8_t i, void(*ISR)(void), DPMI_ISR_HANDLE* outputp h
     memcpy(handle->internal1, &go32pa, sizeof(go32pa));
     memset(handle->internal2, 0, sizeof(handle->internal2));
 
-    int result;
     if(chained)
     {
         result = _go32_dpmi_chain_protected_mode_interrupt_vector(i, &go32pa);
@@ -747,24 +745,55 @@ uint16_t DPMI_UninstallRealModeISR_Direct(DPMI_ISR_HANDLE* inputp handle)
     }
 }
 
+BOOL DPMI_CheckUninstallISR(DPMI_ISR_HANDLE* inputp handle)
+{
+    if(handle->old_rm_offset && handle->old_rm_cs) //RM ISR?
+        return (DPMI_LoadW(handle->n*4) == handle->wrapper_offset && DPMI_LoadW(handle->n*4+2) == handle->wrapper_cs);
+    else
+    {
+        _go32_dpmi_seginfo go32pa;
+        int result = _go32_dpmi_get_protected_mode_interrupt_vector(handle->n, &go32pa);
+        return result == 0 && go32pa.pm_selector == handle->wrapper_cs && go32pa.pm_offset == handle->wrapper_offset;
+    }
+}
+
 uint16_t DPMI_UninstallISR(DPMI_ISR_HANDLE* inputp handle)
 {
-     _go32_dpmi_seginfo go32pa;
-     go32pa.pm_selector = handle->old_cs;
-     go32pa.pm_offset = handle->old_offset;
-     int result = _go32_dpmi_set_protected_mode_interrupt_vector(handle->n, &go32pa);
+    _go32_dpmi_seginfo go32pa;
+    int result = -1;
 
-#if RAW_HOOK
-    CLIS();
-    DPMI_StoreW(handle->n*4, handle->old_rm_offset);
-    DPMI_StoreW(handle->n*4+2, handle->old_rm_cs);
-    STIL();
-#else
-    __dpmi_raddr ra;
-    ra.segment = handle->old_rm_cs;
-    ra.offset16 = handle->old_rm_offset;
-    result = __dpmi_set_real_mode_interrupt_vector(handle->n, &ra) | result;
-#endif
+    if(handle->old_rm_offset && handle->old_rm_cs) //RM ISR?
+    {
+    #if RAW_HOOK
+        CLIS();
+        if(DPMI_LoadW(handle->n*4) == handle->wrapper_offset && DPMI_LoadW(handle->n*4+2) == handle->wrapper_cs) //not hooked by other
+        {
+            DPMI_StoreW(handle->n*4, handle->old_rm_offset);
+            DPMI_StoreW(handle->n*4+2, handle->old_rm_cs);
+            result = 0;
+        }
+        STIL();
+    #else
+        __dpmi_raddr ra;
+        ra.segment = handle->old_rm_cs;
+        ra.offset16 = handle->old_rm_offset;
+        result = __dpmi_set_real_mode_interrupt_vector(handle->n, &ra) | result;
+    #endif
+    }
+    else //PMISR
+    {
+        result = _go32_dpmi_get_protected_mode_interrupt_vector(handle->n, &go32pa);
+        if(result || go32pa.pm_selector != handle->wrapper_cs || go32pa.pm_offset != handle->wrapper_offset) //hooked by others?
+        {
+            _LOG("pm int %x: %x:%x hooked by %x:%x\n", handle->n, handle->wrapper_cs, handle->wrapper_offset, go32pa.pm_selector, go32pa.pm_offset);
+            return result | 0x8000;
+        }
+
+        go32pa.pm_selector = handle->old_cs;
+        go32pa.pm_offset = handle->old_offset;
+        _LOG("restore int %x to %x:%x\n", handle->n, go32pa.pm_selector, go32pa.pm_offset);
+        result = _go32_dpmi_set_protected_mode_interrupt_vector(handle->n, &go32pa);
+    }
 
     memcpy(&go32pa, handle->internal2, sizeof(go32pa));
     if(go32pa.pm_offset)
@@ -780,6 +809,8 @@ uint16_t DPMI_UninstallISR(DPMI_ISR_HANDLE* inputp handle)
     }
     else if(go32pa.pm_offset)
         return (uint16_t)(_go32_dpmi_free_iret_wrapper(&go32pa) | result);
+    else
+        return result;
 }
 
 uint32_t DPMI_CallOldISR(DPMI_ISR_HANDLE* inputp handle)
@@ -792,7 +823,7 @@ uint32_t DPMI_CallOldISR(DPMI_ISR_HANDLE* inputp handle)
     return 0;
 }
 
-uint32_t DPMI_CallOldISRWithContext(DPMI_ISR_HANDLE* inputp handle, const DPMI_REG* regs)
+uint32_t DPMI_CallOldISRWithContext(DPMI_ISR_HANDLE* inputp handle, DPMI_REG* regs)
 {
     DPMI_REG r = *regs; /*make sure regs on the stack, accessed with ebp, not esi/edi/ebx */
     DPMI_ISR_HANDLE h = *handle;
@@ -800,23 +831,34 @@ uint32_t DPMI_CallOldISRWithContext(DPMI_ISR_HANDLE* inputp handle, const DPMI_R
     "pushal \n\t pushfl \n\t"
     "push %%ds \n\t push %%es \n\t push %%fs \n\t push %%gs \n\t"
     
-    "mov %0, %%eax \n\t mov %1, %%ecx \n\t mov %2, %%edx \n\t mov %3, %%ebx \n\t mov %4, %%esi \n\t mov %5, %%edi \n\t"
-    "push %6 \n\t pop %%ds \n\t push %7 \n\t pop %%es \n\t push %8 \n\t pop %%fs \n\t push %9 \n\t pop %%gs \n\t"
+    "mov %12, %%eax \n\t mov %13, %%ecx \n\t mov %14, %%edx \n\t mov %15, %%ebx \n\t mov %16, %%esi \n\t mov %17, %%edi \n\t"
+    "pushw %18 \n\t popw %%ds \n\t pushw %19 \n\t popw %%es \n\t pushw %20 \n\t popw %%fs \n\t pushw %21 \n\t popw %%gs \n\t"
     
-    "push %12 \n\t"
-    "push %11 \n\t"
-    //"pushl %10 \n\t andw $0xFCFF, (%%esp) \n\t"
-    "pushfl \n\t"
-    "mov %13, %%ebp \n\t"
+    "push %%ebp \n\t"
+    "push %24 \n\t"
+    "push %23 \n\t"
+    "pushw $0x0 \n\t" "pushw %22 \n\t" //"andw $0xFCFF, (%%esp) \n\t"
+    "mov %25, %%ebp \n\t"
     "lcall *4(%%esp) \n\t"
-    "add $8, %%esp \n\t"
+    "leal 8(%%esp), %%esp \n\t"
+
+    "xchgl (%%esp), %%ebp \n\t"
+
+    "mov %%eax, %0 \n\t mov %%ecx, %1 \n\t mov %%edx, %2 \n\t mov %%ebx, %3 \n\t mov %%esi, %4 \n\t mov %%edi, %5 \n\t popl %6\n\t"
+    "pushw %%ds \n\t popw %7 \n\t pushw %%es \n\t popw %8 \n\t pushw %%fs \n\t popw %9 \n\t pushw %%gs \n\t popw %10 \n\t pushfw \n\t popw %11\n\t"
     
     "pop %%gs \n\t pop %%fs \n\t pop %%es \n\t pop %%ds \n\t" 
     "popfl \n\t popal \n\t"
-    ::"m"(r.d.eax),"m"(r.d.ecx),"m"(r.d.edx),"m"(r.d.ebx),"m"(r.d.esi),"m"(r.d.edi),
+    :"=m"(r.d.eax),"=m"(r.d.ecx),"=m"(r.d.edx),"=m"(r.d.ebx),"=m"(r.d.esi),"=m"(r.d.edi),"=m"(r.d.ebx),
+    "=m"(r.w.ds),"=m"(r.w.es),"=m"(r.w.fs),"=m"(r.w.gs),"=m"(r.w.flags)
+
+    :"m"(r.d.eax),"m"(r.d.ecx),"m"(r.d.edx),"m"(r.d.ebx),"m"(r.d.esi),"m"(r.d.edi),
     "m"(r.w.ds),"m"(r.w.es),"m"(r.w.fs),"m"(r.w.gs),
     "m"(r.w.flags), "m"(h.old_offset), "m"(h.old_cs), "m"(r.d.ebp)
+    :"memory"
     );
+
+    *regs = r;
     return 0;
 }
 

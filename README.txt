@@ -178,6 +178,17 @@ NOTE: after SBEMU installs, you can change them by a another run of SBEMU with n
         a fast & easy setup would be put a soundfont2 file in the SBEMU folder, and rename it to sbemusf.sf2, and run SBEMU with /vmpu option
         for a typical game sound setup, choose "General Midi" for music, "port 330", and it's ready to go.
 
+/U:     Unload SBEMU
+        if the interrupt used by SBEMU is chained by other programs, SBEMU will failed to unload, reporting the interrupt number.
+        
+        If you have other protected mode TSRs installed after SBEMU, you should unload them first,
+        otherwise there will be problem. This is because DPMI client are "stacked", termniating a DPMI in the middle of client stacks will
+        mess up the protected mode iterrupt tables (IDT).
+
+        Generally you should unload the PM TSRs in the reversed order of installing, and if some program does not support unloading,
+        and you want unload SBEMU, you should install SBEMU AFTER them.
+        
+
 5. Trouble Shooting
 
 a) VCPI issues. Known games: NFS, FastDoom
