@@ -6,7 +6,7 @@ DEBUG ?= 0
 VERSION ?= $(shell git describe --tags)
 
 INCLUDES := -I./mpxplay -I./sbemu -I./drivers/include
-DEFINES := -D__DOS__ -DSBEMU -DDEBUG=$(DEBUG) -DMAIN_SBEMU_VER=\"$(VERSION)\"
+DEFINES := -D__DOS__ -DSBEMU -DAU_CARDS_LINK_USBPCM=1 -DDEBUG=$(DEBUG) -DMAIN_SBEMU_VER=\"$(VERSION)\"
 CFLAGS := -fcommon -march=i386 -ffast-math -O2 -flto $(INCLUDES) $(DEFINES)
 LDFLAGS := -lstdc++ -lm -Wno-attributes
 
@@ -30,6 +30,7 @@ VPATH += sbemu/dpmi
 all: $(TARGET)
 
 CARDS_SRC := mpxplay/au_cards/ac97_def.c \
+	     mpxplay/au_cards/sc_usbpcm.c \
 	     mpxplay/au_cards/au_base.c \
 	     mpxplay/au_cards/au_cards.c \
 	     mpxplay/au_cards/au_linux.c \

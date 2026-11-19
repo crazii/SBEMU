@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <dpmi.h>
 #include <ctype.h>
 #include <conio.h>
 #include <stdbool.h>
@@ -683,6 +684,42 @@ static void MAIN_Cleanup()
     IRQGUARD_Uninstall();
 }
 
+//Everything SBEMU leaves in conventional memory is allocated at the TOP (DOS "last
+//fit" strategy during start-up), so the free memory below stays in one piece for
+//games. The previous strategy is restored before going resident or on exit.
+static int MAIN_OldStrat = -1;
+static void MAIN_RestoreStrategy(void)
+{
+    if(MAIN_OldStrat >= 0)
+    {
+        __dpmi_regs r; memset(&r, 0, sizeof r);
+        r.x.ax = 0x5801; r.x.bx = (unsigned short)MAIN_OldStrat; __dpmi_int(0x21, &r);
+        MAIN_OldStrat = -1;
+    }
+}
+static void MAIN_LastFitStrategy(void)
+{
+    __dpmi_regs r; memset(&r, 0, sizeof r);
+    r.x.ax = 0x5800; __dpmi_int(0x21, &r);
+    if(r.x.flags & 1) return;
+    MAIN_OldStrat = r.x.ax;
+    memset(&r, 0, sizeof r); r.x.ax = 0x5801; r.x.bx = 0x0002; __dpmi_int(0x21, &r);
+    atexit(MAIN_RestoreStrategy);
+}
+//Left/right swap of the digital sound. SBEMU swaps by default (SBEMU_SWAP_STEREO).
+//With the USB Audio driver a left-channel test tone came out on the right with the
+//swap, so the swap is off for that card; SET USBPCM=W turns it on again.
+static int MAIN_SwapLR = SBEMU_SWAP_STEREO;
+static void MAIN_InitSwap(const char* cardname)
+{
+    const char *e = getenv("USBPCM");
+    MAIN_SwapLR = SBEMU_SWAP_STEREO;
+    if(cardname && strncmp(cardname, "USB Audio", 9) == 0)
+    {
+        MAIN_SwapLR = 0;
+        if(e) for(; *e; e++) if(*e == 'W' || *e == 'w') MAIN_SwapLR = 1;
+    }
+}
 int main(int argc, char* argv[])
 {
     MAIN_CPrintf(CYAN, "\r\n%s ", PROGNAME);
@@ -866,6 +903,16 @@ int main(int argc, char* argv[])
         MAIN_HDPMI_Present = hasHDPMI;
     }
     MAIN_Options[OPT_OPL].value = !!MAIN_Options[OPT_OPL].value;
+    MAIN_LastFitStrategy();
+    if(!_8087) //no FPU (e.g. DM&P Vortex86SX): OPL3, soundfont and PC speaker emulation use floating point
+    {
+        if(MAIN_Options[OPT_OPL].value)
+            MAIN_CPrintf(YELLOW, "No FPU: OPL3 (FM) emulation disabled.\n");
+        MAIN_Options[OPT_OPL].value = 0;
+#if SBEMU_VMPU
+        MAIN_Options[OPT_VMPU_VOICES].value = 0;
+#endif
+    }
 
 #if SBEMU_VMPU
 
@@ -1057,6 +1104,7 @@ int main(int argc, char* argv[])
     {
       char hwdesc[64];
       hwdesc[0] = '\0';
+      MAIN_InitSwap(aui.pcm ? aui.card_handler->shortname : NULL);
       if (aui.pcm)
         sprintf(hwdesc, "(%d:%s)", aui.card_test_index, aui.card_handler->shortname);
       printf("SB %s%s emulation at address %x, IRQ %x, DMA %x: ",
@@ -1190,14 +1238,14 @@ int main(int argc, char* argv[])
     // Now that the audio device is running, aui.freq_card is valid for PC Speaker setup.
     // QEMM accepts the whole 3-port table in one call.
     // HDPMI needs two calls because 0x42-0x43 and 0x61 are not contiguous.
-    VPCSPEAKER_Init(aui.freq_card);
+    if(_8087) VPCSPEAKER_Init(aui.freq_card); //uses floating point
 
-    if(enableRM)
+    if(enableRM && _8087)
     {
         MAIN_PCSPEAKER_Installed = QEMM_Install_IOPortTrap(MAIN_PCSPEAKER_IODT, 3, &MAIN_PCSPEAKER_IOPT);
     }
 
-    if(enablePM)
+    if(enablePM && _8087)
     {
         HDPMIPT_Install_IOPortTrap(0x42, 0x43, MAIN_PCSPEAKER_IODT,     2, &MAIN_PCSPEAKER_IOPT);
         HDPMIPT_Install_IOPortTrap(0x61, 0x61, MAIN_PCSPEAKER_IODT + 2, 1, &MAIN_PCSPEAKER_IOPT_61);
@@ -1208,6 +1256,7 @@ int main(int argc, char* argv[])
     MAIN_Print_Enabled_Newline(MAIN_PCSPEAKER_Installed);
 #endif // SBEMU_PCSPEAKER
 
+    MAIN_RestoreStrategy();
     MAIN_TSRed = TRUE;
     if(!PM_ISR || !RM_ISR || !TSR_ISR
     || !QEMMInstalledVDMA || !QEMMInstalledVIRQ || !QEMMInstalledSB
@@ -1337,6 +1386,11 @@ static void MAIN_InterruptRM()
     //DBG_Log("INTRME %d\n", MAIN_InINT);
     MAIN_InINT &= ~MAIN_ININT_RM;
 }
+
+//SB16 mixer volume as on the real card: 5-bit register, 2 dB per step, 31 = 0 dB,
+//0 = mute. Q12 gains (4096 = 1.0), integer only.
+static const uint16_t MAIN_SB16Gain[32] = {0,4,5,6,8,10,13,16,21,26,33,41,52,65,82,103,130,163,205,258,325,410,516,649,817,1029,1295,1631,2053,2584,3254,4096};
+static int32_t MAIN_Gain5(int reg) { return MAIN_SB16Gain[(SBEMU_GetMixerReg(reg) >> 3) & 31]; }
 
 static void MAIN_Interrupt()
 {
@@ -1572,9 +1626,7 @@ static void MAIN_Interrupt()
                 // https://stackoverflow.com/questions/12089662/mixing-16-bit-linear-pcm-streams-and-avoiding-clipping-overflow
                 int la = (int)(MAIN_PCM[i] * voicevol/256) + 32768;
                 int ra = (int)(MAIN_PCM[i+1] * voicevol/256) + 32768;
-                #if SBEMU_SWAP_STEREO
-                {int x = la; la = ra; ra = x;}
-                #endif
+                if(MAIN_SwapLR) {int x = la; la = ra; ra = x;}
                 int lb = (int)((MAIN_OPLPCM[i]+MAIN_OPLPCM[i]*SBEMU_OPL_VOLUME_AMPLICATION/2) * midivol/256) + 32768;
                 int rb = (int)((MAIN_OPLPCM[i+1]+MAIN_OPLPCM[i+1]*SBEMU_OPL_VOLUME_AMPLICATION/2) * midivol/256) + 32768;
                 int l = (la < 32768 || lb < 32768) ? (la*lb/32768) : ((la+lb)*2 - la*lb/32768 - 65536);
@@ -1588,9 +1640,7 @@ static void MAIN_Interrupt()
 
                 int la = (int)(MAIN_PCM[i] * voicevol/256); //SFX PCM
                 int ra = (int)(MAIN_PCM[i+1] * voicevol/256);
-                #if SBEMU_SWAP_STEREO
-                /*if(channels == 2)*/ {int x = la; la = ra; ra = x;}
-                #endif
+                if(MAIN_SwapLR) {int x = la; la = ra; ra = x;}
 
                 // Fix (85fc657 regression): use MAIN_OPLPCM for both terms.
                 // Previously the linear mix used MAIN_PCM in the second term, which double-counted
@@ -1625,16 +1675,33 @@ static void MAIN_Interrupt()
             MAIN_PCM[i] = (MAIN_PCM[i] + MAIN_PCM[i]*SBEMU_OPL_VOLUME_AMPLICATION/2) * SBEMU_OPL_RATIO * midivol/256 * vol/256;
     }
     else if(digital)
+    {
+        //Per-channel volume; SB16 uses the 5-bit registers with 2 dB steps like the
+        //real CT1745 mixer. Without OPL emulation there is nothing to mix with, so the
+        //SFX/OPL headroom ratio is not applied.
+        int32_t gl, gr, vl, vr;
+        int full = !MAIN_Options[OPT_OPL].value;
+        if(MAIN_Options[OPT_TYPE].value == 6)
+        {
+            gl = MAIN_Gain5(SBEMU_MIXRREG_MASTERL); gr = MAIN_Gain5(SBEMU_MIXRREG_MASTERR);
+            vl = MAIN_Gain5(SBEMU_MIXRREG_VOICEL); vr = MAIN_Gain5(SBEMU_MIXRREG_VOICER);
+        }
+        else
+        {
+            gl = gr = vol * 16; vl = vr = voicevol * 16;
+        }
         for(int i = 0; i < samples*2; i+=2)
         {
-            int16_t l = MAIN_PCM[i] * voicevol/256 * vol/256;
-            int16_t r = MAIN_PCM[i+1] * voicevol/256 * vol/256;
-            #if SBEMU_SWAP_STEREO
-            {int x = l; l = r; r = x;}
-            #endif
-            MAIN_PCM[i] = l*SBEMU_SFX_RATIO;
-            MAIN_PCM[i+1] = r*SBEMU_SFX_RATIO;
+            int32_t l = ((int32_t)MAIN_PCM[i] * vl >> 12) * gl >> 12;
+            int32_t r = ((int32_t)MAIN_PCM[i+1] * vr >> 12) * gr >> 12;
+            if(MAIN_SwapLR) {int32_t x = l; l = r; r = x;}
+            if(!full) { l = l*SBEMU_SFX_RATIO; r = r*SBEMU_SFX_RATIO; }
+            if(l > 32767) l = 32767; else if(l < -32768) l = -32768;
+            if(r > 32767) r = 32767; else if(r < -32768) r = -32768;
+            MAIN_PCM[i] = (int16_t)l;
+            MAIN_PCM[i+1] = (int16_t)r;
         }
+    }
 
 #if SBEMU_VMPU
     if(vmpu_active)
@@ -1863,7 +1930,7 @@ static void MAIN_TSR_Interrupt()
 
             char* fpustate = (char*)alloca(108);
             #ifdef DJGPP //make vscode happy
-            asm("fsave %0\n\t finit":"=m"(*fpustate));
+            if(_8087) asm("fsave %0\n\t finit":"=m"(*fpustate));
             #endif
             int irq = aui.card_irq;
             PIC_MaskIRQ(irq);
@@ -1918,7 +1985,7 @@ static void MAIN_TSR_Interrupt()
                 AU_setmixer_one(&aui, AU_MIXCHAN_MASTER, MIXER_SETMODE_ABSOLUTE, MAIN_Options[OPT_VOL].value);
             }
             #ifdef DJGPP //make vscode happy
-            asm("frstor %0" ::"m"(*fpustate));
+            if(_8087) asm("frstor %0" ::"m"(*fpustate));
             #endif
             PIC_UnmaskIRQ(irq);
 

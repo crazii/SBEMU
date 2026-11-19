@@ -76,6 +76,9 @@
 #define  ES_DAC2         (1<<1)       /* DAC2 channel interrupt pending */
 #define  ES_ADC          (1<<0)       /* ADC channel interrupt pending */
 
+#define ES_REG_UART_CONTROL 0x09 /* W/O: UART control register */
+#define ES_REG_UART_RES     0x0a /* R/W: UART receiver register */
+
 #define ES_REG_MEM_PAGE  0x0c   /* R/W: memory page register (bits 0-3, ports 30-3F) */
 #define  ES_MEM_PAGEO(o) (((o)&0x0f)<<0)
 
@@ -128,6 +131,16 @@
 /* fixed reference clock used for the DAC2/ADC programmable divider */
 #define ES_1370_SRCLOCK  1411200UL
 #define ES_1370_SRTODIV(x) (ES_1370_SRCLOCK/(x)-2)
+
+/* ALSA (ens1370.c, hw_constraint_ratnums): the real DAC2 rate is always
+ * SRCLOCK/den with den = PCLKDIV+2 an integer in the range 29..353, i.e.
+ * only ~3997..48662 Hz in discrete steps. Most rates are therefore NOT
+ * exact (e.g. 48000 Hz really runs at 48662 Hz), so ES1370_setrate() writes
+ * the achieved rate back to aui->freq_card; AU_setrate() and the SBEMU
+ * resampler (main.c) then use the real hardware rate.
+ */
+#define ES_1370_DEN_MIN  29
+#define ES_1370_DEN_MAX  353
 
 /* use DAC2 (the "P2" channel), driven by the programmable clock divider,
  * rather than DAC1 (which only supports 4 fixed rates: 5512/11025/22050/
@@ -282,15 +295,38 @@ static void es1370_ak4531_init(struct es1370_card_s *card)
 
 //-------------------------------------------------------------------------
 
-static void es1370_dac2_rate(struct es1370_card_s *card, unsigned int rate)
+/* requested rate -> divider "den" (nearest, limited to what the chip can do) */
+
+static unsigned int es1370_rate_to_den(unsigned int rate)
 {
- mpxplay_debugf(ENS_DEBUG_OUTPUT,"es1370_dac2_rate(%d)",rate);
+ unsigned long den;
+
  if (rate < 4000)
   rate = 4000;
  else if (rate > 48000)
   rate = 48000;
+ den = (ES_1370_SRCLOCK + rate / 2) / rate; /* round to nearest, not truncate */
+ if (den < ES_1370_DEN_MIN)
+  den = ES_1370_DEN_MIN;
+ else if (den > ES_1370_DEN_MAX)
+  den = ES_1370_DEN_MAX;
+ return (unsigned int)den;
+}
+
+/* divider "den" -> rate the hardware really produces */
+
+static unsigned int es1370_den_to_rate(unsigned int den)
+{
+ return (unsigned int)((ES_1370_SRCLOCK + den / 2) / den);
+}
+
+static void es1370_dac2_rate(struct es1370_card_s *card, unsigned int rate)
+{
+ unsigned int den = es1370_rate_to_den(rate);
+
+ mpxplay_debugf(ENS_DEBUG_OUTPUT,"es1370_dac2_rate(%d): den=%d, real rate=%d",rate,den,es1370_den_to_rate(den));
  funcbit_disable(card->ctrl,ES_1370_PCLKDIVM);
- funcbit_enable(card->ctrl,ES_1370_PCLKDIVO(ES_1370_SRTODIV(rate)));
+ funcbit_enable(card->ctrl,ES_1370_PCLKDIVO(den - 2));
  outl((card->port + ES_REG_CONTROL), card->ctrl);
 }
 
@@ -329,6 +365,10 @@ static void es1370_chip_init(struct es1370_card_s *card)
  outl((card->port + ES_REG_MEM_PAGE), ES_MEM_PAGEO(ES_PAGE_ADC));
  outl((card->port + ES_REG_PHANTOM_FRAME), (unsigned long)pds_cardmem_physicalptr(card->dm_phantom, card->dm_phantom->linearptr));
  outl((card->port + ES_REG_PHANTOM_COUNT), 0);
+
+ /* UART reset, as in ALSA's snd_ensoniq_chip_init() (and sc_e1371.c) */
+ outb((card->port + ES_REG_UART_CONTROL), 0x00);
+ outb((card->port + ES_REG_UART_RES), 0x00);
 
  es1370_ak4531_init(card);
  mpxplay_debugf(ENS_DEBUG_OUTPUT,"es1370_chip_init: exit");
@@ -468,6 +508,10 @@ static void ES1370_setrate(struct mpxplay_audioout_info_s *aui)
   aui->freq_card=4000;
  else if(aui->freq_card>48000)
   aui->freq_card=48000;
+
+ /* update freq_card with the rate the divider really produces */
+ aui->freq_card=es1370_den_to_rate(es1370_rate_to_den(aui->freq_card));
+ mpxplay_debugf(ENS_DEBUG_OUTPUT,"ES1370_setrate: real freq_card=%d",aui->freq_card);
 
  MDma_init_pcmoutbuf(aui,card->pcmout_bufsize,ES1370_DMABUF_ALIGN,0);
 

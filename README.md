@@ -13,7 +13,7 @@ Enabled and working:
  * `sc_ich`: Intel ICH / nForce / SIS 7012
  * `sc_inthd`: Intel High Definition Audio (HDA)
  * `sc_via82`: VIA VT82C686, VT8233/37
- * `sc_sbliv`: SB Live! / Audigy
+ * `sc_sbliv`: SB Live! / Audigy (SB Live!: MPU-401 passthrough to the gameport MIDI out)
  * `sc_sbl24`: SB Audigy LS (CA0106)
  * `sc_es1371`: Ensoniq ES1371/1373
  * `sc_cmi`: C-Media CMI8338/8738
@@ -33,6 +33,13 @@ Source code exists, but "doesn't work yet":
  * OXYGEN(CMI8788)
  * ESS Allegro-1 (ES1988S/ES1989S)
  * Trident 4D Wave
+
+USB Audio (experimental), by Lukasz Bolesta with the help of Claude:
+ * `sc_usbpcm`: USB Audio Class 1.0 devices (48 kHz 16-bit stereo output) on an
+   OHCI USB controller, e.g. Behringer UCA202 (TI PCM2902) and cheap USB dongles.
+   Tested on the eBOX-2300SX (DM&P Vortex86SX). The driver is used only when the
+   `USBPCM` environment variable is set (e.g. `SET USBPCM=L32`), because it takes
+   over a USB controller from the BIOS. UHCI/EHCI/xHCI are not supported.
 
 ## Emulated modes
 
@@ -202,7 +209,7 @@ Enabled and working:
  * `sc_ich`: Intel ICH / nForce / SIS 7012
  * `sc_inthd`: Intel High Definition Audio (HDA)
  * `sc_via82`: VIA VT82C686, VT8233/37
- * `sc_sbliv`: SB Live! / Audigy
+ * `sc_sbliv`: SB Live! / Audigy (SB Live!: MPU-401 passthrough to the gameport MIDI out)
  * `sc_sbl24`: SB Audigy LS (CA0106)
  * `sc_es1371`: Ensoniq ES1371/1373
  * `sc_cmi`: C-Media CMI8338/8738
@@ -223,6 +230,13 @@ Source code exists, but "doesn't work yet":
  * OXYGEN(CMI8788)
  * ESS Allegro-1 (ES1988S/ES1989S)
  * Trident 4D Wave
+
+USB Audio (experimental), by Lukasz Bolesta with the help of Claude:
+ * `sc_usbpcm`: USB Audio Class 1.0 devices (48 kHz 16-bit stereo output) on an
+   OHCI USB controller, e.g. Behringer UCA202 (TI PCM2902) and cheap USB dongles.
+   Tested on the eBOX-2300SX (DM&P Vortex86SX). The driver is used only when the
+   `USBPCM` environment variable is set (e.g. `SET USBPCM=L32`), because it takes
+   over a USB controller from the BIOS. UHCI/EHCI/xHCI are not supported.
 
 ## Emulated modes
 
