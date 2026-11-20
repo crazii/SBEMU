@@ -480,7 +480,7 @@ struct MAIN_OPT
     "/VMSF", "VMPU Soundfont2 file", (uintptr_t)VMPU_DEF_SF2, MAIN_SETCMD_STR | (MAIN_VMPU_HDPMI_MEMFIX ? 0 : MAIN_SETCMD_HIDDEN), //NOTE: string ptr to int conversion always safe for 32bit code
     "/VMSFBF", "", 0, MAIN_SETCMD_INTRL|MAIN_SETCMD_HIDDEN,
 #endif
-    "/U", "Unload" PROGNAME, 0, MAIN_SETCMD_INTRL|MAIN_SETCMD_HIDDEN,
+    "/U", "Unload " PROGNAME, 0, 0,
     NULL, NULL, 0,
 };
 enum EOption
