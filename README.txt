@@ -178,6 +178,11 @@ NOTE: after SBEMU installs, you can change them by a another run of SBEMU with n
         a fast & easy setup would be put a soundfont2 file in the SBEMU folder, and rename it to sbemusf.sf2, and run SBEMU with /vmpu option
         for a typical game sound setup, choose "General Midi" for music, "port 330", and it's ready to go.
 
+/PCS:   Enable PC speaker emulation. default: 1 (ON)
+        Legacy PCs have PC speakers, you can disable it if not needed.
+        To test if you PC supports PC speaker, execute "echo ALT+7" with ENTER (shown as "echo ^G") in DOS commandline,
+        if there is a "beep" sound, then you PC has internal PC speaker or emulation, and you can disable this option to save possible CPU power.
+
 /U:     Unload SBEMU
         if the interrupt used by SBEMU is chained by other programs, SBEMU will failed to unload, reporting the interrupt number.
         
