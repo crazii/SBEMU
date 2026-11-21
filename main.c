@@ -2336,6 +2336,10 @@ static void MAIN_TSR_Interrupt()
                 OPLPMInstalled = FALSE;
             }
             MAIN_TSRREG.w.flags &= ~CPU_CFLAG;
+            //stop the sound card while interrupts are still disabled: its IRQ handler is
+            //gone, and a card that keeps playing (level-triggered PCI IRQ) would raise
+            //interrupts nobody clears as soon as they are enabled again before exit().
+            AU_stop(&aui);
             DPMI_HighFree(MAIN_ISR_DOSID);
 
             //use rm passed memory as stub memory for termination
