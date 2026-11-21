@@ -180,7 +180,7 @@ NOTE: after SBEMU installs, you can change them by a another run of SBEMU with n
 
 /PCS:   Enable PC speaker emulation. default: 1 (ON)
         Legacy PCs have PC speakers, you can disable it if not needed.
-        To test if you PC supports PC speaker, execute "echo ALT+7" with ENTER (shown as "echo ^G") in DOS commandline,
+        To test if you PC supports PC speaker, execute "echo ALT+7" with ENTER (shown as "echo ^G") in DOS commandline WITHOUT SBEMU installed,
         if there is a "beep" sound, then you PC has internal PC speaker or emulation, and you can disable this option to save possible CPU power.
 
 /U:     Unload SBEMU
