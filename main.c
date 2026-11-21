@@ -694,6 +694,12 @@ static void MAIN_Cleanup()
     #endif
 }
 
+static int MAIN_HasCPUID(void)
+{
+    uint32_t f1, f2;
+    __asm__ __volatile__("pushfl; pushfl; popl %0; movl %0, %1; xorl $0x200000, %0; pushl %0; popfl; pushfl; popl %0; popfl" : "=&r"(f1), "=&r"(f2));
+    return ((f1 ^ f2) & 0x200000) != 0;
+}
 //Left/right swap of the digital sound. SBEMU swaps by default (SBEMU_SWAP_STEREO).
 //With the USB Audio driver a left-channel test tone came out on the right with the
 //swap, so the swap is off for that card; SET USBPCM=W turns it on again.
@@ -892,6 +898,15 @@ int main(int argc, char* argv[])
         MAIN_HDPMI_Present = hasHDPMI;
     }
     MAIN_Options[OPT_OPL].value = !!MAIN_Options[OPT_OPL].value;
+    {   //The FNINIT/FNSTSW test behind _8087 is not reliable on CPUs without an FPU that do
+        //not trap x87 opcodes (DM&P Vortex86SX returns garbage). A CPU without CPUID
+        //(386/486 class) is treated as having no FPU; SET SBEMU_FPU=0 or 1 overrides it.
+        const char* fpuenv = getenv("SBEMU_FPU");
+        if(fpuenv && (*fpuenv == '0' || *fpuenv == '1'))
+            _8087 = (*fpuenv == '1') ? 3 : 0;
+        else if(_8087 && !MAIN_HasCPUID())
+            _8087 = 0;
+    }
     if(!_8087) //no FPU (e.g. DM&P Vortex86SX): OPL3, soundfont and PC speaker emulation use floating point
     {
         if(MAIN_Options[OPT_OPL].value)

@@ -185,9 +185,12 @@ static void VMPU_Write(uint16_t port, uint8_t value)
         }
         if (value == 0xff)
         {
-            fpu_save(fpu_buffer);
-            VMPU_Process_Messages();
-            fpu_restore(fpu_buffer);
+            if(tsfrenderer) //no x87 without a SoundFont (CPUs without an FPU)
+            {
+                fpu_save(fpu_buffer);
+                VMPU_Process_Messages();
+                fpu_restore(fpu_buffer);
+            }
             bReset = true;
             midi_ptr = 0;
             midi_available_ptr = 0;
