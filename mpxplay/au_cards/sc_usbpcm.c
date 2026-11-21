@@ -142,7 +142,7 @@ typedef struct usbpcm_card_s {
  uint32_t base_phys;
  char *lo;                 /* conventional memory block, 256 B aligned */
  uint32_t lo_phys;
- int lo_sel;
+ uint16_t lo_seg;     /* conventional memory block (HCCA, EDs, TDs) */
  int owned;                /* controller taken over by us */
  uint8_t addr, mps0;
  usbpcm_alt_s alt;
@@ -352,6 +352,37 @@ static void ehci_release_all(void)
 static int bios_busy(void) { return _farpeekb(_dos_ds, BIOS_USB_BUSY); }
 
 static int usbpcm_vec_done;
+static uint16_t usbpcm_stub_seg;      /* EOI stub that replaced the BIOS vector */
+static int usbpcm_stub_vec;
+static __dpmi_raddr usbpcm_stub_old;
+
+/* sbemu/dpmi/dpmi.h (not included here: it clashes with DJGPP's <dpmi.h>) */
+extern uint32_t DPMI_HighMalloc(uint16_t size, int UMB);
+extern void DPMI_HighFree(uint32_t segment);
+
+/* Conventional memory the controller (or the BIOS) uses while SBEMU is resident.
+   Allocated at the top of conventional memory without UMBs (under JEMM the linear
+   and physical address of an UMB differ, the controller needs the physical one).
+   SBEMU terminates its real mode part with INT 21h/4Ch, which frees every block
+   owned by its PSP, so the MCB owner is set to the block itself (as SBEMU does for
+   its own resident block); usbpcm_dosfree() releases it on unload (/U). */
+static uint16_t usbpcm_dosalloc(unsigned bytes)
+{
+ unsigned paras = (bytes + 15) >> 4;
+ uint32_t h = DPMI_HighMalloc((uint16_t)paras, 0);
+ uint16_t seg = (uint16_t)h;
+ if(!h) return 0;
+ if((h & 0xFFFF0000u) == 0xFFFF0000u || (uint32_t)seg + paras > 0xA000){
+  DPMI_HighFree(h);
+  return 0;
+ }
+ _farpokew(_dos_ds, ((uint32_t)seg - 1) * 16 + 1, seg); /* MCB owner */
+ return seg;
+}
+static void usbpcm_dosfree(uint16_t seg)
+{
+ if(seg) DPMI_HighFree(seg);
+}
 static void neutralize_bios_irq(int card_irq)
 {
  /* The BIOS drove this controller before us and may still have its own USB
@@ -362,15 +393,16 @@ static void neutralize_bios_irq(int card_irq)
   if(card_irq > 0 && card_irq < 16 && card_irq != 2 && !getenv("USBPCM_KEEPVEC")){
   int vec = card_irq < 8 ? 8 + card_irq : 0x70 + card_irq - 8;
   __dpmi_raddr old, nr;
-  int sel, seg;
+  int seg;
   static const uint8_t stub_hi[] = { 0x50, 0xB0, 0x20, 0xE6, 0xA0, 0xE6, 0x20, 0x58, 0xCF }; /* push ax; mov al,20h; out A0h,al; out 20h,al; pop ax; iret */
   static const uint8_t stub_lo[] = { 0x50, 0xB0, 0x20, 0xE6, 0x20, 0x58, 0xCF, 0x90, 0x90 };
   __dpmi_get_real_mode_interrupt_vector(vec, &old);
-  seg = __dpmi_allocate_dos_memory(1, &sel);
+  seg = usbpcm_dosalloc(16);
   if(seg > 0){
    dosmemput(card_irq >= 8 ? stub_hi : stub_lo, 9, seg * 16);
    nr.segment = seg; nr.offset16 = 0;
    __dpmi_set_real_mode_interrupt_vector(vec, &nr);
+   usbpcm_stub_seg = (uint16_t)seg; usbpcm_stub_vec = vec; usbpcm_stub_old = old;
    ushow("USBPCM: IRQ %d vector %02Xh was %04X:%04X - replaced by EOI stub at %04X:0000\n",
          card_irq, vec, old.segment, old.offset16, seg);
   }
@@ -981,24 +1013,9 @@ static int USBPCM_adetect(struct mpxplay_audioout_info_s *aui)
  memset(c->base, 0, HIGH_TOTAL);
  {
   int seg;
-  {  /* allocate at the TOP of conventional memory (DOS "last fit", no UMB): the block
-        stays resident with the TSR and would otherwise split the free memory below it.
-        UMBs are not usable - under JEMM their linear and physical addresses differ. */
-   __dpmi_regs r;
-   int strat, link;
-   memset(&r, 0, sizeof r); r.x.ax = 0x5800; __dpmi_int(0x21, &r); strat = r.x.ax;
-   memset(&r, 0, sizeof r); r.x.ax = 0x5802; __dpmi_int(0x21, &r); link = r.h.al;
-   memset(&r, 0, sizeof r); r.x.ax = 0x5803; r.x.bx = 0; __dpmi_int(0x21, &r);
-   memset(&r, 0, sizeof r); r.x.ax = 0x5801; r.x.bx = 0x0002; __dpmi_int(0x21, &r);
-   seg = __dpmi_allocate_dos_memory((LOW_TOTAL + 256 + 15) / 16, &c->lo_sel);
-   memset(&r, 0, sizeof r); r.x.ax = 0x5801; r.x.bx = strat; __dpmi_int(0x21, &r);
-   memset(&r, 0, sizeof r); r.x.ax = 0x5803; r.x.bx = link; __dpmi_int(0x21, &r);
-   if(seg > 0 && seg + (LOW_TOTAL + 256 + 15) / 16 > 0xA000){
-    ulog("low block at %04X is above 640 KB - not usable for USB DMA\n", seg);
-    __dpmi_free_dos_memory(c->lo_sel); seg = 0; c->lo_sel = 0;
-   }
-  }
-  if(seg <= 0){ ushow("USBPCM: not enough conventional memory (%d bytes)\n", LOW_TOTAL + 256); c->lo_sel = 0; goto err; }
+  c->lo_seg = usbpcm_dosalloc(LOW_TOTAL + 256);
+  seg = c->lo_seg;
+  if(seg <= 0){ ushow("USBPCM: not enough conventional memory (%d bytes)\n", LOW_TOTAL + 256); goto err; }
   c->lo_phys = ((uint32_t)seg * 16 + 255) & ~255u;
   {   /* low-memory mapping (kept for the lifetime of the TSR, never released) */
    unsigned long m = pds_dpmi_map_physical_memory(c->lo_phys & ~0xFFFu, (c->lo_phys & 0xFFF) + LOW_TOTAL);
@@ -1205,7 +1222,20 @@ static void USBPCM_close(struct mpxplay_audioout_info_s *aui)
  if(c->ctl){ c->ctl->sig[0] = 0; c->ctl = NULL; }
  if(c->rec_ok){ pds_dpmi_xms_freemem(&c->rec); c->rec_ok = 0; }
  if(c->dm) MDma_free_cardmem(c->dm);
- if(c->lo_sel) __dpmi_free_dos_memory(c->lo_sel);
+ usbpcm_dosfree(c->lo_seg); /* the controller is stopped above */
+ c->lo_seg = 0;
+ if(usbpcm_stub_seg){
+  /* unload (/U): give the IRQ back to the BIOS handler. If another program hooked
+     the vector after us, keep the stub (it may chain to it) instead of freeing it. */
+  __dpmi_raddr cur;
+  __dpmi_get_real_mode_interrupt_vector(usbpcm_stub_vec, &cur);
+  if(cur.segment == usbpcm_stub_seg && cur.offset16 == 0){
+   __dpmi_set_real_mode_interrupt_vector(usbpcm_stub_vec, &usbpcm_stub_old);
+   usbpcm_dosfree(usbpcm_stub_seg);
+  }
+  usbpcm_stub_seg = 0;
+  usbpcm_vec_done = 0;
+ }
  if(c->pci_dev) free(c->pci_dev);
  free(c);
  aui->card_private_data = NULL;
