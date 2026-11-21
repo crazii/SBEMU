@@ -480,7 +480,10 @@ struct MAIN_OPT
     "/VMSF", "VMPU Soundfont2 file", (uintptr_t)VMPU_DEF_SF2, MAIN_SETCMD_STR | (MAIN_VMPU_HDPMI_MEMFIX ? 0 : MAIN_SETCMD_HIDDEN), //NOTE: string ptr to int conversion always safe for 32bit code
     "/VMSFBF", "", 0, MAIN_SETCMD_INTRL|MAIN_SETCMD_HIDDEN,
 #endif
-    "/U", "Unload " PROGNAME, 0, 0,
+#if SBEMU_PCSPEAKER
+    "/PCS", "Enable PC Speaker emualtion", 1, 0,
+#endif
+    "/U", "Unload " PROGNAME, 0, MAIN_SETCMD_HIDDEN,
     NULL, NULL, 0,
 };
 enum EOption
@@ -515,6 +518,9 @@ enum EOption
     OPT_VMPU_VOICES,
     OPT_VMPU_SF,
     OPT_VMPU_SFBUF,
+#endif
+#if SBEMU_PCSPEAKER
+    OPT_PCS,
 #endif
     OPT_UNLOAD,
     OPT_COUNT,
@@ -784,7 +790,8 @@ int main(int argc, char* argv[])
         for(int j = 0; j < OPT_COUNT; ++j)
         {
             int len = strlen(MAIN_Options[j].option);
-            if(memicmp(argv[i], MAIN_Options[j].option, len) == 0)
+            if(memicmp(argv[i], MAIN_Options[j].option, len) == 0 && 
+                (argv[i][len] == '=' || argv[i][len] == ':' || isdigit(argv[i][len]) || (MAIN_Options[j].setcmd&MAIN_SETCMD_STR)))
             {
                 if(argv[i][len] == '=' || argv[i][len] == ':') ++len; //optional separator
                 int arglen = strlen(argv[i]);
@@ -1242,25 +1249,28 @@ int main(int argc, char* argv[])
     AU_start(&aui);
 
 #if SBEMU_PCSPEAKER
-    // Now that the audio device is running, aui.freq_card is valid for PC Speaker setup.
-    // QEMM accepts the whole 3-port table in one call.
-    // HDPMI needs two calls because 0x42-0x43 and 0x61 are not contiguous.
-    if(_8087) VPCSPEAKER_Init(aui.freq_card); //uses floating point
-
-    if(enableRM && _8087)
+    if(MAIN_Options[OPT_PCS].value)
     {
-        MAIN_PCSPEAKER_Installed = QEMM_Install_IOPortTrap(MAIN_PCSPEAKER_IODT, 3, &MAIN_PCSPEAKER_IOPTRM);
-    }
+        // Now that the audio device is running, aui.freq_card is valid for PC Speaker setup.
+        // QEMM accepts the whole 3-port table in one call.
+        // HDPMI needs two calls because 0x42-0x43 and 0x61 are not contiguous.
+        if(_8087) VPCSPEAKER_Init(aui.freq_card); //uses floating point
 
-    if(enablePM && _8087)
-    {
-        HDPMIPT_Install_IOPortTrap(0x42, 0x43, MAIN_PCSPEAKER_IODT,     2, &MAIN_PCSPEAKER_IOPTPM);
-        HDPMIPT_Install_IOPortTrap(0x61, 0x61, MAIN_PCSPEAKER_IODT + 2, 1, &MAIN_PCSPEAKER_IOPT_61);
-        MAIN_PCSPEAKER_Installed = TRUE;
-    }
+        if(enableRM && _8087)
+        {
+            MAIN_PCSPEAKER_Installed = QEMM_Install_IOPortTrap(MAIN_PCSPEAKER_IODT, 3, &MAIN_PCSPEAKER_IOPTRM);
+        }
 
-    printf("PC Speaker emulation (Ports 42,43,61): ");
-    MAIN_Print_Enabled_Newline(MAIN_PCSPEAKER_Installed);
+        if(enablePM && _8087)
+        {
+            HDPMIPT_Install_IOPortTrap(0x42, 0x43, MAIN_PCSPEAKER_IODT,     2, &MAIN_PCSPEAKER_IOPTPM);
+            HDPMIPT_Install_IOPortTrap(0x61, 0x61, MAIN_PCSPEAKER_IODT + 2, 1, &MAIN_PCSPEAKER_IOPT_61);
+            MAIN_PCSPEAKER_Installed = TRUE;
+        }
+
+        printf("PC Speaker emulation (Ports 42,43,61): ");
+        MAIN_Print_Enabled_Newline(MAIN_PCSPEAKER_Installed);
+    }
 #endif // SBEMU_PCSPEAKER
 
     MAIN_TSRed = TRUE;
@@ -1720,7 +1730,7 @@ static void MAIN_Interrupt()
     // safe even when the SB/OPL stream is currently silent.
     if(VPCSPEAKER_IsActive())
     {
-        VPCSPEAKER_GenSamples(MAIN_PCM, samples, aui.freq_card, /*domix=*/1);
+        VPCSPEAKER_GenSamples(MAIN_PCM, samples, aui.freq_card, digital | opl_active | vmpu_active);
     }
 #endif
 
@@ -2084,7 +2094,13 @@ static void MAIN_TSR_Interrupt()
                 mpxplay_audio_decoder_info_s adi = {NULL, 0, 1, samplerate, SBEMU_CHANNELS, SBEMU_CHANNELS, NULL, SBEMU_BITS, SBEMU_BITS/8, 0};
                 AU_setrate(&aui, &adi);
                 if(OPT_CHANGED(OPT_RATE))
+                {
                     OPL3EMU_Init(aui.freq_card);
+                    #if SBEMU_PCSPEAKER
+                    if(MAIN_Options[OPT_PCS].value && _8087)
+                        VPCSPEAKER_Init(aui.freq_card);
+                    #endif
+                }
                 AU_prestart(&aui); //setsamplerate/reset will do stop
                 AU_start(&aui);
             }
@@ -2289,7 +2305,7 @@ static void MAIN_TSR_Interrupt()
             CLIS();
 
             //uninstall pm vec not work because IDT will be restored by HDPMI on foreground instance exit.
-            //need hacks in rm (DPMI_Exit), still won't work if any PM TSR installed after SBEMU: IDT restored to the hooked value again.
+            //need hacks in rm (MAIN_UninstallTSR), still won't work if any PM TSR installed after SBEMU: IDT restored to the hooked value again.
             BOOL isr_uninst = TRUE; 
             _LOG("uninstall tsr int %d\n", isr_uninst);
             #if MAIN_INSTALL_RM_ISR
@@ -2342,7 +2358,7 @@ static void MAIN_TSR_Interrupt()
             AU_stop(&aui);
             DPMI_HighFree(MAIN_ISR_DOSID);
 
-            //use rm passed memory as stub memory for termination
+            //use rm passed memory as stub memory for termination, because the original stub memory is freed during TSR via int21h 4ch
             __dpmi_set_segment_base_address(_stubinfo->ds_selector, (MAIN_TSRREG.w.ds<<4) + MAIN_TSRREG.w.bx);
             __dpmi_set_segment_base_address(_stubinfo->cs_selector, (MAIN_TSRREG.w.ds<<4) + MAIN_TSRREG.w.bx);
             

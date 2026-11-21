@@ -60,6 +60,10 @@ static struct {
     // Global state
     int      initialized;
     int      output_freq;
+
+    //client FPU states for different contexts
+    unsigned char fpu_state_io[108] __attribute__((aligned(16))); //for IO traps
+    unsigned char fpu_state_int[108] __attribute__((aligned(16))); //for gen-samples in interrupts
 } spc;
 
 // ---------------------------------------------------------------------------
@@ -70,6 +74,8 @@ static struct {
 static void vpcspeaker_update_pit(void)
 {
     if(spc.pit_count == 0) return;
+
+    fpu_save(spc.fpu_state_io);
 
     double ticks = (double)spc.pit_count;
 
@@ -89,6 +95,8 @@ static void vpcspeaker_update_pit(void)
             spc.pit_half = ticks;
             break;
     }
+
+    fpu_restore(spc.fpu_state_io);
 }
 
 // Set Port 61h value
@@ -142,7 +150,7 @@ void VPCSPEAKER_Shutdown(void)
 
 int VPCSPEAKER_IsActive(void)
 {
-    return spc.initialized;
+    return spc.initialized && spc.spkr_mode != SPKR_OFF;
 }
 
 // ---------------------------------------------------------------------------
@@ -246,6 +254,8 @@ void VPCSPEAKER_GenSamples(int16_t *pcm16, int samples, int freq, int domix)
         }
     }
 
+    fpu_save(spc.fpu_state_int);
+
     // How many PIT ticks happen per audio sample?
     double ticks_per_sample = (double)PIT_FREQ / freq;
 
@@ -310,6 +320,8 @@ void VPCSPEAKER_GenSamples(int16_t *pcm16, int samples, int freq, int domix)
             pcm16[i*2+1] = sample_val;
         }
     }
+
+    fpu_restore(spc.fpu_state_int);
 }
 
 #endif // SBEMU_PCSPEAKER

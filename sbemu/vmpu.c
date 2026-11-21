@@ -15,7 +15,7 @@
 #define TSF_FLOAT_LUT
 #include "tsf.h"
 
-static unsigned char fpu_buffer[512] __attribute__((aligned(16)));
+static unsigned char fpu_buffer[108] __attribute__((aligned(16)));
 
 /* 0x330: data port
  * 0x331: read: status port
