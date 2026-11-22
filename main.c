@@ -791,7 +791,7 @@ int main(int argc, char* argv[])
         {
             int len = strlen(MAIN_Options[j].option);
             if(memicmp(argv[i], MAIN_Options[j].option, len) == 0 && 
-                (argv[i][len] == '=' || argv[i][len] == ':' || isdigit(argv[i][len]) || (MAIN_Options[j].setcmd&MAIN_SETCMD_STR)))
+                (argv[i][len] =='\0' || argv[i][len] == '=' || argv[i][len] == ':' || isdigit(argv[i][len]) || (MAIN_Options[j].setcmd&MAIN_SETCMD_STR)))
             {
                 if(argv[i][len] == '=' || argv[i][len] == ':') ++len; //optional separator
                 int arglen = strlen(argv[i]);
@@ -2357,6 +2357,7 @@ static void MAIN_TSR_Interrupt()
             //interrupts nobody clears as soon as they are enabled again before exit().
             AU_stop(&aui);
             DPMI_HighFree(MAIN_ISR_DOSID);
+            QEMM_Shutdown(); //free QEMM dos memory
 
             //use rm passed memory as stub memory for termination, because the original stub memory is freed during TSR via int21h 4ch
             __dpmi_set_segment_base_address(_stubinfo->ds_selector, (MAIN_TSRREG.w.ds<<4) + MAIN_TSRREG.w.bx);

@@ -12,6 +12,7 @@
 #include <dpmi/dbgutil.h>
 #include <untrapio.h>
 
+//handle frequent in 388 (for game delays) directly in rm without switching to PM
 #define HANDLE_IN_388H_DIRECTLY 1
 
 int QEMM_TrapFlags;
@@ -202,6 +203,7 @@ BOOL QEMM_Install_IOPortTrap(QEMM_IODT* inputp iodt, uint16_t count, QEMM_IOPT* 
                 QEMM_DOSMEM = 0;
                 return FALSE;
             }
+
             DPMI_LMemcpy(DPMI_SEGOFF2L(QEMM_DOSMEM, 0), DPMI_PTR2L(&rmcb), 4);
             void* buf = malloc(codesize);
             memcpy_c2d(buf, &QEMM_RM_Wrapper, codesize); //copy to ds seg in case cs&ds are not same
@@ -220,6 +222,9 @@ BOOL QEMM_Install_IOPortTrap(QEMM_IODT* inputp iodt, uint16_t count, QEMM_IOPT* 
             QEMM_DOSMEM = 0;
             return FALSE;
         }
+
+        DPMI_StoreW(((QEMM_DOSMEM-1)<<4)+1, QEMM_DOSMEM); //mcb owner
+        DPMI_LMemcpy(((QEMM_DOSMEM-1)<<4)+8, DPMI_PTR2L("SBEMU"), min(sizeof("SBEMU"), 8));
     }
     assert(QEMM_IODT_Link->next == NULL);
     QEMM_IODT* mem = (QEMM_IODT*)malloc(sizeof(QEMM_IODT)*count);
@@ -345,3 +350,11 @@ uint8_t QEMM_UntrappedIO_Read(uint16_t port)
     }
 }
 
+void QEMM_Shutdown()
+{
+    if(QEMM_DOSMEM)
+    {
+        DPMI_HighFree(QEMM_DOSMEM);
+        QEMM_DOSMEM = 0;
+    }
+}

@@ -49,6 +49,8 @@ BOOL QEMM_Uninstall_IOPortTrap(QEMM_IOPT* inputp iopt);
 void QEMM_UntrappedIO_Write(uint16_t port, uint8_t value);
 uint8_t QEMM_UntrappedIO_Read(uint16_t port);
 
+void QEMM_Shutdown();
+
 #ifdef __cplusplus
 }
 #endif
