@@ -6,7 +6,7 @@
 If you wish to use SBEMU and its dependencies in an existing DOS installation, you'll find the necessary
 files in `SBEMU.zip`.
 
-Alternatively, `SBEMU-FD13-USB.img.xz` provides SBEMU and is dependencies preconfigured inside a compressed
+Alternatively, `SBEMU-FD14-USB.img.xz` provides SBEMU and is dependencies preconfigured inside a compressed
 bootable FreeDOS image that you can write to a USB flash drive or an SD card.
 
 <details>
@@ -27,7 +27,7 @@ It will decompress such files automatically, before writing the image to the tar
 You can run the image in a VM with QEMU as follows:
 
 ```shell
-unxz SBEMU-FD13-USB.img.xz
+unxz SBEMU-FD14-USB.img.xz
 qemu-system-i386 -drive file=SBEMU-FD13-USB.img,format=raw -device AC97
 ```
 
@@ -37,7 +37,7 @@ On Linux, you can include the parameter `--enable-kvm` to run the VM with hardwa
 If you prefer to use another hypervisor, such as VirtualBox or VMware, you may have to convert the raw image to a supported VM image format first:
 
 ```shell
-unxz SBEMU-FD13-USB.img.xz
+unxz SBEMU-FD14-USB.img.xz
 qemu-img convert -f raw -O vmdk SBEMU-FD13-USB.img SBEMU-FD13-USB.vmdk
 ```
 
