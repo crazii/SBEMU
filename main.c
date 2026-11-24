@@ -2331,7 +2331,6 @@ static void MAIN_TSR_Interrupt()
                 QEMM_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT);
                 #endif
                 QEMM_Uninstall_IOPortTrap(&MAIN_SB_IOPT);
-                OPLRMInstalled = FALSE;
             }
             if(MAIN_Options[OPT_PM].value)
             {
@@ -2349,7 +2348,6 @@ static void MAIN_TSR_Interrupt()
                 HDPMIPT_Uninstall_IOPortTrap(&MAIN_VIRQ_IOPT_PM2);
                 #endif
                 HDPMIPT_Uninstall_IOPortTrap(&MAIN_SB_IOPT_PM);
-                OPLPMInstalled = FALSE;
             }
             MAIN_TSRREG.w.flags &= ~CPU_CFLAG;
             //stop the sound card while interrupts are still disabled: its IRQ handler is
