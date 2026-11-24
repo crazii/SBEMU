@@ -46,6 +46,9 @@ static BOOL MAIN_TSRed;
 
 #define MAIN_SETIF 1 //merge form vdpmi branch, not suree if this works well enough
 
+//use non-std int 2Dh installation check with no string id, but extra 2 dword signatures (magic num)
+#define MAIN_TSRINT_USE_SIGNATURE 1
+
 //note: use __dpmi_get_and_disable_virtual_interrupt_state()/__dpmi_get_and_enable_virtual_interrupt_state() causes crash.
 //needs to find why HDPMI traps #GP well but int31h not not working.
 #if MAIN_SETIF
@@ -56,8 +59,19 @@ static BOOL MAIN_TSRed;
 #define RESETIF() 
 #endif
 
+#if MAIN_TSRINT_USE_SIGNATURE
+#define MAIN_TSR_INT 0x2D   //AMIS multiplex.
+#define MAIN_TSR_INTSTART_ID 0xFF
+#define MAIN_INTSIG1 0x5BE0FF00UL
+#define MAIN_INTSIG2 0x4D454253UL
+#define MAIN_INTREPLY1 0x5BE0A5A5
+#define MAIN_INTREPLY2 0x534559
+#else
 #define MAIN_TSR_INT 0x2D   //AMIS multiplex. TODO: 0x2F?
 #define MAIN_TSR_INTSTART_ID 0x01 //start id
+static uint32_t MAIN_ISR_DOSID;
+static const char MAIN_ISR_DOSID_String[] = "Crazii  SBEMU   Sound Blaster emulation on AC97"; //8:8:asciiz
+#endif
 
 #if SBEMU_VMPU 
 
@@ -119,8 +133,6 @@ static void MAIN_InterruptRM();
 static DPMI_ISR_HANDLE MAIN_TSRIntHandle;
 static DPMI_REG MAIN_TSRREG;
 static uint32_t MAIN_TSR_INT_FNO = MAIN_TSR_INTSTART_ID;
-static uint32_t MAIN_ISR_DOSID;
-static const char MAIN_ISR_DOSID_String[] = "Crazii  SBEMU   Sound Blaster emulation on AC97"; //8:8:asciiz
 static void MAIN_TSR_InstallationCheck();
 static void MAIN_TSR_Interrupt();
 
@@ -1168,21 +1180,25 @@ int main(int argc, char* argv[])
     BOOL TSR_ISR = FALSE;
     for(int i = MAIN_TSR_INTSTART_ID; i <= 0xFF; ++i)
     {
+        #if !MAIN_TSRINT_USE_SIGNATURE
         DPMI_REG r = {0};
         r.h.ah = i;
         //DBG_DumpREG(&r);
         DPMI_CallRealModeINT(MAIN_TSR_INT, &r);
         if(r.h.al != 0) //find free multiplex number
             continue;
+        #endif
         MAIN_TSR_INT_FNO = i;
         TSR_ISR = DPMI_InstallRealModeISR(MAIN_TSR_INT, MAIN_TSR_Interrupt, &MAIN_TSRREG, &MAIN_TSRIntHandle, FALSE) == 0;
         if(!TSR_ISR)
             break;
+        #if !MAIN_TSRINT_USE_SIGNATURE
         MAIN_ISR_DOSID = DPMI_HighMalloc((sizeof(MAIN_ISR_DOSID_String)+15)>>4, TRUE);
         //printf("DOSID:%x\n", MAIN_ISR_DOSID);
         DPMI_StoreW(((MAIN_ISR_DOSID-1)<<4)+1, MAIN_ISR_DOSID); //MCB owner, avoid be freed, because we will use int21h 4ch for TSR
         DPMI_LMemcpy(((MAIN_ISR_DOSID-1)<<4)+8, DPMI_PTR2L(PROGNAME), min(sizeof(PROGNAME), 8));
         DPMI_LMemcpy(DPMI_SEGOFF2L(MAIN_ISR_DOSID,0), DPMI_PTR2L((char*)MAIN_ISR_DOSID_String), sizeof(MAIN_ISR_DOSID_String));
+        #endif
         break;
     }
 
@@ -1760,7 +1776,12 @@ void __NAKED MAIN_UinstallTSR_RM()
         _ASM(push cx)
         _ASM(popf)
 
+        #if MAIN_TSRINT_USE_SIGNATURE
+        _ASM(mov eax, [256+2])
+        _ASM(mov edx, [256+6])
+        #else
         _ASM(mov ax, [256+2])
+        #endif
         _ASM(mov bx, 256)
         _ASM(int 0x2D) //MAIN_TSR_INT
         //should not go here! the 0x2D handler will terminate PM with int21 4ch which terminiates this created psp
@@ -1774,7 +1795,7 @@ void MAIN_UninstallTSR(uint32_t intid)
 {
     uint32_t psp_size = 256;
     uint32_t code_size = (uintptr_t)&MAIN_UinstallTSR_RM_End - (uintptr_t)&MAIN_UinstallTSR_RM;
-    uint32_t data_size = 4;
+    uint32_t data_size = 2 + (MAIN_TSRINT_USE_SIGNATURE ? 8 : 2);
     uint32_t stack_size = 512;
     //on exit, djgpp will use _stubinfo->ds_selector as stack with sp=0x400 (1K), see ___exit in crt0.S in djggpp source.
     //_stubinfo->ds_selector's base will be changed to dosmem+256 in int 2D handler function 04 (skipped psp, code discarded after calling int2D)
@@ -1808,7 +1829,12 @@ void MAIN_UninstallTSR(uint32_t intid)
 
     DPMI_LMemcpy(dosmem + psp_size + data_size, DPMI_PTR2L(&MAIN_UinstallTSR_RM), code_size);
     DPMI_StoreW(dosmem + psp_size + 0, psp_size + data_size + code_size + stack_size); //rm sp
+    #if MAIN_TSRINT_USE_SIGNATURE
+    DPMI_StoreD(dosmem + psp_size + 2, (MAIN_INTSIG1&~0xFFFF)|(intid<<8)|4); //int id + function no.
+    DPMI_StoreD(dosmem + psp_size + 6, MAIN_INTSIG2);
+    #else
     DPMI_StoreW(dosmem + psp_size + 2, (intid<<8)|4); //int id + function no.
+    #endif
     
     DPMI_StoreD(_go32_info_block.linear_address_of_original_psp+0x0A, ((dosmem>>4)<<16) | (psp_size + data_size) ); //return to alloced mem block
 
@@ -1822,6 +1848,18 @@ void MAIN_TSR_InstallationCheck()
     int i = -1;
     for(int id = MAIN_TSR_INTSTART_ID; id <= 0xFF; ++id)
     { //detect TSR existence
+        #if MAIN_TSRINT_USE_SIGNATURE
+        r.d.eax = MAIN_INTSIG1;
+        r.d.edx = MAIN_INTSIG2;
+        DPMI_CallRealModeINT(MAIN_TSR_INT, &r);
+        if(r.d.eax == MAIN_INTREPLY1 && r.d.edx == MAIN_INTREPLY2)
+        {
+            i = id;
+            r.d.eax = MAIN_INTSIG1;
+            r.d.edx = MAIN_INTSIG2;
+        }
+        break;
+        #else
         r.h.ah = id;
         DPMI_CallRealModeINT(MAIN_TSR_INT, &r);
         if(r.h.al == 0)
@@ -1831,6 +1869,7 @@ void MAIN_TSR_InstallationCheck()
             i = id;
             break;
         }
+        #endif
     }
 
     if(i == -1) //not installed
@@ -1870,6 +1909,7 @@ void MAIN_TSR_InstallationCheck()
     r.h.al = 0x01; //get current settings
     r.d.ebx = DPMI_PTR2L(opt); //dest
     r.d.ecx = sizeof(MAIN_Options); //size: in case that a different version of SBEMU is installed
+    r.w.flags |= CPU_CFLAG;
     DPMI_CallRealModeINT(MAIN_TSR_INT, &r);
     if((r.w.flags&CPU_CFLAG))
     {
@@ -1929,6 +1969,7 @@ void MAIN_TSR_InstallationCheck()
 
     r.h.ah = i;
     r.h.al = 0x02; //set new settings
+    r.w.flags |= CPU_CFLAG;
     r.d.ebx = DPMI_PTR2L(opt);
     r.d.ecx = sizeof(MAIN_Options);
 
@@ -1944,6 +1985,7 @@ void MAIN_TSR_InstallationCheck()
     r.h.al = 0x01; //read back to confirm
     r.d.ebx = DPMI_PTR2L(opt);
     r.d.ecx = sizeof(MAIN_Options);
+    r.w.flags |= CPU_CFLAG;
     DPMI_CallRealModeINT(MAIN_TSR_INT, &r);
     if((r.w.flags&CPU_CFLAG))
     {
@@ -1972,21 +2014,28 @@ void MAIN_TSR_InstallationCheck()
 
 static void MAIN_TSR_Interrupt()
 {
+    #if MAIN_TSRINT_USE_SIGNATURE
+    if((MAIN_TSRREG.d.eax&~0xF) != (MAIN_INTSIG1&~0xF) || MAIN_TSRREG.d.edx != MAIN_INTSIG2)
+    #else
     if(MAIN_TSRREG.h.ah != MAIN_TSR_INT_FNO)
+    #endif
     {
-        //DBG_Log("chain %x ",MAIN_TSRREG.d.eax);
-        //DBG_DumpREG(&MAIN_TSRREG);
         DPMI_CallRealModeOldISR(&MAIN_TSRIntHandle, &MAIN_TSRREG);
         return;
     }
-    //DBG_Log("call tsr\n");
+
     switch(MAIN_TSRREG.h.al)
     {
         case 0x00:  //AMIS installation check
+            #if MAIN_TSRINT_USE_SIGNATURE
+            MAIN_TSRREG.d.eax = MAIN_INTREPLY1;
+            MAIN_TSRREG.d.edx = MAIN_INTREPLY2;
+            #else
             MAIN_TSRREG.h.al = 0xFF;
             MAIN_TSRREG.w.cx = 0x0100; //bcd version
             MAIN_TSRREG.w.dx = (MAIN_ISR_DOSID&0xFFFF); //a real mode string buffer of identification: segment
             MAIN_TSRREG.w.di = 0; //offset
+            #endif
         return;
         case 0x01: //query
         {
@@ -2353,8 +2402,11 @@ static void MAIN_TSR_Interrupt()
             //stop the sound card while interrupts are still disabled: its IRQ handler is
             //gone, and a card that keeps playing (level-triggered PCI IRQ) would raise
             //interrupts nobody clears as soon as they are enabled again before exit().
+            PIC_MaskIRQ(aui.card_irq);
             AU_stop(&aui);
+            #if !MAIN_TSRINT_USE_SIGNATURE
             DPMI_HighFree(MAIN_ISR_DOSID);
+            #endif
             QEMM_Shutdown(); //free QEMM dos memory
 
             //use rm passed memory as stub memory for termination, because the original stub memory is freed during TSR via int21h 4ch

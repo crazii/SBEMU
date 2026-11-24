@@ -13,7 +13,8 @@
 #include <untrapio.h>
 
 //handle frequent in 388 (for game delays) directly in rm without switching to PM
-#define HANDLE_IN_388H_DIRECTLY 1
+//this config is optional
+#define QEMM_HANDLE_IN_388H_DIRECTLY 0
 
 int QEMM_TrapFlags;
 
@@ -25,6 +26,8 @@ static uint16_t QEMM_EntryCS;
 static BOOL QEMM_InCallback;
 static uint16_t QEMM_OldCallbackIP;
 static uint16_t QEMM_OldCallbackCS;
+
+#if QEMM_HANDLE_IN_388H_DIRECTLY
 static uint32_t QEMM_DOSMEM;
 
 static void __NAKED QEMM_RM_Wrapper()
@@ -32,7 +35,6 @@ static void __NAKED QEMM_RM_Wrapper()
     _ASM_BEGIN16
         //_ASM(pushf)
         //_ASM(cli)
-#if HANDLE_IN_388H_DIRECTLY
         _ASM(cmp dx, 0x388)
         _ASM(je next)
         _ASM(cmp dx, 0x389)
@@ -65,7 +67,6 @@ static void __NAKED QEMM_RM_Wrapper()
     _ASMLBL(OUT388H:)
         _ASM(mov cs:[4], al)
     _ASMLBL(normal:)
-#endif
         _ASM(call dword ptr cs:[0])
     _ASMLBL(ret:)
         //_ASM(popf)
@@ -73,6 +74,7 @@ static void __NAKED QEMM_RM_Wrapper()
     _ASM_END16
 }
 static void __NAKED QEMM_RM_WrapperEnd() {}
+#endif
 
 static DPMI_REG QEMM_TrapHandlerREG;
 static void QEMM_TrapHandler()
@@ -140,14 +142,14 @@ uint16_t QEMM_GetVersion(void)
          * which is the INT 2Fh, followed by an RETF.
          */
         asm volatile(
-            "push ds \n\t"
-            "push ebx \n\t"
-            "push $0x40 \n\t"
-            "pop ds \n\t"
-            "mov $0xd0, bx \n\t"
-            "movl $0xcb2fcd, (bx) \n\t"
-            "pop ebx \n\t"
-            "pop ds \n\t"
+            "pushw %ds \n\t"
+            "pushl %ebx \n\t"
+            "pushw $0x40 \n\t"
+            "popw %ds \n\t"
+            "movw $0xd0, %bx \n\t"
+            "movl $0xcb2fcd, (%bx) \n\t"
+            "popl %ebx \n\t"
+            "popw %ds \n\t"
            );
         r.w.ax = 0x1684;
         r.w.bx = 0x4354;
@@ -191,40 +193,50 @@ BOOL QEMM_Install_IOPortTrap(QEMM_IODT* inputp iodt, uint16_t count, QEMM_IOPT* 
         QEMM_OldCallbackCS = r.w.di;
         //_LOG("QEMM old callback: %04x:%04x\n",r.w.es, r.w.di);
 
+        uint32_t cs = 0;
+        uint32_t ip = 0;
+        uint32_t rmcb = DPMI_AllocateRMCB_RETF(&QEMM_TrapHandler, &QEMM_TrapHandlerREG);
+        if(rmcb == 0)
+            return FALSE;
+        cs = rmcb>>16;
+        ip = rmcb&0xFFFF;
+        #if QEMM_HANDLE_IN_388H_DIRECTLY
         if(QEMM_DOSMEM == 0)
         {
             uint32_t codesize = (uintptr_t)&QEMM_RM_WrapperEnd - (uintptr_t)&QEMM_RM_Wrapper;
             //_LOG("QEMM dos mem size: %d\n", codesize);
             QEMM_DOSMEM = DPMI_HighMalloc((codesize + 4 + 2 + 15)>>4, TRUE);
-            uint32_t rmcb = DPMI_AllocateRMCB_RETF(&QEMM_TrapHandler, &QEMM_TrapHandlerREG);
-            if(rmcb == 0)
-            {
-                DPMI_HighFree(QEMM_DOSMEM);
-                QEMM_DOSMEM = 0;
-                return FALSE;
-            }
-
             DPMI_LMemcpy(DPMI_SEGOFF2L(QEMM_DOSMEM, 0), DPMI_PTR2L(&rmcb), 4);
             void* buf = malloc(codesize);
             memcpy_c2d(buf, &QEMM_RM_Wrapper, codesize); //copy to ds seg in case cs&ds are not same
             DPMI_LMemcpy(DPMI_SEGOFF2L(QEMM_DOSMEM, 4+2), DPMI_PTR2L(buf), codesize);
             free(buf);
         }
+        cs = QEMM_DOSMEM&0xFFFF;
+        ip = 4+2;
+        #endif
 
         r.w.cs = QEMM_EntryCS;
         r.w.ip = QEMM_EntryIP;
         r.w.ax = 0x1A07;
-        r.w.es = QEMM_DOSMEM&0xFFFF;
-        r.w.di = 4+2;
-        if( DPMI_CallRealModeRETF(&r) != 0 || (r.w.flags&CPU_CFLAG))
+        r.w.es = cs;
+        r.w.di = ip;
+
+        if(DPMI_CallRealModeRETF(&r) != 0 || (r.w.flags&CPU_CFLAG))
         {
-            DPMI_HighFree(QEMM_DOSMEM);
+            #if QEMM_HANDLE_IN_388H_DIRECTLY
+            if(QEMM_DOSMEM)
+                DPMI_HighFree(QEMM_DOSMEM);
             QEMM_DOSMEM = 0;
+            #endif
+
             return FALSE;
         }
 
+        #if QEMM_HANDLE_IN_388H_DIRECTLY
         DPMI_StoreW(((QEMM_DOSMEM-1)<<4)+1, QEMM_DOSMEM); //mcb owner
         DPMI_LMemcpy(((QEMM_DOSMEM-1)<<4)+8, DPMI_PTR2L("SBEMU"), min(sizeof("SBEMU"), 8));
+        #endif
     }
     assert(QEMM_IODT_Link->next == NULL);
     QEMM_IODT* mem = (QEMM_IODT*)malloc(sizeof(QEMM_IODT)*count);
@@ -352,9 +364,11 @@ uint8_t QEMM_UntrappedIO_Read(uint16_t port)
 
 void QEMM_Shutdown()
 {
+    #if QEMM_HANDLE_IN_388H_DIRECTLY
     if(QEMM_DOSMEM)
     {
         DPMI_HighFree(QEMM_DOSMEM);
         QEMM_DOSMEM = 0;
     }
+    #endif
 }
