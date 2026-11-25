@@ -234,8 +234,9 @@ BOOL QEMM_Install_IOPortTrap(QEMM_IODT* inputp iodt, uint16_t count, QEMM_IOPT* 
         }
 
         #if QEMM_HANDLE_IN_388H_DIRECTLY
-        DPMI_StoreW(((QEMM_DOSMEM-1)<<4)+1, QEMM_DOSMEM); //mcb owner
-        DPMI_LMemcpy(((QEMM_DOSMEM-1)<<4)+8, DPMI_PTR2L("SBEMU"), min(sizeof("SBEMU"), 8));
+        //the high word of QEMM_DOSMEM still have values (0xFFFF) if it is allcoted from UMB via XMS (when DOS=UMB not specified)
+        DPMI_StoreW((((QEMM_DOSMEM&0xFFFF)-1)<<4)+1, QEMM_DOSMEM); //mcb owner
+        DPMI_LMemcpy((((QEMM_DOSMEM&0xFFFF)-1)<<4)+8, DPMI_PTR2L("SBEMU"), min(sizeof("SBEMU"), 8));
         #endif
     }
     assert(QEMM_IODT_Link->next == NULL);
