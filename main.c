@@ -1195,9 +1195,10 @@ int main(int argc, char* argv[])
         #if !MAIN_TSRINT_USE_SIGNATURE
         MAIN_ISR_DOSID = DPMI_HighMalloc((sizeof(MAIN_ISR_DOSID_String)+15)>>4, TRUE);
         //printf("DOSID:%x\n", MAIN_ISR_DOSID);
-        DPMI_StoreW(((MAIN_ISR_DOSID-1)<<4)+1, MAIN_ISR_DOSID); //MCB owner, avoid be freed, because we will use int21h 4ch for TSR
-        DPMI_LMemcpy(((MAIN_ISR_DOSID-1)<<4)+8, DPMI_PTR2L(PROGNAME), min(sizeof(PROGNAME), 8));
-        DPMI_LMemcpy(DPMI_SEGOFF2L(MAIN_ISR_DOSID,0), DPMI_PTR2L((char*)MAIN_ISR_DOSID_String), sizeof(MAIN_ISR_DOSID_String));
+        //the high word of MAIN_ISR_DOSID still have values (0xFFFF) if it is allcoted from UMB via XMS (when DOS=UMB not specified)
+        DPMI_StoreW((((MAIN_ISR_DOSID&0xFFFF)-1)<<4)+1, MAIN_ISR_DOSID); //MCB owner, avoid be freed, because we will use int21h 4ch for TSR
+        DPMI_LMemcpy((((MAIN_ISR_DOSID&0xFFFF)-1)<<4)+8, DPMI_PTR2L(PROGNAME), min(sizeof(PROGNAME), 8));
+        DPMI_LMemcpy(DPMI_SEGOFF2L((MAIN_ISR_DOSID&0xFFFF),0), DPMI_PTR2L((char*)MAIN_ISR_DOSID_String), sizeof(MAIN_ISR_DOSID_String));
         #endif
         break;
     }
